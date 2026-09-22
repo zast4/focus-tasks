@@ -1420,9 +1420,12 @@ module.exports = class FocusTasks extends Plugin {
       area.buckets = [...(area.buckets || []), bucket];
     }
     for (const task of this.tasks()) {
-      if (!task.area || task.status === STATUS_CANCELLED || task.status === STATUS_SOMEDAY) continue;
-      const area = areaOf(task.area);
+      if (task.status === STATUS_CANCELLED || task.status === STATUS_SOMEDAY) continue;
       const bucket = task.project ? projects.get(task.project) : null;
+      // A task written by another plugin has no `area`: its project tells us which one it belongs to.
+      if (!task.area && bucket) task.area = bucket.area.name;
+      if (!task.area) continue;
+      const area = areaOf(task.area);
       if (task.status === STATUS_DONE) {
         if (task.doneDate === now) (bucket ? bucket.done : area.done).push(task);
         continue;
@@ -1477,13 +1480,16 @@ module.exports = class FocusTasks extends Plugin {
   async setFields(task, fields) {
     const file = this.app.vault.getAbstractFileByPath(task.file.path) || task.file;
     if (!file || file.deleted) { new Notice(t("changed")); return false; }
+    let uid = null;
     try {
       await this.app.fileManager.processFrontMatter(file, (fm) => {
+        if (!fm.uid) fm.uid = uid = newUid();  // a note written by another plugin gets its identity here
         for (const [key, value] of Object.entries(fields)) {
           if (value === null || value === undefined) delete fm[key];
           else fm[key] = value;
         }
       });
+      if (uid) task.uid = uid;
     } catch (e) {
       new Notice(t("changed"));
       console.warn("focus-tasks: the task note could not be written", task.file.path, e);
@@ -1492,12 +1498,25 @@ module.exports = class FocusTasks extends Plugin {
     return true;
   }
 
+  // A repeating task (TaskNotes wrote `recurrence` into the note) is not finished by a tick: the one
+  // occurrence is, and the note moves on to the next date. TaskNotes owns that rule, so we ask it.
+  recurring(task) {
+    const fm = this.app.metadataCache.getFileCache(task.file)?.frontmatter;
+    const api = this.app.plugins.plugins["tasknotes"]?.api?.recurring;
+    return fm?.recurrence && api?.toggleCompleteInstance ? api : null;
+  }
+
   // Done ⇄ open, with the day it was done. One write per task at a time (the same task can be on
   // screen twice); a second click on the same row is held by the row itself until it is rebuilt.
   async toggle(task) {
     if (this.toggling.has(task.uid)) return false;
     this.toggling.add(task.uid);
     try {
+      const api = this.recurring(task);
+      if (api) {
+        await api.toggleCompleteInstance(task.file.path, task.date || today());
+        return true;
+      }
       const done = task.status !== STATUS_DONE;
       const ok = await this.setFields(task, { status: done ? STATUS_DONE : STATUS_OPEN, completedDate: done ? today() : null });
       if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate: done ? today() : null });

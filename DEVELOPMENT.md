@@ -53,9 +53,10 @@ Other tools read the same notes, so keep these stable:
 - a **task** = a note of its own in the tasks folder (`Задачи` by default) with `type: задача`:
   - `uid` — its identity, never changes (a rename or a move keeps it);
   - `status`: `open` / `done` / `cancelled` / `someday`;
-  - `area` — the area's name, `project` — a wikilink to the project's note (absent = a loose task);
-  - `scheduled` — the date the focus goes by, `due`, `done` — the day it was checked off;
-  - `priority`: `low` … `highest`; `title` — the whole text when the file name had to be cut;
+  - `area` — the area's name, `projects` — a list with a wikilink to the project's note (absent = a
+    loose task; we keep one project per task, the list is TaskNotes' shape);
+  - `scheduled` — the date the focus goes by, `due`, `completedDate` — the day it was checked off;
+  - `priority`: `low` / `normal` / `high`; `title` — the whole text when the file name had to be cut;
   - the body of the note is the task's description;
 - the file name is a readable label only: it follows the text, the `uid` does not;
 - a linked note = `note: "[[...]]"` in an area's or a project's note;
@@ -63,6 +64,25 @@ Other tools read the same notes, so keep these stable:
 
 Tasks the plugin does not touch: `cancelled` and `someday` (хотелки in ordinary notes are not migrated
 yet). The Tasks plugin is not part of this model — a task is no longer a checkbox line.
+
+### TaskNotes on the same notes
+
+The field names and their values are TaskNotes' own, so that plugin can be installed on the same
+vault and bring its recurrence, reminders, time tracking, calendar and Bases views for free. Checked
+by hand on a copy of the real vault (147 tasks), TaskNotes 4.13.4:
+
+- in its settings, **Task identification** → *Property*, `type` = `задача`, tasks folder `Задачи`;
+  its default Bases views filter by the `#task` tag, so delete `TaskNotes/Views/` once and let it
+  write them again — the filter then reads `list(note["type"]).contains("задача")`;
+- it reads all our notes, and its edits keep `uid` and `area` (it never drops unknown keys);
+- it writes `complete_instances`, `timeEntries`, `dateModified`, `recurrence` into our notes; our
+  plugin and `obsidian_tasks.py` keep those keys (block lists included) when they write;
+- a task it creates has no `area` (and no `uid`): the plugin takes the area from the task's project
+  and writes a `uid` on the first change. A task with neither an area nor a project stays invisible
+  to us — that is TaskNotes' own inbox;
+- a repeating task (`recurrence`) is not finished by a tick: the checkbox asks TaskNotes to complete
+  that one occurrence, so the note rolls on to the next date. Without TaskNotes installed the tick
+  completes the task as usual.
 
 ## Tests
 
@@ -76,7 +96,7 @@ npm install
 node test/e2e.mjs                                      # --keep leaves the vault open
 ```
 
-It must pass (32/32) before a release. On failure the vault stays open and screenshots go to
+It must pass (33/33) before a release. On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

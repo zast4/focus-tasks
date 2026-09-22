@@ -475,6 +475,22 @@ step("Collapse all / Expand all", async () => {
   await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view()).length >= 3`), "task rows back");
 });
 
+step("a note written by another plugin: no uid, no area — the project gives both", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Written by TaskNotes")),
+    `---\ntype: задача\nstatus: open\nscheduled: ${TODAY}\nprojects:\n  - "[[Marathon]]"\ntimeEntries:\n  - startTime: ${TODAY}T10:00:00Z\n    endTime: ${TODAY}T10:30:00Z\n---\n`);
+  await until(() => page.eval(`return !!__ft.task('Written by TaskNotes')`), "the foreign task shows up in its project's area");
+  await click(`__ft.at(__ft.task('Written by TaskNotes').querySelector('input'))`);
+  await taskIs("Written by TaskNotes", { status: "done", completedDate: TODAY });
+  const f = fm("Written by TaskNotes");
+  if (!/^ft-/.test(f.uid || "")) throw new Error("no uid was written: " + J(f.uid));
+  if (!f.body.includes("startTime") && !JSON.stringify(f).includes("startTime")) throw new Error("the time entries were lost");
+  await until(() => page.eval(`return !!__ft.task('Written by TaskNotes')?.closest('.ft-done-block')`), "the row moved to Completed");
+  await click(`__ft.at(__ft.task('Written by TaskNotes').querySelector('input'))`);
+  await taskIs("Written by TaskNotes", { status: "open" });
+  fs.rmSync(path.join(VAULT, taskPath("Written by TaskNotes")));   // the rest of the run counts rows
+  await until(() => page.eval(`return !__ft.task('Written by TaskNotes')`), "the foreign task is gone again");
+});
+
 step("rename a project in place; its tasks follow it", async () => {
   await click(`__ft.grip(__ft.project('Marathon'))`);
   await menu("Rename");
