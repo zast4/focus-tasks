@@ -67,6 +67,13 @@ task can be restored from the notice that appears.
 Folded state, «opened» areas and the drag order are saved in the plugin's `data.json` (synced with
 the vault); «All» is remembered per device.
 
+## Install with BRAT (from inside Obsidian)
+
+1. *Settings → Community plugins → Browse* → install and enable **BRAT** (Obsidian42 - BRAT).
+2. Command palette → **BRAT: Add a beta plugin for testing** → paste `zast4/obsidian-focus-tasks` →
+   pick the latest version → *Add plugin*.
+3. *Settings → Community plugins* → enable **Focus Tasks**. BRAT keeps it updated.
+
 ## Install (manual, for testing)
 
 1. Unzip `focus-tasks-<version>.zip` into `<your vault>/.obsidian/plugins/` — you get
@@ -133,7 +140,11 @@ passes (`--keep` leaves it).
 или правый клик — меню. Внизу — «Все» / «Скрыть», «+ Область», «+ Область из заметки»,
 «Свернуть всё» / «Развернуть всё». Язык интерфейса — в настройках (Auto / English / Русский).
 
-Установка для теста: распаковать `focus-tasks-<версия>.zip` в `<хранилище>/.obsidian/plugins/`
+Установка прямо из Obsidian — через BRAT: *Настройки → Сторонние плагины → Обзор* → поставить и
+включить **BRAT**; палитра команд → **BRAT: Add a beta plugin for testing** → `zast4/obsidian-focus-tasks`
+→ последняя версия → *Add plugin*; включить **Focus Tasks**. Обновления BRAT подтягивает сам.
+
+Установка руками: распаковать `focus-tasks-<версия>.zip` в `<хранилище>/.obsidian/plugins/`
 (получится папка `focus-tasks`), перезапустить Obsidian и включить плагин в
 *Настройки → Сторонние плагины*.
 

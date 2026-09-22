@@ -1,0 +1,27 @@
+# A tag equal to the version in manifest.json (e.g. 0.1.0) publishes a release with the files
+# Obsidian and BRAT install: main.js, manifest.json, styles.css (+ a zip for manual install).
+name: Release
+
+on:
+  push:
+    tags: ["*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The tag matches manifest.json and package.json
+        run: |
+          test "$(jq -r .version manifest.json)" = "$GITHUB_REF_NAME"
+          test "$(jq -r .version package.json)" = "$GITHUB_REF_NAME"
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npm run zip
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "Focus Tasks $GITHUB_REF_NAME" \
+            main.js manifest.json styles.css "dist/focus-tasks-$GITHUB_REF_NAME.zip"
