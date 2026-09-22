@@ -16,7 +16,8 @@
  *
  * A click on a task's text edits it in place (Enter saves and opens the next row, Esc cancels;
  * ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date). The date on the right opens a date picker.
- * The checkbox completes a task (through the Tasks plugin when it is installed: recurrence, ✅).
+ * The checkbox completes a task (through the Tasks plugin when it is installed: recurrence, ✅); for
+ * the rest of the day it stays at the bottom of its area under «Completed», where its box brings it back.
  * The grip on the left drags areas, projects and tasks; a plain click on it opens the row's menu.
  * Shift-click selects every task from the last clicked one, Cmd/Ctrl-click adds or drops one; the
  * grip of a selected row then drags them all, and its date, its menu or ⌘1–4 (as in the editor)
@@ -80,7 +81,7 @@ const STRINGS = {
     newAreaOption: "+ New area “{0}”", looseTasks: "(loose tasks)", whatToDo: "What to do",
     pickNote: "Pick a note", cmdToggleAll: "Show all / focus only", cmdFoldAll: "Collapse all",
     cmdUnfoldAll: "Expand all", cmdAddTask: "New task", cmdAddArea: "New area", cmdAreaFromNote: "New area from the current note",
-    pickerPlaceholder: "DD.MM.YY or “tomorrow”", clearDate: "Clear date",
+    pickerPlaceholder: "DD.MM.YY or “tomorrow”", clearDate: "Clear date", completed: "Completed",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -124,7 +125,7 @@ const STRINGS = {
     newAreaOption: "＋ Новая область «{0}»", looseTasks: "(разовые задачи)", whatToDo: "Что сделать",
     pickNote: "Выбери заметку", cmdToggleAll: "Показать всё / только фокус", cmdFoldAll: "Свернуть всё",
     cmdUnfoldAll: "Развернуть всё", cmdAddTask: "Новая задача", cmdAddArea: "Новая область", cmdAreaFromNote: "Новая область из текущей заметки",
-    pickerPlaceholder: "ДД.ММ.ГГ или «завтра»", clearDate: "Убрать дату",
+    pickerPlaceholder: "ДД.ММ.ГГ или «завтра»", clearDate: "Убрать дату", completed: "Выполненные",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
@@ -221,16 +222,21 @@ function reindent(block, indent) {
   return block.map((l) => " ".repeat(Math.max(0, indentOf(l) - base + indent)) + l.replace(/^\s*/, ""));
 }
 
-// "    - [ ] Step ⏫ ⏳ 2026-09-22" → {indent: 1, text: "Step ⏫", date: "2026-09-22", mark: "⏳"};
-// date = the earliest focus date, mark = the emoji it came with (the one a date edit changes).
+// "    - [ ] Step ⏫ ⏳ 2026-09-22" → {indent: 1, text: "Step ⏫", date: "2026-09-22", mark: "⏳", done: null};
+// date = the earliest focus date, mark = the emoji it came with (the one a date edit changes),
+// done = the ✅ date.
 function parseLine(line) {
   const m = line.match(/^(\s*)[-*] \[(.)\] (.*)$/);
   if (!m) return null;
   const dates = [];
-  for (const [, mark, day] of m[3].matchAll(DATE_RE)) if (FOCUS_MARKS.includes(mark)) dates.push({ mark, day });
+  let done = null;
+  for (const [, mark, day] of m[3].matchAll(DATE_RE)) {
+    if (FOCUS_MARKS.includes(mark)) dates.push({ mark, day });
+    else if (mark === "✅") done = day;
+  }
   dates.sort((a, b) => a.day.localeCompare(b.day));
   return { indent: Math.floor(m[1].replace(/\t/g, "    ").length / 4), status: m[2],
-    text: m[3].replace(DATE_RE, "").trim(), date: dates[0]?.day || null, mark: dates[0]?.mark || null };
+    text: m[3].replace(DATE_RE, "").trim(), date: dates[0]?.day || null, mark: dates[0]?.mark || null, done };
 }
 
 // `line` with its date (the one marked `mark`; ⏳ when it has none) set to `day`, or dropped for null.
@@ -471,7 +477,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const p = this.plugin;
     const everything = p.everything();
     const areas = await p.collect(false);
-    const rest = everything ? (await p.collect(true)).filter((a) => !a.focus) : [];
+    const rest = everything ? (await p.collect(true)).filter((a) => !areas.some((x) => x.name === a.name)) : [];
     const shownAreas = [...areas, ...rest];
     this.fresh = new WeakMap();
     // [key, all] of every foldable header on screen (also inside folded areas)
@@ -683,14 +689,55 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     if (area.loose.length) await this.list(box, area.loose);
     for (const project of area.projects) await this.project(box, area, project);
-    if (!area.later && !area.future.projects.length) return;
-    const futureKey = (wide ? "futureoff:" : "future:") + area.name;
-    const shown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
-    this.upcoming(box, area, shown, futureKey);
-    if (!shown) return;
-    const block = box.createDiv({ cls: "ft-future-block" });
-    if (area.future.loose.length) await this.list(block, area.future.loose);
-    for (const project of area.future.projects) await this.project(block, area, project, true);
+    if (area.later || area.future.projects.length) {
+      const futureKey = (wide ? "futureoff:" : "future:") + area.name;
+      const shown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
+      this.upcoming(box, area, shown, futureKey);
+      if (shown) {
+        const block = box.createDiv({ cls: "ft-future-block" });
+        if (area.future.loose.length) await this.list(block, area.future.loose);
+        for (const project of area.future.projects) await this.project(block, area, project, true);
+      }
+    }
+    if (area.done.length) await this.completed(box, area);
+  }
+
+  // «Completed · N» at the bottom of an area: its tasks and steps checked off today, open unless folded;
+  // a box unchecks its task. Not selectable, not draggable.
+  async completed(box, area) {
+    const p = this.plugin;
+    const key = "done:" + area.name;
+    const open = p.isShown(key, false);
+    const block = box.createDiv({ cls: "ft-done-block" });  // not a direct list of the area: «+» adds after the loose tasks
+    const head = block.createDiv({ cls: "ft-future ft-done-title" });
+    setIcon(head.createSpan({ cls: "ft-future-icon" }), open ? "chevron-down" : "chevron-right");
+    head.createSpan({ text: `${t("completed")} · ${area.done.length}` });
+    head.onclick = async () => { await p.toggleShown(key, false); p.refresh(); };
+    if (!open) return;
+    const ul = block.createEl("ul", { cls: "contains-task-list ft-list" });
+    for (const task of area.done) {
+      const li = ul.createEl("li", { cls: "task-list-item ft-task ft-done" });  // no data-task: themes strike the whole row
+      const check = li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
+      check.checked = true;
+      check.onclick = (e) => { e.preventDefault(); p.toggle(task); };
+      await this.text(li, task);
+      if (task.project) li.createSpan({ cls: "ft-done-project", text: "📁 " + task.file.basename });
+      li.oncontextmenu = (e) => {
+        e.preventDefault();
+        const menu = new Menu();
+        menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file, null, { line: task.lineNo })));
+        menu.showAtMouseEvent(e);
+      };
+    }
+  }
+
+  // The task's text as markdown (links work), without the paragraph around it.
+  async text(li, task) {
+    const text = li.createSpan({ cls: "ft-text" });
+    await MarkdownRenderer.render(this.plugin.app, task.text, text, task.file.path, this.inner);
+    const para = text.querySelector("p");
+    if (para) para.replaceWith(...para.childNodes);
+    return text;
   }
 
   // «Show upcoming · N» under the focus of an area; «Hide upcoming» when the block is open.
@@ -1154,10 +1201,7 @@ class FocusRenderer extends MarkdownRenderChild {
       if (all && task.indent) li.style.setProperty("--ft-level", task.indent);
       const box = li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       box.onclick = (e) => { e.preventDefault(); this.plugin.toggle(task); };
-      const text = li.createSpan({ cls: "ft-text" });
-      await MarkdownRenderer.render(this.plugin.app, task.text, text, task.file.path, this.inner);
-      const para = text.querySelector("p");
-      if (para) para.replaceWith(...para.childNodes);
+      const text = await this.text(li, task);
       const date = li.createSpan();
       this.dateLabel(date, task);
       date.onclick = (e) => {
@@ -1382,33 +1426,40 @@ module.exports = class FocusTasks extends Plugin {
     return [this.settings.inboxHeading, ...CATCH_ALL].includes(last) ? last : this.settings.inboxHeading;
   }
 
-  async openTasks(file) {
+  // The open tasks of a task file, and those checked off today (`done`: [x] with ✅ today).
+  async fileTasks(file) {
     const cache = this.app.metadataCache.getFileCache(file);
-    const items = (cache?.listItems || []).filter((i) => i.task !== undefined && !"xX-".includes(i.task));
-    if (!items.length) return [];
+    const items = (cache?.listItems || []).filter((i) => i.task !== undefined && i.task !== "-");
+    const out = { open: [], done: [] };
+    if (!items.length) return out;
     const lines = (await this.app.vault.cachedRead(file)).split("\n");
-    const out = [];
+    const now = today();
     for (const i of items) {
       const lineNo = i.position.start.line;
       const parsed = parseLine(lines[lineNo] || "");
-      if (parsed && parsed.text) out.push({ ...parsed, file, lineNo, line: lines[lineNo] });
+      if (!parsed || !parsed.text) continue;
+      const task = { ...parsed, file, lineNo, line: lines[lineNo] };
+      if (!"xX".includes(i.task)) out.open.push(task);
+      else if (parsed.done === now) out.done.push(task);
     }
     return out;
   }
 
-  // → [{name, note, loose, projects, focus, later, future}]. The focus keeps only tasks due today or
-  // earlier (their areas only); `all` keeps every task of every area.
+  // → [{name, note, loose, projects, focus, later, future, done}]. The focus keeps only tasks due today
+  // or earlier (their areas, and areas with something checked off today); `all` keeps every task of
+  // every area. `done`: checked off today, `project` set on the steps of projects.
   async collect(all) {
     const byArea = new Map();
     const areaOf = (name) => {
-      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] } });
+      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [] });
       return byArea.get(name);
     };
     const first = (tasks) => tasks.map((x) => x.date).filter(Boolean).sort()[0] || "9999";
     for (const n of this.notes()) {
       const area = areaOf(n.area);
       if (!n.project && !area.note) area.note = n.file;
-      const open = await this.openTasks(n.file);
+      const { open, done } = await this.fileTasks(n.file);
+      area.done.push(...done.map((x) => ({ ...x, project: n.project })));
       const focus = open.filter(inFocus), later = open.filter((x) => !inFocus(x));
       area.focus += focus.length;
       area.later += later.length;
@@ -1422,14 +1473,19 @@ module.exports = class FocusTasks extends Plugin {
       }
     }
     let areas = [...byArea.values()];
-    if (!all) areas = areas.filter((a) => a.focus);
+    if (!all) areas = areas.filter((a) => a.focus || a.done.length);
     // A dragged order wins; the rest follows it: areas by name, projects by their nearest date.
     const rank = (list, key) => { const i = (list || []).indexOf(key); return i < 0 ? 1e9 : i; };
     const order = this.data.order;
     const cmp = collator();
     const byOrder = (a) => (x, y) => rank(order.projects[a.name], x.file.path) - rank(order.projects[a.name], y.file.path)
       || x.first.localeCompare(y.first) || cmp(x.file.basename, y.file.basename);
-    for (const a of areas) { a.projects.sort(byOrder(a)); a.future.projects.sort(byOrder(a)); }
+    for (const a of areas) {
+      a.projects.sort(byOrder(a));
+      a.future.projects.sort(byOrder(a));
+      a.done.sort((x, y) => x.project - y.project || rank(order.projects[a.name], x.file.path) - rank(order.projects[a.name], y.file.path)
+        || cmp(x.file.basename, y.file.basename) || x.lineNo - y.lineNo);
+    }
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));
   }
 

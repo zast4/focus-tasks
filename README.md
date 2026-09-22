@@ -34,7 +34,7 @@ What you can do in the view:
 
 | | |
 |---|---|
-| Complete a task | click its checkbox |
+| Complete a task | click its checkbox; for the rest of the day it stays at the bottom of its area under «Completed» (its box brings it back) |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** cancels |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date |
 | Date picker | click the date on the right (type `25.12`, `tomorrow`, or pick a day) |
@@ -94,7 +94,8 @@ Try these in a new vault (or a copy of yours):
 3. Grip on the area → «New project» → the project note, and `- 📁 [[…]]` in the area note.
 4. **+** on the project → steps; click a step → ⌘1 → «Today» on the right, the area moves to the top.
 5. ⌘2 / ⌘4 / ⌘3 on a task; the date on the right → picker: «Today», a day, «Clear date».
-6. Check a task: `[x] … ✅ <today>` in the note; it leaves the list.
+6. Check a task: `[x] … ✅ <today>` in the note; it moves to «Completed» at the bottom of its area;
+   its box there brings it back.
 7. Drag a task onto an area header; drag a task between two others; drag an area above another.
 8. Click a task, Shift-click another two rows down: three rows selected; the grip menu → «Tomorrow»
    dates all three; ⌘4 / ⌘1 do the same from the keyboard; drag one of them by the grip onto a
@@ -137,6 +138,9 @@ passes (`--keep` leaves it).
   плагин не меняет.
 - **Даты** — в формате плагина Tasks (⏳ 📅 🛫 ✅). Tasks не обязателен: без него галочка ставит `[x]`
   и `✅ <сегодня>` сама.
+
+Отмеченная задача до конца дня остаётся внизу своей области в блоке «Выполненные» (галочка там
+возвращает её в работу): видно, что сделано за день.
 
 Открыть: иконка на ленте или команда **Focus Tasks: Открыть Фокус**, либо блок ` ```focus-tasks``` `
 в любой заметке. Клик по тексту — правка на месте (Enter — сохранить и новая строка ниже, Esc —

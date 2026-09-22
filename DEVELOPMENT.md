@@ -24,12 +24,14 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
     group, `editDate`, `selectionMenu` and `keys` (a `Scope` with Mod+1…4 and Esc, pushed while rows are
     selected and the list's tab is active, so Obsidian's «go to tab» elsewhere is untouched) date it. The row map `items` is swapped together with the
     DOM (`fresh` while building), so a click during a render still finds its row.
+  - `completed`: «Completed · N» at the bottom of an area (tasks with ✅ today from `fileTasks`), folded
+    by the `done:<area>` key; its rows are not tracked, so selection and drag skip them.
   - Inline editing: `editor()` (contenteditable, Enter / Esc / blur, Mod+digit hotkeys via a `Scope`),
     `editInline`, `rowAfter`, `draft`, `renameProject`, `projectRow`.
   - `open(file)` never replaces the pane itself with the note.
 - **FocusSettingTab**.
 - **Plugin** — settings + `data` (`folded`, `opened`, `order`) in `data.json`; «All» per device in
-  local storage; `classify` / `notes` / `collect` (the model); task edits (`replace`, `setDate`,
+  local storage; `classify` / `notes` / `fileTasks` / `collect` (the model); task edits (`replace`, `setDate`,
   `setDates`, `moveTasks`, `remove` with undo, `rename`, `insertAfter`, `addLine`, `toggle`); areas and projects
   (`createArea`, `createProject`, `renameProject`, `deleteProject` / `deleteArea`, linked notes:
   `linked`, `setLinked`, `pickNote`, `areaFromNote`, `projectFromNote`).
@@ -41,7 +43,8 @@ Other tools read the same files, so keep these stable:
 - a task file = a note in the folder with `area:` in its frontmatter; `type:` = the project word
   (`project` / `проект`) makes it a project, anything else an area;
 - a task = `- [ ] text` with Tasks emoji dates: ⏳ scheduled (the focus date), 📅 due, 🛫 start,
-  ✅ done; the earliest of ⏳📅🛫 is the date the view shows and edits (its emoji is kept);
+  ✅ done; the earliest of ⏳📅🛫 is the date the view shows and edits (its emoji is kept); `[x]` with
+  ✅ today shows under «Completed» of its area (an area with only those stays in the focus);
 - priority emoji 🔺⏫🔼🔽⏬ stay in the text;
 - a project is listed in its area's note as `- 📁 [[project]]` under the projects heading;
 - a linked note = `note: "[[...]]"` in the task file.

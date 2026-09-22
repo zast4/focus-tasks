@@ -138,6 +138,11 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view .is-later { opacity: 0.7; }
 .focus-tasks-view .is-later:hover { opacity: 1; }
 
+/* «Completed» at the bottom of an area: today's checked-off tasks, faint and struck through. */
+.focus-tasks-view .ft-done-title { display: flex; width: fit-content; }
+.focus-tasks-view li.ft-done > .ft-text { color: var(--text-faint); text-decoration: line-through; cursor: default; }
+.focus-tasks-view li.ft-done > .ft-done-project { flex: none; margin: 0.2em 0 0 0.8em; font-size: 0.8em; color: var(--text-faint); white-space: nowrap; }
+
 /* The bottom of the view: «All» / «Hide», new areas, collapse / expand all, and the title of
    the areas with nothing due. */
 .focus-tasks-view .ft-foot { display: flex; gap: 0.4rem; margin: 0.9em 0 0.4em; padding-top: 0.6em; border-top: 1px solid var(--background-modifier-border); }

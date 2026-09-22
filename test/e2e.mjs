@@ -338,10 +338,26 @@ step("the date on the right: Today button, a day of the month, Clear date", asyn
   await idle();
 });
 
-step(TASKS ? "the checkbox completes through Tasks" : "the checkbox completes without Tasks: [x] and a ✅ date", async () => {
+step((TASKS ? "the checkbox completes through Tasks" : "the checkbox completes without Tasks: [x] and a ✅ date")
+  + "; the task goes to «Completed» at the bottom of the area, its box brings it back", async () => {
+  const done = `(() => { const r = __ft.task('Lace them'); return !!r && !!r.closest('.ft-done-block') && r.querySelector('input').checked; })()`;
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await fileHas("Tasks/Marathon.md", `- [x] Lace them ⏳ ${TODAY} ✅ ${TODAY}`);
-  await until(() => page.eval(`return !__ft.task('Lace them')`), "Lace them gone from the view");
+  await until(() => page.eval(`return ${done} && __ft.area('Sport').parentElement.lastElementChild.matches('.ft-done-block')`), "Lace them under Completed, last in Sport");
+  if (!(await page.eval(`return !!__ft.text('.ft-done-title', 'Completed · 1')`))) throw new Error("no «Completed · 1»");
+  // folds and unfolds
+  await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
+  await until(() => page.eval(`return !__ft.task('Lace them')`), "Completed folded");
+  await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
+  await until(() => page.eval(`return ${done}`), "Completed open again");
+  // its box: open again, among the focus
+  await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
+  await fileHas("Tasks/Marathon.md", `- [ ] Lace them ⏳ ${TODAY}\n`);
+  await until(() => page.eval(`const r = __ft.task('Lace them'); return !!r && !r.closest('.ft-done-block') && !document.querySelector('.focus-tasks-pane .ft-done-block')`), "Lace them open again");
+  await settle();
+  await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
+  await fileHas("Tasks/Marathon.md", `- [x] Lace them ⏳ ${TODAY} ✅ ${TODAY}`);
+  await until(() => page.eval(`return ${done}`), "Lace them under Completed again");
 });
 
 step("drag a task onto an area header moves it into the area's inbox", async () => {
