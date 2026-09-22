@@ -1003,6 +1003,89 @@ test("fuzz: every write leaves a note the plugin can still read", async () => {
   }
 });
 
+// --- a week of use, and someone writing underneath ------------------------------------------------
+
+test("a week of ordinary use leaves the vault consistent", async () => {
+  const { app, plugin } = await stand((a) => {
+    for (const name of ["Work", "Home", "Sport"]) areaNote(a, name);
+    projectNote(a, "Work", "Launch");
+  });
+  const pick = (text) => plugin.tasks().find((x) => x.text === text);
+  // Monday: three tasks come in, one straight into the project
+  await plugin.createTask("Написать письмо", { area: "Work", project: null }, TODAY);
+  await plugin.createTask("Собрать вещи", { area: "Home", project: null }, TODAY);
+  await plugin.createTask("Первый шаг запуска", { area: "Work", project: "Launch" }, TODAY);
+  eq(names((await plugin.collect(false)).flatMap((x) => [...x.loose, ...x.projects.flatMap((p) => p.tasks)])).sort(),
+     ["Written".replace("Written", "Написать письмо"), "Первый шаг запуска", "Собрать вещи"].sort(), "all three are in the focus");
+  // one is finished, one goes to tomorrow, one to the someday list
+  await plugin.toggle(pick("Написать письмо"));
+  await plugin.setDate(pick("Собрать вещи"), DAY(1));
+  await plugin.setDate(pick("Первый шаг запуска"), null);
+  let areas = await plugin.collect(false);
+  eq(names(areaOf(areas, "Work").done), ["Написать письмо"], "what was finished is under Completed");
+  eq(areaNames(areas), ["Work"], "the other areas have nothing due");
+  // a task grows a plan and becomes a project
+  await plugin.createTask("Ремонт кухни", { area: "Home", project: null }, TODAY);
+  await plugin.update(pick("Ремонт кухни"), () => {});
+  await app.vault.process(app.vault.getAbstractFileByPath("Tasks/Ремонт кухни.md"), (t0) => t0 + "\n- [ ] Замерить\n- [ ] Выбрать плитку\n");
+  plugin.forgetScan();
+  await plugin.toProject(pick("Ремонт кухни"));
+  const home = areaOf(await plugin.collect(true), "Home");
+  eq(projectOf(home, "Ремонт кухни").tasks.map((x) => x.text), ["Замерить", "Выбрать плитку"], "the plan became steps");
+  // the day after: what was done yesterday is gone, what was moved is due
+  const yesterday = plugin.tasks().find((x) => x.text === "Написать письмо");
+  await plugin.setFields(yesterday, { completedDate: DAY(-1) });
+  await plugin.setDate(pick("Собрать вещи"), TODAY);
+  areas = await plugin.collect(false);
+  eq(areaOf(areas, "Work"), undefined, "nothing is left in Work today");
+  eq(names(areaOf(areas, "Home").loose), ["Собрать вещи"], "and Home has the task that was moved");
+  // nothing was lost on the way
+  eq(plugin.orphans().length, 0, "no task without a home");
+  eq(plugin.tasks().length, 5, "four tasks and the two steps, minus the one that became a project");
+});
+
+test("someone writing the same notes underneath does not break the list", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    for (let i = 0; i < 12; i++) taskNote(a, "Task " + i, { area: "Work", scheduled: i % 2 ? TODAY : DAY(2) });
+  });
+  // the other writer: a script that edits, renames and adds notes while the plugin works
+  const meddle = async (round) => {
+    const tasks = plugin.tasks();
+    const victim = tasks[round % tasks.length];
+    if (!victim) return;
+    if (round % 3 === 0) {
+      await app.fileManager.processFrontMatter(app.vault.getAbstractFileByPath(victim.file.path), (fm) => { fm.priority = "high"; });
+    } else if (round % 3 === 1) {
+      const to = `Tasks/Renamed ${round}.md`;
+      if (!app.vault.files.has(to)) await app.vault.rename(app.vault.getAbstractFileByPath(victim.file.path), to);
+    } else {
+      taskNote(app, "Extra " + round, { area: "Work", scheduled: TODAY });
+    }
+    plugin.forgetScan();
+  };
+  for (let round = 0; round < 12; round++) {
+    const before = plugin.tasks();
+    const task = before[round % before.length];
+    await Promise.all([
+      round % 2 ? plugin.setDate(task, TODAY) : plugin.toggle(task),
+      meddle(round),
+    ]);
+    const areas = await plugin.collect(true);
+    ok(areas.length >= 1, `round ${round}: the list survived`);
+    for (const t of plugin.tasks()) ok(t.uid && t.text, `round ${round}: a task came back broken`);
+  }
+  const open = plugin.tasks().filter((t) => !["done", "cancelled", "someday"].includes(t.status));
+  const shown = new Set();
+  for (const area of await plugin.collect(true)) {
+    for (const t of [...area.loose, ...area.future.loose]) shown.add(t.file.path);
+    for (const pr of [...area.projects, ...area.future.projects]) for (const t of pr.tasks) shown.add(t.file.path);
+  }
+  for (const t of plugin.orphans()) shown.add(t.file.path);
+  eq(open.filter((t) => !shown.has(t.file.path)).map((t) => t.file.path), [], "every open task is still visible");
+});
+
 // --- scale -------------------------------------------------------------------------------------
 
 test("a thousand tasks collect fast enough for a keystroke", async () => {
