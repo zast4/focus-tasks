@@ -1,22 +1,27 @@
 # Focus Tasks
 
 A focus list for Obsidian in the spirit of TickTick / Things: **areas → projects → tasks**, built on
-plain Markdown checkboxes. What is due today (or overdue) is on top; the rest waits one click away.
+plain Markdown notes — one note per task. What is due today (or overdue) is on top; the rest waits one
+click away.
 
 *[Русская версия ниже](#focus-tasks-по-русски)*
 
 ## How it works
 
-- **Task files.** Every area and every project is a note in one folder (`Tasks` by default, change it
-  in the settings). An area note has `area: <name>` in its frontmatter; a project note also has
-  `type: project`. Tasks are ordinary lines: `- [ ] Buy shoes ⏳ 2026-09-22`.
+- **A task is a note.** Every task is its own note in the tasks folder (`Задачи` by default), with
+  `type: задача` and the rest in the frontmatter: `uid` (its identity, never rewritten), `status`,
+  `area`, `projects`, `scheduled`, `due`, `completedDate`, `priority`. The body of the note is the
+  task's description — and when a description grows into a plan, «Make it a project» turns the task
+  into one.
+- **Areas and projects are notes too**, in the folder from the settings (`Tasks` by default). An area
+  note has `area: <name>` in its frontmatter; a project note also has `type: project`.
 - **Your notes stay yours.** An area or a project can be *linked* to any note of your vault. A click on
   its name opens that note, and the task file is one menu item away («Open task file»). Linked notes
   are never modified.
-- **Dates** use the [Tasks](https://github.com/obsidian-tasks-group/obsidian-tasks) emoji format
-  (⏳ scheduled, 📅 due, 🛫 start, ✅ done), so both plugins read the same lines. Tasks is optional:
-  with it, the checkbox goes through Tasks (recurrence, its done date) and its edit dialog is in the
-  menu; without it, Focus Tasks marks `[x]` and adds `✅ <today>` itself.
+- **The field names are [TaskNotes](https://github.com/callumalpass/tasknotes)'**, so that plugin can
+  be installed on the same notes and bring its recurrence, reminders, time tracking and calendar
+  views, while this list stays the daily focus on top. `uid` and `area` are this plugin's own; both
+  sides keep keys they do not know.
 
 ## The view
 
@@ -63,7 +68,6 @@ task can be restored from the notice that appears.
 | `type` of an area / project | `area` / `project` | `project`/`проект` and `area`/`область` are always recognised |
 | Steps / Inbox / Projects headings | `Steps` / `Inbox` / `Projects` | sections new lines go to |
 | Date format | `DD.MM.YY` | any moment.js format |
-| Use the Tasks plugin | on | when Tasks is installed |
 
 Folded state, «opened» areas and the drag order are saved in the plugin's `data.json` (synced with
 the vault); «All» is remembered per device.
@@ -127,17 +131,22 @@ passes (`--keep` leaves it).
 
 ## Focus Tasks по-русски
 
-Список фокуса в духе TickTick: **области → проекты → задачи** на обычных чекбоксах Markdown.
+Список фокуса в духе TickTick: **области → проекты → задачи** на обычных заметках Markdown —
+по заметке на задачу.
 Сверху — то, что на сегодня и просрочено, остальное — в одном клике.
 
-- **Файлы задач.** Каждая область и каждый проект — заметка в одной папке (по умолчанию `Tasks`,
-  меняется в настройках). У области во frontmatter `area: <имя>`, у проекта ещё `type: project`
-  (или `проект`). Задачи — обычные строки `- [ ] Купить кроссовки ⏳ 2026-09-22`.
+- **Задача — заметка.** Каждая задача лежит своей заметкой в папке задач (по умолчанию `Задачи`):
+  `type: задача`, остальное в свойствах — `uid` (личность, не переписывается), `status`, `area`,
+  `projects`, `scheduled`, `due`, `completedDate`, `priority`. Тело заметки — описание; когда описание
+  вырастает в план, «Сделать проектом» превращает задачу в проект.
+- **Области и проекты — тоже заметки**, в папке из настроек (по умолчанию `Tasks`). У области во
+  frontmatter `area: <имя>`, у проекта ещё `type: проект`.
 - **Свои заметки остаются своими.** Область или проект можно привязать к любой заметке хранилища:
   клик по имени открывает её, а файл задач — в меню («Открыть файл задач»). Привязанные заметки
   плагин не меняет.
-- **Даты** — в формате плагина Tasks (⏳ 📅 🛫 ✅). Tasks не обязателен: без него галочка ставит `[x]`
-  и `✅ <сегодня>` сама.
+- **Имена полей — как у [TaskNotes](https://github.com/callumalpass/tasknotes)**: его можно поставить
+  на те же заметки и получить повторы, напоминания, учёт времени и его виды, а этот список останется
+  дневным фокусом сверху. Свои здесь только `uid` и `area`; чужие ключи обе стороны сохраняют.
 
 Отмеченная задача до конца дня остаётся внизу своей области в блоке «Выполненные» (галочка там
 возвращает её в работу): видно, что сделано за день.

@@ -93,10 +93,24 @@ through every feature with real mouse and keyboard input, checking the files on 
 ```sh
 open -a Obsidian --args --remote-debugging-port=9222   # any vault open
 npm install
+node test/model.mjs                                    # the data layer, no Obsidian needed
 node test/e2e.mjs                                      # --keep leaves the vault open
+node test/mobile.mjs                                   # the same in mobile emulation, with touch
 ```
 
-It must pass (33/33) before a release. On failure the vault stays open and screenshots go to
+`test/model.mjs` runs `main.js` in node against a fake Obsidian (`test/harness.mjs`): a vault in
+memory with the same frontmatter rules. It is where the nasty cases live — junk YAML, dates with a
+time, duplicate uids, two projects of one name, renames that collide, order after a move, four fuzz
+rounds over random vaults that hold one invariant: **no open task may be invisible**. It takes a
+second, so run it on every change.
+
+`test/mobile.mjs` turns on Obsidian's own mobile emulation (a setting of the whole app — both suites
+switch it deliberately, or the desktop run silently tests the phone build) and drives the list with
+touch events on a 390×844 screen.
+
+What each scenario is for, and which test holds it: `SCENARIOS.md`.
+
+It must pass (39/39) before a release, together with the model suite (78) and the phone suite (13). On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;
