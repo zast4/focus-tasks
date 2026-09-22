@@ -719,7 +719,7 @@ class FocusRenderer extends MarkdownRenderChild {
       const li = ul.createEl("li", { cls: "task-list-item ft-task ft-done" });  // no data-task: themes strike the whole row
       const check = li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       check.checked = true;
-      check.onclick = (e) => { e.preventDefault(); p.toggle(task); };
+      this.check(li, check, task);
       await this.text(li, task);
       if (task.project) li.createSpan({ cls: "ft-done-project", text: "📁 " + task.file.basename });
       li.oncontextmenu = (e) => {
@@ -729,6 +729,20 @@ class FocusRenderer extends MarkdownRenderChild {
         menu.showAtMouseEvent(e);
       };
     }
+  }
+
+  // The box of a row: it marks the row at once (the note is written and the list re-read a moment
+  // later) and ignores further clicks on it until then — a second click would undo the first.
+  check(li, box, task) {
+    box.onclick = async (e) => {
+      e.preventDefault();
+      if (li.hasClass("is-toggling")) return;
+      li.addClass("is-toggling");
+      box.checked = !box.checked;
+      if (await this.plugin.toggle(task)) return;
+      li.removeClass("is-toggling");  // the note changed under it: the row goes back as it was
+      box.checked = !box.checked;
+    };
   }
 
   // The task's text as markdown (links work), without the paragraph around it.
@@ -1200,7 +1214,7 @@ class FocusRenderer extends MarkdownRenderChild {
       if (!all && !inFocus(task)) li.addClass("is-later");
       if (all && task.indent) li.style.setProperty("--ft-level", task.indent);
       const box = li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
-      box.onclick = (e) => { e.preventDefault(); this.plugin.toggle(task); };
+      this.check(li, box, task);
       const text = await this.text(li, task);
       const date = li.createSpan();
       this.dateLabel(date, task);
@@ -1305,6 +1319,7 @@ module.exports = class FocusTasks extends Plugin {
     this.data = { folded: saved.folded || {}, opened: saved.opened || {}, order: Object.assign({ areas: [], projects: {} }, saved.order) };
     this.applyLanguage();
     this.views = new Set();
+    this.toggling = new Set();  // lines with a toggle in flight
     this.registerView(VIEW_TYPE, (leaf) => new FocusView(leaf, this));
     this.registerMarkdownCodeBlockProcessor("focus-tasks", (_src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath)));
     this.addRibbonIcon("list-checks", t("open"), () => this.openView());
@@ -1505,6 +1520,7 @@ module.exports = class FocusTasks extends Plugin {
     });
     if (ok) task.line = text.replace(/\n$/, "").split("\n")[0];
     else new Notice(t("changed"));
+    return ok;
   }
 
   // Changes the date the row shows (its emoji kept: ⏳ stays ⏳, 📅 stays 📅); a task without one gets
@@ -1670,9 +1686,18 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // Through Tasks when it is there (recurrence, its own ✅), otherwise [ ] ⇄ [x] with a ✅ date.
+  // One toggle per line at a time (a click repeated before the list catches up is dropped, and so is
+  // the same task clicked in two views at once).
   async toggle(task) {
-    const api = this.tasksApi();
-    await this.replace(task, api ? api.executeToggleTaskDoneCommand(task.line, task.file.path) : toggleLine(task.line));
+    const key = keyOf(task);
+    if (this.toggling.has(key)) return;
+    this.toggling.add(key);
+    try {
+      const api = this.tasksApi();
+      return await this.replace(task, api ? api.executeToggleTaskDoneCommand(task.line, task.file.path) : toggleLine(task.line));
+    } finally {
+      setTimeout(() => this.toggling.delete(key), 600);  // until the list has been re-read
+    }
   }
 
   async edit(task) {

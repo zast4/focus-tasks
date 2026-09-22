@@ -24,6 +24,9 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
     group, `editDate`, `selectionMenu` and `keys` (a `Scope` with Mod+1…4 and Esc, pushed while rows are
     selected and the list's tab is active, so Obsidian's «go to tab» elsewhere is untouched) date it. The row map `items` is swapped together with the
     DOM (`fresh` while building), so a click during a render still finds its row.
+  - `check`: a box marks its row at once and ignores further clicks until the list is re-read (a
+    second click would undo the first); a failed write puts the row back. `toggle` holds one toggle
+    per line in the plugin, so the same task clicked in two views does not toggle twice.
   - `completed`: «Completed · N» at the bottom of an area (tasks with ✅ today from `fileTasks`), folded
     by the `done:<area>` key; its rows are not tracked, so selection and drag skip them.
   - Inline editing: `editor()` (contenteditable, Enter / Esc / blur, Mod+digit hotkeys via a `Scope`),
@@ -62,7 +65,7 @@ node test/e2e.mjs                                      # own ✅ toggle, no Task
 node test/e2e.mjs --with-tasks "<vault>/.obsidian/plugins/obsidian-tasks-plugin"
 ```
 
-Both must pass (32/32) before a release. On failure the vault stays open and screenshots go to
+Both must pass (35/35) before a release. On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

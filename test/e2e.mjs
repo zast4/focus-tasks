@@ -360,6 +360,36 @@ step((TASKS ? "the checkbox completes through Tasks" : "the checkbox completes w
   await until(() => page.eval(`return ${done}`), "Lace them under Completed again");
 });
 
+step("a second click on the same box before the list catches up does not undo the first", async () => {
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')`), "Buy shoes fast on screen");
+  const box = await pos(`__ft.at(__ft.task('Buy shoes fast').querySelector('input'))`, "box of Buy shoes fast");
+  await page.click(box);
+  await page.click(box);  // the row has not moved yet
+  await until(() => page.eval(`const r = __ft.task('Buy shoes fast'); return !!r && !!r.closest('.ft-done-block')`), "Buy shoes fast under Completed");
+  await settle();
+  if (!read("Tasks/Marathon.md").includes(`- [x] Buy shoes fast ⏳ ${TODAY}`)) throw new Error("the second click undid the first: " + J(read("Tasks/Marathon.md").split("\n").find((l) => l.includes("Buy shoes"))));
+  // its box in «Completed» still brings it back
+  await click(`__ft.at(__ft.task('Buy shoes fast').querySelector('input'))`);
+  await fileHas("Tasks/Marathon.md", `- [ ] Buy shoes fast ⏳ ${TODAY}\n`);
+  await until(() => page.eval(`const r = __ft.task('Buy shoes fast'); return !!r && !r.closest('.ft-done-block')`), "Buy shoes fast open again");
+});
+
+step("a box on a row the note changed under: a notice, and the row goes back as it was", async () => {
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')`), "Buy shoes fast on screen");
+  // the list is held still while the note changes, so the row on screen is out of date
+  await page.eval(`const v = [...app.plugins.plugins['focus-tasks'].views][0]; v.editing = true;
+    const f = app.vault.getAbstractFileByPath('Tasks/Marathon.md');
+    await app.vault.process(f, (d) => d.replace('- [ ] Buy shoes fast', '- [ ] Buy shoes fast now'));
+    return true;`);
+  await click(`__ft.at(__ft.task('Buy shoes fast').querySelector('input'))`);
+  await until(() => page.eval(`return [...document.querySelectorAll('.notice')].some((n) => n.textContent.includes('The task changed'))`), "the «changed» notice");
+  if (!(await page.eval(`return !document.querySelector('.focus-tasks-pane li.is-toggling')`))) throw new Error("the row stayed struck through");
+  await page.eval(`const v = [...app.plugins.plugins['focus-tasks'].views][0]; v.editing = false;
+    await app.vault.process(app.vault.getAbstractFileByPath('Tasks/Marathon.md'), (d) => d.replace('- [ ] Buy shoes fast now', '- [ ] Buy shoes fast'));
+    v.render(); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')`), "Buy shoes fast back on screen");
+});
+
 step("drag a task onto an area header moves it into the area's inbox", async () => {
   const from = await pos(`__ft.grip(__ft.task('Plan route'))`, "grip of Plan route");
   const to = await pos(`__ft.at(__ft.area('Sport'))`, "Sport header");
@@ -672,6 +702,17 @@ step("in a note's block, with another note beside it active: Shift-click selects
   await page.key("Meta+2");
   await fileHas("Tasks/Marathon 2027.md", `- [ ] Stretch ⏳ ${TOMORROW}\n- [ ] Plan route ⏳ ${TOMORROW}\n- [ ] Run 5k ⏳ ${TOMORROW}\n- [ ] Buy shoes fast ⏳ ${TODAY}\n`);
   await until(() => page.eval(`return !!(${block})`), "the block still rendered");
+});
+
+step("a box inside a note's block completes the task too", async () => {
+  const block = `[...document.querySelectorAll('.focus-tasks-view')].find((e) => !e.closest('.focus-tasks-pane') && e.getClientRects().length)`;
+  const row = (name) => `__ft.all('li.ft-task', ${block}).find((e) => e.querySelector('.ft-text')?.textContent.trim() === ${J(name)})`;
+  await until(() => page.eval(`return !!(${row("Stretch")})`), "Stretch in the block");
+  await page.click(await page.eval(`return __ft.at((${row("Stretch")}).querySelector('input'))`));
+  await fileHas("Tasks/Marathon 2027.md", `- [x] Stretch`);
+  await until(() => page.eval(`const r = ${row("Stretch")}; return !!r && !!r.closest('.ft-done-block')`), "Stretch under Completed in the block");
+  await page.click(await page.eval(`return __ft.at((${row("Stretch")}).querySelector('input'))`));
+  await fileHas("Tasks/Marathon 2027.md", /- \[ \] Stretch/);
 });
 
 step("commands are registered", async () => {
