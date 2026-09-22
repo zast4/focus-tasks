@@ -6,8 +6,10 @@
   "scripts": {
     "test": "node test/e2e.mjs",
     "test:tasks": "node test/e2e.mjs --with-tasks",
-    "zip": "mkdir -p dist && rm -f dist/focus-tasks.zip && zip -j dist/focus-tasks.zip main.js manifest.json styles.css"
+    "zip": "rm -rf dist && mkdir -p dist/focus-tasks && cp main.js manifest.json styles.css README.md dist/focus-tasks/ && cd dist && zip -qr focus-tasks-$npm_package_version.zip focus-tasks"
   },
   "license": "MIT",
-  "devDependencies": { "ws": "^8.18.0" }
+  "devDependencies": {
+    "ws": "^8.18.0"
+  }
 }
