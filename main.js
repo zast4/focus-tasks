@@ -31,24 +31,21 @@ const {
 } = require("obsidian");
 
 const VIEW_TYPE = "focus-tasks-view";
-const DATE_RE = /\s*(⏳|📅|🛫|✅|➕|❌)️?\s*(\d{4}-\d{2}-\d{2})/g;
-const FOCUS_MARKS = ["⏳", "📅", "🛫"];
 const PROJECT_WORDS = ["project", "проект"];
-const CATCH_ALL = ["Без раздела", "No section"];
+const TASK_WORDS = ["task", "задача"];
+const STATUS_OPEN = "open", STATUS_DONE = "done", STATUS_CANCELLED = "cancelled", STATUS_SOMEDAY = "someday";
 
 const DEFAULTS = {
   folder: "Tasks",
+  tasksFolder: "Задачи",
   language: "auto",
   areaNoteName: "{area}",
   areaFrontmatter: "",
   projectFrontmatter: "",
   typeArea: "area",
   typeProject: "project",
-  stepsHeading: "Steps",
-  inboxHeading: "Inbox",
   projectsHeading: "Projects",
   dateFormat: "DD.MM.YY",
-  useTasksPlugin: true,
 };
 
 // --- strings ----------------------------------------------------------------------------------
@@ -86,7 +83,8 @@ const STRINGS = {
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
-    sFolder: "Folder", sFolderDesc: "Where the task files of areas and projects live. Notes linked to them can be anywhere.",
+    sFolder: "Folder", sFolderDesc: "Where the notes of areas and projects live. Notes linked to them can be anywhere.",
+    sTasksFolder: "Tasks folder", sTasksFolderDesc: "Where task notes are kept, one note per task.",
     sLanguage: "Language", sLanguageDesc: "Interface language (Auto follows Obsidian).",
     sAreaName: "Area note name", sAreaNameDesc: "File name of a new area note; {area} is the area name without a leading emoji.",
     sAreaFm: "Extra frontmatter for new area notes", sAreaFmDesc: "YAML lines added to every new area note (optional).",
@@ -131,7 +129,8 @@ const STRINGS = {
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
-    sFolder: "Папка", sFolderDesc: "Где лежат файлы задач областей и проектов. Привязанные к ним заметки могут быть где угодно.",
+    sFolder: "Папка", sFolderDesc: "Где лежат заметки областей и проектов. Привязанные к ним заметки могут быть где угодно.",
+    sTasksFolder: "Папка задач", sTasksFolderDesc: "Где лежат заметки задач, по одной заметке на задачу.",
     sLanguage: "Язык", sLanguageDesc: "Язык интерфейса (Auto — как в Obsidian).",
     sAreaName: "Имя заметки области", sAreaNameDesc: "Имя файла новой области; {area} — имя области без эмодзи в начале.",
     sAreaFm: "Дополнительный frontmatter новых областей", sAreaFmDesc: "YAML-строки, которые добавятся в каждую новую заметку области (необязательно).",
@@ -163,8 +162,9 @@ const isHead = (l) => /^#{1,6}\s/.test(l);
 const headText = (l) => l.replace(/^#+\s*/, "").trim();
 const indentOf = (l) => l.match(/^\s*/)[0].replace(/\t/g, "    ").length;
 const collator = () => (a, b) => a.localeCompare(b, LANG);
-// What a selected row is known by across re-renders: its note and its line.
-const keyOf = (task) => task.file.path + "\n" + task.line;
+const newUid = () => "ft-" + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
+// What a selected row is known by across re-renders: the task's own identity.
+const keyOf = (task) => task.uid;
 // Shift or Cmd (Ctrl off the Mac) held: a click selects rather than edits.
 const picking = (e) => e.shiftKey || (Platform.isMacOS ? e.metaKey : e.ctrlKey);
 
@@ -192,79 +192,6 @@ function insertBlock(text, block, section) {
     lines.splice(end, 0, ...(end === start + 1 ? ["", ...block] : block));  // an empty section: a blank line under its heading
   } else lines.push("", "## " + section, "", ...block);
   return lines.join("\n") + "\n";
-}
-
-// A task line plus the lines nested under it (steps, description): [start, end).
-function blockAt(lines, i) {
-  let end = i + 1;
-  while (end < lines.length && lines[end].trim() && indentOf(lines[end]) > indentOf(lines[i])) end++;
-  return end;
-}
-
-// The line of `task` in `lines`: where it was read, the same line elsewhere (lines above it changed),
-// or the nearest line with the same task text (another device or a script has edited its dates in the
-// meantime); -1 when the task is gone.
-function lineOf(lines, task) {
-  if (lines[task.lineNo] === task.line) return task.lineNo;
-  const exact = lines.indexOf(task.line);
-  if (exact >= 0) return exact;
-  let near = -1;
-  for (let i = 0; i < lines.length; i++) {
-    const parsed = parseLine(lines[i]);
-    if (parsed?.text === task.text && (near < 0 || Math.abs(i - task.lineNo) < Math.abs(near - task.lineNo))) near = i;
-  }
-  return near;
-}
-
-// Where the blocks of `tasks` are in `lines`, top down: [{task, i, end}]; a task nested in another
-// one's block goes along with it and has no span of its own. null when one is gone (`loose`: skipped).
-function spansOf(lines, tasks, loose = false) {
-  const spans = [];
-  for (const task of tasks) {
-    const i = lineOf(lines, task);
-    if (i < 0) { if (loose) continue; return null; }
-    spans.push({ task, i, end: blockAt(lines, i) });
-  }
-  spans.sort((a, b) => a.i - b.i);
-  return spans.filter((s, k) => !spans.slice(0, k).some((o) => s.i < o.end));
-}
-
-// Shifts a block so its first line sits at `indent` spaces; tabs become four spaces.
-function reindent(block, indent) {
-  const base = indentOf(block[0]);
-  return block.map((l) => " ".repeat(Math.max(0, indentOf(l) - base + indent)) + l.replace(/^\s*/, ""));
-}
-
-// "    - [ ] Step ⏫ ⏳ 2026-09-22" → {indent: 1, text: "Step ⏫", date: "2026-09-22", mark: "⏳", done: null};
-// date = the earliest focus date, mark = the emoji it came with (the one a date edit changes),
-// done = the ✅ date.
-function parseLine(line) {
-  const m = line.match(/^(\s*)[-*] \[(.)\] (.*)$/);
-  if (!m) return null;
-  const dates = [];
-  let done = null;
-  for (const [, mark, day] of m[3].matchAll(DATE_RE)) {
-    if (FOCUS_MARKS.includes(mark)) dates.push({ mark, day });
-    else if (mark === "✅") done = day;
-  }
-  dates.sort((a, b) => a.day.localeCompare(b.day));
-  return { indent: Math.floor(m[1].replace(/\t/g, "    ").length / 4), status: m[2],
-    text: m[3].replace(DATE_RE, "").trim(), date: dates[0]?.day || null, mark: dates[0]?.mark || null, done };
-}
-
-// `line` with its date (the one marked `mark`; ⏳ when it has none) set to `day`, or dropped for null.
-function withDate(line, mark, day) {
-  mark = mark || "⏳";
-  const body = line.replace(new RegExp(`\\s*${mark}\\uFE0F?\\s*\\d{4}-\\d{2}-\\d{2}`, "g"), "").replace(/\s+$/, "");
-  return day ? `${body} ${mark} ${day}` : body;
-}
-
-// "- [ ] Task ⏳ 2026-09-22" → "- [x] Task ⏳ 2026-09-22 ✅ <today>" and back.
-function toggleLine(line) {
-  const m = line.match(/^(\s*[-*] \[)(.)(\] .*)$/);
-  if (!m) return line;
-  if (m[2] === " ") return `${m[1]}x${m[3].replace(/\s+$/, "")} ✅ ${today()}`;
-  return `${m[1]} ${m[3].replace(/\s*✅️?\s*\d{4}-\d{2}-\d{2}/g, "")}`;
 }
 
 // --- modals and the date picker --------------------------------------------------------------
@@ -678,10 +605,8 @@ class FocusRenderer extends MarkdownRenderChild {
     const focus = tasks.filter(inFocus).length;
     if (all) title.createSpan({ cls: "ft-count", text: t("openCount", tasks.length) + (focus ? t("inFocus", focus) : "") });
     else if (!open) title.createSpan({ cls: "ft-count", text: String(tasks.length) });
-    this.plus(title, t("addToArea"), async () => {
-      const file = area.note || await p.createArea(area.name);
-      return file && { file, project: false, noDate: all };
-    }, () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
+    this.plus(title, t("addToArea"), async () => ({ area: area.name, project: null, noDate: all }),
+      () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
     this.more(title, (menu) => this.areaMenu(menu, area));
     this.grip(title, { type: "area", area });
     if (!open) return;
@@ -691,10 +616,8 @@ class FocusRenderer extends MarkdownRenderChild {
       if (!area.loose.length && !area.projects.length) {
         // «Empty» is the first row's placeholder: a click turns it into a new task being typed
         const empty = box.createDiv({ cls: "ft-empty ft-empty-add", text: t("empty"), attr: { "aria-label": t("addTask") } });
-        empty.onclick = async () => {
-          const file = area.note || await p.createArea(area.name);
-          if (!file) return;
-          this.draft(empty, { file, project: false, noDate: true });
+        empty.onclick = () => {
+          this.draft(empty, { area: area.name, project: null, noDate: true });
           empty.remove();
         };
       }
@@ -736,7 +659,7 @@ class FocusRenderer extends MarkdownRenderChild {
       li.oncontextmenu = (e) => {
         e.preventDefault();
         const menu = new Menu();
-        menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file, null, { line: task.lineNo })));
+        menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file)));
         menu.showAtMouseEvent(e);
       };
     }
@@ -791,7 +714,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const focus = project.tasks.filter(inFocus).length;
     if (all) head.createSpan({ cls: "ft-count", text: `${project.tasks.length}` + (focus ? t("inFocus", focus) : "") });
     else if (!open) head.createSpan({ cls: "ft-count", text: String(project.tasks.length) });
-    this.plus(head, t("addStep"), () => ({ file: project.file, project: true, noDate: later || all }), () => {
+    this.plus(head, t("addStep"), () => ({ area: area.name, project: project.file.basename, noDate: later || all }), () => {
       const body = head.nextElementSibling?.hasClass("ft-project-body") ? head.nextElementSibling : null;
       if (body) return body.lastElementChild || body;
       const fresh = createDiv({ cls: "ft-project-body" });
@@ -827,7 +750,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (!target) return null;
     if (item.type === "area" && target.area.name === item.area.name) return null;
     if (item.type === "project" && (target.area.name !== item.area.name || target.project.file === item.project.file)) return null;
-    if (item.type === "task" && target.type === "task" && (item.tasks || [item.task]).some((x) => x.file === target.task.file && x.lineNo === target.task.lineNo)) return null;
+    if (item.type === "task" && target.type === "task" && (item.tasks || [item.task]).some((x) => x.uid === target.task.uid)) return null;
     const r = hit.getBoundingClientRect();
     const into = item.type === "task" && target.type !== "task";
     return { el: hit, target, into, after: !into && y > r.top + r.height / 2 };
@@ -987,8 +910,6 @@ class FocusRenderer extends MarkdownRenderChild {
     // The date changes at once and the label on the right follows; the text stays in edit.
     const redate = async (day) => {
       await this.plugin.setDate(task, day);
-      const parsed = parseLine(task.line);
-      Object.assign(task, { date: parsed?.date || null, mark: parsed?.mark || null });
       const label = el.closest("li")?.querySelector(".ft-date");
       if (label) this.dateLabel(label, task);
     };
@@ -1135,10 +1056,7 @@ class FocusRenderer extends MarkdownRenderChild {
 
   areaMenu(menu, area) {
     const p = this.plugin;
-    menu.addItem((i) => i.setTitle(t("addToArea")).setIcon("plus").onClick(async () => {
-      const file = area.note || await p.createArea(area.name);
-      if (file) p.addTask(null, { file, project: false });
-    }));
+    menu.addItem((i) => i.setTitle(t("addToArea")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: null })));
     menu.addItem((i) => i.setTitle(t("newProject")).setIcon("folder-plus").onClick(() => p.newProject(area)));
     menu.addItem((i) => i.setTitle(t("projectFromNote")).setIcon("file-plus").onClick(() => p.projectFromNote(area)));
     menu.addSeparator();
@@ -1152,7 +1070,7 @@ class FocusRenderer extends MarkdownRenderChild {
 
   projectMenu(menu, area, project, head) {
     const p = this.plugin;
-    menu.addItem((i) => i.setTitle(t("addStep")).setIcon("plus").onClick(() => p.addTask(null, { file: project.file, project: true })));
+    menu.addItem((i) => i.setTitle(t("addStep")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: project.file.basename })));
     if (head) menu.addItem((i) => i.setTitle(t("rename")).setIcon("pencil").onClick(() => this.renameProject(head, area, project)));
     menu.addSeparator();
     this.noteItems(menu, project.file, () => project.file);
@@ -1186,8 +1104,7 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => p.setDate(task, day(1))));
     menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => p.setDate(task, null)));
     menu.addSeparator();
-    if (p.tasksApi()) menu.addItem((i) => i.setTitle(t("tasksDialog")).setIcon("calendar-days").onClick(() => p.tasksDialog(task)));
-    menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file, null, { line: task.lineNo })));
+    menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file)));
     menu.addItem((i) => {
       i.setTitle(t("delete")).setIcon("trash-2").onClick(() => p.remove(task));
       if (i.setWarning) i.setWarning(true);
@@ -1224,9 +1141,8 @@ class FocusRenderer extends MarkdownRenderChild {
   async list(parent, tasks, all = false) {
     const ul = parent.createEl("ul", { cls: "contains-task-list ft-list" });
     for (const task of tasks) {
-      const li = ul.createEl("li", { cls: "task-list-item ft-task", attr: { "data-task": task.status } });
+      const li = ul.createEl("li", { cls: "task-list-item ft-task" });
       if (!all && !inFocus(task)) li.addClass("is-later");
-      if (all && task.indent) li.style.setProperty("--ft-level", task.indent);
       const box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       this.check(li, box, task);
       const text = await this.text(li, task);
@@ -1294,6 +1210,7 @@ class FocusSettingTab extends PluginSettingTab {
         p.refresh();
       }));
     text("sFolder", "sFolderDesc", "folder");
+    text("sTasksFolder", "sTasksFolderDesc", "tasksFolder");
     new Setting(containerEl).setName(t("sLanguage")).setDesc(t("sLanguageDesc")).addDropdown((d) => d
       .addOptions({ auto: "Auto", en: "English", ru: "Русский" }).setValue(s.language).onChange(async (v) => {
         s.language = v;
@@ -1315,12 +1232,8 @@ class FocusSettingTab extends PluginSettingTab {
       }));
     text("sTypeArea", "sTypeDesc", "typeArea");
     text("sTypeProject", "sTypeDesc", "typeProject");
-    text("sSteps", "sStepsDesc", "stepsHeading");
-    text("sInbox", "sInboxDesc", "inboxHeading");
     text("sProjects", "sProjectsDesc", "projectsHeading");
     text("sDateFormat", "sDateFormatDesc", "dateFormat");
-    new Setting(containerEl).setName(t("sTasks")).setDesc(t("sTasksDesc")).addToggle((c) => c
-      .setValue(s.useTasksPlugin).onChange(async (v) => { s.useTasksPlugin = v; await p.saveAll(); }));
   }
 }
 
@@ -1411,11 +1324,6 @@ module.exports = class FocusTasks extends Plugin {
     await this.saveAll();
   }
 
-  tasksApi() {
-    if (!this.settings.useTasksPlugin) return null;
-    return this.app.plugins?.plugins?.["obsidian-tasks-plugin"]?.apiV1 || null;
-  }
-
   // --- notes --------------------------------------------------------------------------------
 
   get folder() { return normalizePath(this.settings.folder || DEFAULTS.folder); }
@@ -1448,35 +1356,34 @@ module.exports = class FocusTasks extends Plugin {
     return out;
   }
 
-  // Where an area note takes a new task: its last section when that's the catch-all, else the inbox.
-  areaSection(text) {
-    const heads = text.split("\n").filter(isHead).map(headText);
-    const last = heads[heads.length - 1];
-    return [this.settings.inboxHeading, ...CATCH_ALL].includes(last) ? last : this.settings.inboxHeading;
+  get tasksFolder() { return normalizePath(this.settings.tasksFolder || DEFAULTS.tasksFolder); }
+
+  // A task = its own note in the tasks folder: `type: задача`, the rest in the frontmatter. `uid` is
+  // its identity and never changes; the file name is only a readable label.
+  taskOf(file) {
+    const folder = this.tasksFolder;
+    if (folder && folder !== "/" && !file.path.startsWith(folder + "/")) return null;
+    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (!fm || !TASK_WORDS.includes(String(fm.type ?? "").trim().toLowerCase())) return null;
+    const link = (v) => (typeof v === "string" ? (v.match(/\[\[([^\]|#]+)/)?.[1] || v).trim() : null);
+    return { file, uid: fm.uid ? String(fm.uid) : file.path, text: String(fm.title ?? file.basename),
+      status: String(fm.status ?? STATUS_OPEN), date: fm.scheduled || null, due: fm.due || null,
+      doneDate: fm.done || null, priority: fm.priority || null,
+      area: fm.area ? String(fm.area) : null, project: link(fm.project), source: link(fm.source) };
   }
 
-  // The open tasks of a task file, and those checked off today (`done`: [x] with ✅ today).
-  async fileTasks(file) {
-    const cache = this.app.metadataCache.getFileCache(file);
-    const items = (cache?.listItems || []).filter((i) => i.task !== undefined && i.task !== "-");
-    const out = { open: [], done: [] };
-    if (!items.length) return out;
-    const lines = (await this.app.vault.cachedRead(file)).split("\n");
-    const now = today();
-    for (const i of items) {
-      const lineNo = i.position.start.line;
-      const parsed = parseLine(lines[lineNo] || "");
-      if (!parsed || !parsed.text) continue;
-      const task = { ...parsed, file, lineNo, line: lines[lineNo] };
-      if (!"xX".includes(i.task)) out.open.push(task);
-      else if (parsed.done === now) out.done.push(task);
+  tasks() {
+    const out = [];
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      const task = this.taskOf(file);
+      if (task) out.push(task);
     }
     return out;
   }
 
   // → [{name, note, loose, projects, focus, later, future, done}]. The focus keeps only tasks due today
   // or earlier (their areas, and areas with something checked off today); `all` keeps every task of
-  // every area. `done`: checked off today, `project` set on the steps of projects.
+  // every area. `done`: checked off today. Tasks are notes; areas and projects are their own notes.
   async collect(all) {
     const byArea = new Map();
     const areaOf = (name) => {
@@ -1484,23 +1391,46 @@ module.exports = class FocusTasks extends Plugin {
       return byArea.get(name);
     };
     const first = (tasks) => tasks.map((x) => x.date).filter(Boolean).sort()[0] || "9999";
+    const projects = new Map();  // basename of a project note → its bucket in its area
+    const now = today();
     for (const n of this.notes()) {
       const area = areaOf(n.area);
-      if (!n.project && !area.note) area.note = n.file;
-      const { open, done } = await this.fileTasks(n.file);
-      const focus = open.filter(inFocus), later = open.filter((x) => !inFocus(x));
-      area.focus += focus.length;
-      area.later += later.length;
-      const tasks = all ? open : focus;
-      if (n.project) {
-        // a project whose steps are all done today stays on screen with its «Completed»
-        if (all || tasks.length || done.length) area.projects.push({ file: n.file, tasks, done, first: first(tasks) });
-        if (!all && (later.length || !focus.length)) area.future.projects.push({ file: n.file, tasks: later, done: [], first: first(later) });
-      } else {
-        area.loose.push(...tasks);
-        area.done.push(...done);  // the area's own «Completed»: its loose tasks only
-        if (!all) area.future.loose.push(...later);
+      if (!n.project) { if (!area.note) area.note = n.file; continue; }
+      const bucket = { file: n.file, area, tasks: [], done: [], later: [], first: "9999" };
+      projects.set(n.file.basename, bucket);
+      area.buckets = [...(area.buckets || []), bucket];
+    }
+    for (const task of this.tasks()) {
+      if (!task.area || task.status === STATUS_CANCELLED || task.status === STATUS_SOMEDAY) continue;
+      const area = areaOf(task.area);
+      const bucket = task.project ? projects.get(task.project) : null;
+      if (task.status === STATUS_DONE) {
+        if (task.doneDate === now) (bucket ? bucket.done : area.done).push(task);
+        continue;
       }
+      const focused = inFocus(task);
+      area[focused ? "focus" : "later"]++;
+      if (bucket) (focused || all ? bucket.tasks : bucket.later).push(task);
+      else if (focused || all) area.loose.push(task);
+      else area.future.loose.push(task);
+    }
+    // Notes have no order of their own: the nearest date first, then by name (a dragged order of
+    // tasks inside a list is a separate thing and is not kept yet).
+    const cmpTask = (x, y) => (x.date || "9999").localeCompare(y.date || "9999") || collator()(x.text, y.text);
+    for (const area of byArea.values()) {
+      area.loose.sort(cmpTask);
+      area.future.loose.sort(cmpTask);
+      for (const b of area.buckets || []) {
+        b.tasks.sort(cmpTask);
+        b.later.sort(cmpTask);
+        b.done.sort(cmpTask);
+      }
+      for (const b of area.buckets || []) {
+        b.first = first(b.tasks);
+        if (all || b.tasks.length || b.done.length) area.projects.push(b);
+        if (!all && (b.later.length || !b.tasks.length)) area.future.projects.push({ file: b.file, tasks: b.later, done: [], first: first(b.later) });
+      }
+      delete area.buckets;
     }
     let areas = [...byArea.values()];
     if (!all) areas = areas.filter((a) => a.focus || a.done.length);
@@ -1513,167 +1443,89 @@ module.exports = class FocusTasks extends Plugin {
     for (const a of areas) {
       a.projects.sort(byOrder(a));
       a.future.projects.sort(byOrder(a));
-      a.done.sort((x, y) => x.lineNo - y.lineNo);
+      a.done.sort((x, y) => cmp(x.text, y.text));
     }
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));
   }
 
   // --- tasks --------------------------------------------------------------------------------
 
-  // Rewrites the task's line — wherever it is now — with `fn(the line as it is in the note)`, so an
-  // edit made meanwhile on another device is not overwritten. `fn` may return several lines (Tasks
-  // makes the next copy of a recurring task) or null to leave the note alone.
-  async change(task, fn) {
-    let ok = false, before = null;
-    await this.app.vault.process(task.file, (data) => {
-      const lines = data.split("\n");
-      const i = lineOf(lines, task);
-      if (i < 0) return data;
-      const text = fn(lines[i]);
-      if (text == null) return data;
-      ok = true;
-      before = lines[i];
-      lines.splice(i, 1, ...text.replace(/\n$/, "").split("\n"));
-      task.lineNo = i;
-      task.line = text.replace(/\n$/, "").split("\n")[0];
-      return lines.join("\n");
-    });
-    if (ok) this.watch(task.file, before, task.line);
-    if (!ok) {
+  // --- tasks: each one is a note ------------------------------------------------------------
+
+  // Writes fields into the task's note; a null value removes the key. The note is found by its path:
+  // renames are followed by Obsidian itself, so nothing here depends on the text of the task.
+  async setFields(task, fields) {
+    const file = this.app.vault.getAbstractFileByPath(task.file.path) || task.file;
+    if (!file || file.deleted) { new Notice(t("changed")); return false; }
+    try {
+      await this.app.fileManager.processFrontMatter(file, (fm) => {
+        for (const [key, value] of Object.entries(fields)) {
+          if (value === null || value === undefined) delete fm[key];
+          else fm[key] = value;
+        }
+      });
+    } catch (e) {
       new Notice(t("changed"));
-      console.warn("focus-tasks: the task is gone from", task.file.path, { lineNo: task.lineNo, line: task.line });
+      console.warn("focus-tasks: the task note could not be written", task.file.path, e);
+      return false;
     }
+    return true;
+  }
+
+  // Done ⇄ open, with the day it was done.
+  async toggle(task) {
+    if (this.toggling.has(task.uid)) return false;
+    this.toggling.add(task.uid);
+    try {
+      const done = task.status !== STATUS_DONE;
+      const ok = await this.setFields(task, { status: done ? STATUS_DONE : STATUS_OPEN, done: done ? today() : null });
+      if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate: done ? today() : null });
+      return ok;
+    } finally {
+      setTimeout(() => this.toggling.delete(task.uid), 600);  // until the list has been re-read
+    }
+  }
+
+  // The date the focus goes by; null takes the task back to the someday list.
+  async setDate(task, day) {
+    const ok = await this.setFields(task, { scheduled: day || null });
+    if (ok) task.date = day || null;
     return ok;
   }
 
-  // Swap a task's line for new text.
-  replace(task, text) { return this.change(task, () => text); }
-
-  // Sync from another device (or another plugin) can save its own copy of a note a moment after a
-  // change; then the line is back as it was and nothing on screen says so.
-  watch(file, before, after) {
-    setTimeout(async () => {
-      const lines = (await this.app.vault.read(file)).split("\n");
-      if (lines.includes(after) || !lines.includes(before)) return;
-      new Notice(t("overwritten", file.basename), 10000);
-      console.warn("focus-tasks: the note was saved over the change", file.path, { before, after });
-    }, 2000);
-  }
-
-  // Changes the date the row shows (its emoji kept: ⏳ stays ⏳, 📅 stays 📅); a task without one gets
-  // ⏳; null drops it.
-  async setDate(task, day) {
-    await this.change(task, (line) => withDate(line, parseLine(line)?.mark, day));
-  }
-
-  // One date for several tasks, one write per note.
   async setDates(tasks, day) {
-    let missed = false;
-    for (const file of new Set(tasks.map((x) => x.file))) {
-      await this.app.vault.process(file, (data) => {
-        const lines = data.split("\n");
-        for (const task of tasks.filter((x) => x.file === file)) {
-          const i = lineOf(lines, task);
-          if (i < 0) { missed = true; continue; }
-          lines[i] = task.line = withDate(lines[i], parseLine(lines[i])?.mark, day);
-          task.lineNo = i;
-        }
-        return lines.join("\n");
-      });
+    for (const task of tasks) await this.setDate(task, day);
+  }
+
+  // New text: the note keeps its uid and is renamed to match (the whole text stays in `title` when it
+  // is too long for a file name).
+  async rename(task, text) {
+    const name = fileName(text).slice(0, 60).trim();
+    await this.setFields(task, { title: !name || name !== text ? text : null });
+    if (name && name !== task.file.basename) {
+      const path = normalizePath(`${this.tasksFolder}/${await this.freeName(name)}.md`);
+      await this.app.fileManager.renameFile(task.file, path);
     }
-    if (missed) new Notice(t("changed"));
+    task.text = text;
   }
 
-  // `drop` comes from FocusRenderer.target; `shown` is the order on screen.
-  async drop(item, drop, shown) {
-    const place = (list, key, targetKey, after) => {
-      const out = list.filter((k) => k !== key);
-      const i = out.indexOf(targetKey);
-      out.splice(i < 0 ? out.length : i + (after ? 1 : 0), 0, key);
-      return out;
-    };
-    const merge = (...lists) => [...new Set(lists.flat())];
-    const cmp = collator();
-    if (item.type === "area") {
-      const rank = (a) => { const i = this.data.order.areas.indexOf(a); return i < 0 ? 1e9 : i; };
-      const all = [...new Set(this.notes().map((n) => n.area))].sort((a, b) => rank(a) - rank(b) || cmp(bare(a), bare(b)));
-      this.data.order.areas = place(all, item.area.name, drop.target.area.name, drop.after);
-    } else if (item.type === "project") {
-      const name = item.area.name;
-      const mine = this.notes().filter((n) => n.project && n.area === name).map((n) => n.file.path);
-      const all = merge(this.data.order.projects[name] || [], shown.projects[name] || [], mine);
-      this.data.order.projects[name] = place(all, item.project.file.path, drop.target.project.file.path, drop.after);
-    } else return this.moveTasks(item.tasks || [item.task], drop);
-    await this.saveAll();
-    this.refresh();
-  }
-
-  // Moves tasks with their nested lines to one place, in the given order. Into another note they are
-  // written there first and only then cut from their old places, so a failure leaves copies rather
-  // than a loss.
+  // `drop` comes from FocusRenderer.target: onto a header means «into that area or project», onto a
+  // task means «where that task lives».
   async moveTasks(tasks, drop) {
-    const eol = (before, after) => (before.endsWith("\n") && !after.endsWith("\n") ? after + "\n" : after);
-    let dest, section = null;
-    if (drop.into) {
-      const tg = drop.target;
-      dest = tg.type === "project" ? tg.project.file : (tg.area.note || await this.createArea(tg.area.name));
-      if (!dest) return;
-      section = tg.type === "project" ? this.settings.stepsHeading : null;
-    } else dest = drop.target.task.file;
-    const target = drop.into ? null : drop.target.task;
-    const blocks = new Map();  // task → its lines
-    const away = new Map();    // another note → its tasks
-    for (const task of tasks) if (task.file !== dest) away.set(task.file, [...(away.get(task.file) || []), task]);
-    for (const [file, list] of away) {
-      const lines = (await this.app.vault.read(file)).split("\n");
-      const spans = spansOf(lines, list);
-      if (!spans) { new Notice(t("changed")); return; }
-      for (const s of spans) blocks.set(s.task, lines.slice(s.i, s.end));
-    }
-    let ok = false;
-    await this.app.vault.process(dest, (data) => {
-      const lines = data.split("\n");
-      let j = target ? lineOf(lines, target) : -1;
-      const spans = spansOf(lines, tasks.filter((x) => x.file === dest));
-      if (!spans || (target && j < 0)) return data;
-      if (target && spans.some((s) => j >= s.i && j < s.end)) return data;  // onto a moved task's own step
-      for (const s of [...spans].reverse()) {
-        blocks.set(s.task, lines.splice(s.i, s.end - s.i));
-        if (j > s.i) j -= s.end - s.i;
-      }
-      const indent = target ? indentOf(lines[j]) : 0;
-      const moved = tasks.filter((x) => blocks.has(x)).flatMap((x) => reindent(blocks.get(x), indent));
-      ok = true;
-      if (target) {
-        lines.splice(drop.after ? blockAt(lines, j) : j, 0, ...moved);
-        return eol(data, lines.join("\n"));
-      }
-      const text = lines.join("\n");
-      return eol(data, insertBlock(text, moved, section || this.areaSection(text)).replace(/\n$/, ""));
-    });
-    if (!ok) { new Notice(t("changed")); return; }
-    for (const [file, list] of away) {
-      await this.app.vault.process(file, (data) => {
-        const lines = data.split("\n");
-        for (const s of spansOf(lines, list, true).reverse()) lines.splice(s.i, s.end - s.i);
-        return lines.join("\n");
-      });
+    const tg = drop.target;
+    const area = drop.into ? tg.area.name : tg.task.area;
+    const project = drop.into ? (tg.type === "project" ? tg.project.file.basename : null) : tg.task.project;
+    for (const task of tasks) {
+      const ok = await this.setFields(task, { area, project: project ? `[[${project}]]` : null });
+      if (ok) Object.assign(task, { area, project });
     }
   }
 
-  // Deletes the task line and the lines nested under it; the notice can undo.
+  // The note goes to the trash; the notice puts it back with the same uid.
   async remove(task) {
-    let removed = null, at = -1;
-    await this.app.vault.process(task.file, (data) => {
-      const lines = data.split("\n");
-      const i = lineOf(lines, task);
-      if (i < 0) return data;
-      const end = blockAt(lines, i);
-      removed = lines.splice(i, end - i);
-      at = i;
-      return lines.join("\n");
-    });
-    if (!removed) { new Notice(t("changed")); return; }
+    const text = await this.app.vault.read(task.file);
+    const path = task.file.path;
+    await this.trash(task.file);
     let undo;
     const notice = new Notice(createFragment((f) => {
       f.appendText(t("deleted", task.text) + " ");
@@ -1682,84 +1534,56 @@ module.exports = class FocusTasks extends Plugin {
     undo.onclick = async (e) => {
       e.preventDefault();
       notice.hide();
-      await this.app.vault.process(task.file, (data) => {
-        const lines = data.split("\n");
-        lines.splice(Math.min(at, lines.length), 0, ...removed);
-        return lines.join("\n");
-      });
+      if (!this.app.vault.getAbstractFileByPath(path)) await this.app.vault.create(path, text);
+      this.refresh();
     };
   }
 
-  // New text for a task, the dates of its line kept.
-  async rename(task, text) {
-    await this.change(task, (line) => {
-      const m = line.match(/^(\s*[-*] \[.\] )(.*)$/);
-      if (!m) return null;
-      const dates = [...m[2].matchAll(DATE_RE)].map((d) => d[0].trim());
-      return m[1] + text + (dates.length ? " " + dates.join(" ") : "");
-    });
-    task.text = text;
+  // A free file name in the tasks folder.
+  async freeName(base) {
+    let name = base, i = 2;
+    while (this.app.vault.getAbstractFileByPath(normalizePath(`${this.tasksFolder}/${name}.md`))) name = `${base} (${i++})`;
+    return name;
   }
 
-  // A new task line right after `anchor`'s block, at its indent → the new line (the next anchor).
+  // A new task note. `target`: {area, project (basename or null)}; `day` — the focus date.
+  async createTask(text, target, day) {
+    await this.ensureFolder(this.tasksFolder);
+    const name = await this.freeName(fileName(text).slice(0, 60) || t("newTask"));
+    const front = ["---", `uid: ${newUid()}`, "type: задача", `status: ${STATUS_OPEN}`];
+    if (target.area) front.push(`area: ${JSON.stringify(target.area)}`);
+    if (target.project) front.push(`project: "[[${target.project}]]"`);
+    if (day) front.push(`scheduled: ${day}`);
+    if (name !== text) front.push(`title: ${JSON.stringify(text)}`);
+    front.push("---", "");
+    const file = await this.app.vault.create(normalizePath(`${this.tasksFolder}/${name}.md`), front.join("\n"));
+    this.lastTarget = target;
+    return this.taskOf(file) || { file, uid: front[1].slice(5), text, status: STATUS_OPEN, date: day || null, area: target.area, project: target.project };
+  }
+
+  // The view asks for these when a row is typed: a task right after another one, or in a container.
   async insertAfter(anchor, text, day) {
-    let made = null;
-    await this.app.vault.process(anchor.file, (data) => {
-      const lines = data.split("\n");
-      const i = lineOf(lines, anchor);
-      if (i < 0) return data;
-      const at = blockAt(lines, i);
-      const line = `${lines[i].match(/^\s*/)[0]}- [ ] ${text}` + (day ? ` ⏳ ${day}` : "");
-      lines.splice(at, 0, line);
-      made = { file: anchor.file, line, lineNo: at };
-      return lines.join("\n");
-    });
-    if (!made) new Notice(t("changed"));
-    return made;
+    return this.createTask(text, { area: anchor.area, project: anchor.project }, day);
   }
 
   async addLine(target, text, day) {
-    const line = `- [ ] ${text}` + (day ? ` ⏳ ${day}` : "");
-    await this.app.vault.process(target.file, (body) => insertBlock(body, [line], target.project ? this.settings.stepsHeading : this.areaSection(body)));
-    this.lastPath = target.file.path;
-  }
-
-  // Through Tasks when it is there (recurrence, its own ✅), otherwise [ ] ⇄ [x] with a ✅ date.
-  // One toggle per line at a time (a click repeated before the list catches up is dropped, and so is
-  // the same task clicked in two views at once).
-  async toggle(task) {
-    const key = keyOf(task);
-    if (this.toggling.has(key)) return;
-    this.toggling.add(key);
-    try {
-      const api = this.tasksApi();
-      return await this.change(task, (line) => (api ? api.executeToggleTaskDoneCommand(line, task.file.path) : toggleLine(line)));
-    } finally {
-      setTimeout(() => this.toggling.delete(key), 600);  // until the list has been re-read
-    }
-  }
-
-  async tasksDialog(task) {
-    const api = this.tasksApi();
-    if (!api) return;
-    const line = await api.editTaskLineModal(task.line);
-    if (line && line !== task.line) await this.replace(task, line);
+    await this.createTask(text, { area: target.area ?? target.file?.parent?.name, project: target.project }, day);
   }
 
   targets() {
     const cmp = collator();
     const out = this.notes().map((n) => ({
-      ...n, label: n.project ? `📁 ${n.file.basename} · ${n.area}` : `🗂 ${n.area} ${t("looseTasks")}`,
+      area: n.area, project: n.project ? n.file.basename : null,
+      label: n.project ? `📁 ${n.file.basename} · ${n.area}` : `🗂 ${n.area} ${t("looseTasks")}`,
     }));
-    const last = this.lastPath;
-    return out.sort((a, b) => (b.file.path === last) - (a.file.path === last)
-      || cmp(bare(a.area), bare(b.area)) || (a.project - b.project) || cmp(a.file.basename, b.file.basename));
+    const last = this.lastTarget;
+    const same = (x) => last && x.area === last.area && (x.project || null) === (last.project || null);
+    return out.sort((a, b) => same(b) - same(a) || cmp(bare(a.area), bare(b.area)) || (!!a.project - !!b.project) || cmp(a.project || "", b.project || ""));
   }
 
   // --- areas and projects ------------------------------------------------------------------
 
-  async ensureFolder() {
-    const folder = this.folder;
+  async ensureFolder(folder = this.folder) {
     if (folder && folder !== "/" && !this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
   }
 
@@ -1856,7 +1680,7 @@ module.exports = class FocusTasks extends Plugin {
     if (!note) return null;
     const extra = (this.settings.projectFrontmatter || "").trim().replaceAll("{areaNote}", this.app.metadataCache.fileToLinktext(note, path));
     const file = await this.app.vault.create(path, ["---", ...(extra ? extra.split("\n") : []), `area: "${area.name.replace(/"/g, "'")}"`,
-      `type: ${this.settings.typeProject}`, "---", "", `## ${this.settings.stepsHeading}`, ""].join("\n"));
+      `type: ${this.settings.typeProject}`, "---", ""].join("\n"));
     if (linkTo) await this.setLinked(file, linkTo, true);
     await this.app.vault.process(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading));
     await this.setOpen("area:" + area.name, true);
@@ -1922,10 +1746,9 @@ module.exports = class FocusTasks extends Plugin {
   addTask(day, target) {
     new NameModal(this.app, t("newTask"), t("whatToDo"), async (text) => {
       const put = async (tg) => {
-        if (tg.create) tg = { file: await this.createArea(tg.create), project: false };
-        if (!tg.file) return;
+        if (tg.create) { if (!await this.createArea(tg.create)) return; tg = { area: tg.create, project: null }; }
         await this.addLine(tg, text, day);
-        new Notice(t("taskIn", tg.file.basename));
+        new Notice(t("taskIn", tg.project || tg.area));
       };
       if (target) await put(target);
       else new TargetModal(this.app, this.targets(), put).open();
