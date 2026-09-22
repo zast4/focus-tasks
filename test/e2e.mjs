@@ -371,12 +371,14 @@ step("the date on the right: Today button, a day of the month, Clear date", asyn
   await idle();
 });
 
-step("the box completes the task: status and the day; «Completed» of its project brings it back", async () => {
+step("the box completes the task: status, the day, and the area's «Completed» brings it back", async () => {
   const done = `(() => { const r = __ft.task('Lace them'); return !!r && !!r.closest('.ft-done-block') && r.querySelector('input').checked; })()`;
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await taskIs("Lace them", { status: "done", completedDate: TODAY });
-  await until(() => page.eval(`return ${done} && !!__ft.task('Lace them').closest('.ft-project-body')`), "Lace them under the project's Completed");
-  if (await page.eval(`return !!document.querySelector('.ft-done-project')`)) throw new Error("the project label is back");
+  await until(() => page.eval(`return ${done}`), "Lace them under Completed");
+  if (await page.eval(`return !!__ft.task('Lace them').closest('.ft-project-body')`)) throw new Error("a project keeps a Completed block of its own");
+  const tag = await page.eval(`return __ft.task('Lace them').querySelector('.ft-done-project')?.textContent.trim() || null`);
+  if (tag !== "📁Marathon") throw new Error("the done row does not name its project: " + J(tag));
   await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
   await until(() => page.eval(`return !__ft.task('Lace them')`), "Completed folded");
   await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
@@ -489,6 +491,44 @@ step("a note written by another plugin: no uid, no area — the project gives bo
   await taskIs("Written by TaskNotes", { status: "open" });
   fs.rmSync(path.join(VAULT, taskPath("Written by TaskNotes")));   // the rest of the run counts rows
   await until(() => page.eval(`return !__ft.task('Written by TaskNotes')`), "the foreign task is gone again");
+});
+
+step("the row shows what the note says: a priority dot and a deadline on another day", async () => {
+  await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
+    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'low'; fm.due = ${J(TOMORROW)}; }); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-priority.is-low')`), "the low-priority dot");
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the deadline badge");
+  await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
+    await app.fileManager.processFrontMatter(f, (fm) => { delete fm.priority; delete fm.due; }); return true;`);
+  await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the badges are gone again");
+});
+
+step("a task with no area is not lost: «Without an area» places it", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Nowhere")), `---\ntype: задача\nstatus: open\nscheduled: ${TODAY}\n---\n`);
+  await until(() => page.eval(`return !!__ft.text('.ft-orphans-title', 'Without an area · 1')`), "the block of lost tasks");
+  await click(`__ft.at(__ft.task('Nowhere').querySelector('.ft-place'))`);
+  await modalInput(".prompt-input");
+  await page.type("Sport");
+  await sleep(300);
+  await page.key("Enter");
+  await taskIs("Nowhere", { area: "💪Sport" }, "the task landed in the area");
+  await until(() => page.eval(`return !document.querySelector('.ft-orphans')`), "the block is gone");
+  await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Nowhere"))}); await app.vault.delete(f); return true;`);
+  await until(() => page.eval(`return !__ft.task('Nowhere')`), "cleaned up");
+});
+
+step("«Make it a project»: the task becomes a project and stays in the focus as its first step", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Plan the season")),
+    `---\nuid: ft-season\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n\nНужно расписать на 16 недель.\n`);
+  await until(() => page.eval(`return !!__ft.task('Plan the season')`), "the task is on screen");
+  await click(`__ft.grip(__ft.task('Plan the season'))`);
+  await menu("Make it a project");
+  await until(() => exists("Tasks/Plan the season.md"), "the project note was made", 8000);
+  await until(() => page.eval(`return !!__ft.project('Plan the season')`), "the project is in the list");
+  await until(() => page.eval(`const r = __ft.task('Plan the season'); return !!r && !!r.closest('.ft-project-body')`), "the task became its first step");
+  const note = read("Tasks/Plan the season.md") || "";
+  if (!note.includes("16 недель")) throw new Error("the description did not move into the project note");
+  if ((fm("Plan the season")?.body || "").includes("16 недель")) throw new Error("the description is still in the task note");
 });
 
 step("rename a project in place; its tasks follow it", async () => {

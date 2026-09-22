@@ -16,5 +16,8 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/zast4/focus-tasks"
+  },
+  "dependencies": {
+    "moment": "^2.31.0"
   }
 }

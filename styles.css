@@ -166,3 +166,27 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-pane { padding: 0.5rem 1.2rem 2rem 2.2rem !important; }
 .focus-tasks-pane > .focus-tasks-view { max-width: 46rem; margin: 0 auto; }
 .focus-tasks-view .ft-onboarding { padding: 1.2em 0 0.4em; font-size: 1.05em; }
+
+/* What the frontmatter says and the row would otherwise hide: the priority dot right after the text
+   (low = «an agent added this, not looked at yet»), and a deadline that falls on another day. */
+.focus-tasks-view li.ft-task > .ft-priority { flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
+  border-radius: 50%; background: var(--text-faint); }
+.focus-tasks-view .ft-priority.is-low { background: none; box-shadow: inset 0 0 0 1px var(--text-faint); }
+.focus-tasks-view .ft-priority.is-normal { background: var(--color-orange); }
+.focus-tasks-view .ft-priority.is-high { background: var(--text-error); }
+.focus-tasks-view li.ft-task > .ft-due { flex: none; display: inline-flex; align-items: center; gap: 0.15em; margin-left: 0.6em;
+  height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; color: var(--text-muted); white-space: nowrap; }
+.focus-tasks-view .ft-due.is-late { color: var(--text-error); }
+.focus-tasks-view .ft-due svg { width: 0.8rem; height: 0.8rem; }
+
+/* A completed row says which project it came from, so one «Completed» per area is enough. */
+.focus-tasks-view li.ft-done > .ft-done-project { flex: none; display: inline-flex; align-items: center; gap: 0.2em; margin-left: 0.6em;
+  height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; color: var(--text-faint); white-space: nowrap; max-width: 40%; overflow: hidden; }
+.focus-tasks-view li.ft-done > .ft-done-project > .ft-icon { width: auto; }
+
+/* Tasks another tool wrote with no area of their own: apart, and one click from a home. */
+.focus-tasks-view .ft-orphans { margin-top: 1.2em; }
+.focus-tasks-view .ft-orphans-title { display: flex; width: fit-content; color: var(--text-warning, var(--color-orange)); }
+.focus-tasks-view li.ft-orphan > .ft-place { flex: none; margin-left: 0.6em; font-size: 0.8em; color: var(--text-accent); cursor: pointer;
+  height: calc(var(--ft-line) * 1em / 0.8); display: inline-flex; align-items: center; white-space: nowrap; }
+.focus-tasks-view li.ft-orphan > .ft-place:hover { text-decoration: underline; }
