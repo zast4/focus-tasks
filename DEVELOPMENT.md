@@ -21,7 +21,8 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
     leave the drag hanging); a click without moving opens the row's menu.
   - Selection: `select` (Shift / Cmd-click, on mousedown), `paint` (after every render the selection
     follows its tasks by note + line), `chosen` (screen order); the grip of a selected row drags the
-    group, `editDate` and `selectionMenu` date it. The row map `items` is swapped together with the
+    group, `editDate`, `selectionMenu` and `keys` (a `Scope` with Mod+1…4 and Esc, pushed while rows are
+    selected and the list's tab is active, so Obsidian's «go to tab» elsewhere is untouched) date it. The row map `items` is swapped together with the
     DOM (`fresh` while building), so a click during a render still finds its row.
   - Inline editing: `editor()` (contenteditable, Enter / Esc / blur, Mod+digit hotkeys via a `Scope`),
     `editInline`, `rowAfter`, `draft`, `renameProject`, `projectRow`.
@@ -58,7 +59,7 @@ node test/e2e.mjs                                      # own ✅ toggle, no Task
 node test/e2e.mjs --with-tasks "<vault>/.obsidian/plugins/obsidian-tasks-plugin"
 ```
 
-Both must pass (31/31) before a release. On failure the vault stays open and screenshots go to
+Both must pass (32/32) before a release. On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

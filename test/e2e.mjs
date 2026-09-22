@@ -522,7 +522,7 @@ step("click, then Shift-click selects the rows between; Cmd-click drops one; the
   await selectedAre([]);
 });
 
-step("the grip of a selected row drags them all, the date picker dates them all", async () => {
+step("the grip of a selected row drags them all; ⌘1–4 and the date picker date them all", async () => {
   const pick = async (from, to) => {
     await until(() => page.eval(`return !!__ft.task(${J(from)}) && !!__ft.task(${J(to)})`), `${from} … ${to} on screen`);
     await click(`__ft.at(__ft.task(${J(from)}).querySelector('.ft-text'))`, from, CMD);
@@ -540,6 +540,33 @@ step("the grip of a selected row drags them all, the date picker dates them all"
   // Obsidian re-reads Sport.md a moment later; until then the moved rows show there too
   await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view()).filter((e) => /^(Stretch|Plan route|Run 5k)$/.test(e.querySelector('.ft-text').textContent.trim()))
     .every((e) => e.closest('.ft-project-body'))`), "the moved rows only in Marathon 2027");
+  // hotkeys as in the editor: ⌘4 no date; ⌘3 the picker (Esc closes only it); ⌘2 tomorrow
+  await settle();
+  await pick("Stretch", "Run 5k");
+  await page.key("Meta+4");
+  await fileHas("Tasks/Marathon 2027.md", `- [ ] Call coach ⏳ ${TODAY}\n- [ ] Stretch\n- [ ] Plan route\n- [ ] Run 5k\n`);
+  await selectedAre([]);
+  await settle();
+  await pick("Stretch", "Run 5k");
+  await page.key("Meta+3");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker')`), "picker");
+  await page.key("Escape");
+  await until(() => page.eval(`return !document.querySelector('.ft-picker')`), "the picker closed");
+  await selectedAre(["Stretch", "Plan route", "Run 5k"]);
+  await page.key("Meta+2");
+  const tomorrow = `- [ ] Stretch ⏳ ${TOMORROW}\n- [ ] Plan route ⏳ ${TOMORROW}\n- [ ] Run 5k ⏳ ${TOMORROW}\n`;
+  await fileHas("Tasks/Marathon 2027.md", tomorrow);
+  await selectedAre([]);
+  // with another tab active ⌘4 is Obsidian's again; back in the list Esc drops the selection
+  await settle();
+  await pick("Stretch", "Run 5k");
+  await page.eval(`app.workspace.setActiveLeaf(app.workspace.getLeavesOfType('markdown')[0], { focus: true }); return true;`);
+  await page.key("Meta+4");
+  await sleep(800);
+  if (!read("Tasks/Marathon 2027.md").includes(tomorrow)) throw new Error("⌘4 in another tab changed the dates");
+  await selectedAre(["Stretch", "Plan route", "Run 5k"]);
+  await page.key("Escape");
+  await selectedAre([]);
   // the date on the right of a selected row
   await settle();
   await pick("Stretch", "Run 5k");
@@ -608,6 +635,27 @@ step("a ```focus-tasks``` block in a note renders the same list", async () => {
   await until(() => page.eval(`return !!app.vault.getAbstractFileByPath('Dashboard.md')`), "Dashboard indexed");
   await page.eval(`const l = app.workspace.getLeaf('tab'); await l.openFile(app.vault.getAbstractFileByPath('Dashboard.md')); return true;`);
   await until(() => page.eval(`return __ft.all('.workspace-leaf.mod-active .focus-tasks-view .ft-area-title').some((e) => e.textContent.includes('Sport'))`), "block rendered");
+});
+
+step("in a note's block, with another note beside it active: Shift-click selects, ⌘2 dates them all", async () => {
+  // Dashboard (from the step before) on the left with its cursor on the block, a note on the right, active
+  await page.eval(`const dash = app.workspace.getLeavesOfType('markdown').find((l) => l.view.file?.path === 'Dashboard.md');
+    dash.view.editor?.setCursor({ line: 4, ch: 0 });
+    const right = app.workspace.createLeafBySplit(dash, 'vertical');
+    await right.openFile(app.vault.getAbstractFileByPath('Notes/Running log.md'));
+    app.workspace.setActiveLeaf(right, { focus: true });
+    return true;`);
+  const block = `[...document.querySelectorAll('.focus-tasks-view')].find((e) => !e.closest('.focus-tasks-pane') && e.getClientRects().length)`;
+  const row = (name) => `__ft.all('li.ft-task', ${block}).find((e) => e.querySelector('.ft-text')?.textContent.trim() === ${J(name)})`;
+  await until(() => page.eval(`return !!(${row("Stretch")}) && !!(${row("Run 5k")})`), "the block's rows");
+  await page.click(await page.eval(`return __ft.at((${row("Stretch")}).querySelector('.ft-text'))`), CMD);
+  await page.click(await page.eval(`return __ft.at((${row("Run 5k")}).querySelector('.ft-text'))`), SHIFT);
+  await until(async () => J(await page.eval(`return __ft.all('li.ft-task.is-selected', ${block}).map((e) => e.querySelector('.ft-text').textContent.trim())`))
+    === J(["Stretch", "Plan route", "Run 5k"]), "three rows selected in the block");
+  if ((await activePath()) !== "Dashboard.md") throw new Error("the block's note is not the active tab: " + (await activePath()));
+  await page.key("Meta+2");
+  await fileHas("Tasks/Marathon 2027.md", `- [ ] Stretch ⏳ ${TOMORROW}\n- [ ] Plan route ⏳ ${TOMORROW}\n- [ ] Run 5k ⏳ ${TOMORROW}\n- [ ] Buy shoes fast ⏳ ${TODAY}\n`);
+  await until(() => page.eval(`return !!(${block})`), "the block still rendered");
 });
 
 step("commands are registered", async () => {

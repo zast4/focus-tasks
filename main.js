@@ -19,7 +19,8 @@
  * The checkbox completes a task (through the Tasks plugin when it is installed: recurrence, ✅).
  * The grip on the left drags areas, projects and tasks; a plain click on it opens the row's menu.
  * Shift-click selects every task from the last clicked one, Cmd/Ctrl-click adds or drops one; the
- * grip of a selected row then drags them all, and its date or its menu sets the date of all of them.
+ * grip of a selected row then drags them all, and its date, its menu or ⌘1–4 (as in the editor)
+ * set the date of all of them.
  * Dates use the Tasks emoji format (⏳ scheduled, 📅 due, 🛫 start, ✅ done), so both plugins agree.
  */
 const {
@@ -274,7 +275,7 @@ class DatePicker {
     };
     this.input.oninput = () => this.input.removeClass("is-invalid");
     this.outside = (e) => { if (!this.el.contains(e.target)) this.close(); };
-    this.keys = (e) => { if (e.key === "Escape") this.close(); };
+    this.keys = (e) => { if (e.key === "Escape") { e.preventDefault(); this.close(); } };
     this.scrolled = (e) => { if (!this.el.contains(e.target)) this.close(); };
     setTimeout(() => {
       document.addEventListener("pointerdown", this.outside, true);
@@ -440,15 +441,21 @@ class FocusRenderer extends MarkdownRenderChild {
     this.registerEvent(this.plugin.app.metadataCache.on("changed", later));
     this.registerEvent(this.plugin.app.vault.on("delete", later));
     this.registerEvent(this.plugin.app.vault.on("rename", later));
-    // a plain click anywhere else or Esc drops the selection (not the Esc that closes a menu)
+    // a plain click anywhere else drops the selection; its hotkeys work only while this tab is active
     this.registerDomEvent(this.containerEl, "click", (e) => { if (!picking(e)) this.clearSelection(); });
-    this.registerDomEvent(window, "keydown", (e) => {
-      if (e.key === "Escape" && this.selected.size && !this.editing && !this.menuOpen && !document.querySelector(".modal-container")) this.clearSelection();
-    }, true);
+    this.registerEvent(this.plugin.app.workspace.on("active-leaf-change", () => this.keys(this.selected.size > 0)));
     this.plugin.views.add(this);
     this.render();
   }
-  onunload() { clearTimeout(this.timer); this.plugin.views.delete(this); }
+  onunload() { clearTimeout(this.timer); this.keys(false); this.plugin.views.delete(this); }
+
+  // The tab the list is in: the pane, or the note with the block.
+  leafOf() {
+    if (this.leaf) return this.leaf;
+    let found = null;
+    this.plugin.app.workspace.iterateAllLeaves((l) => { if (!found && l.containerEl.contains(this.containerEl)) found = l; });
+    return found;
+  }
 
   // Renders run one at a time; a change during a render, an edit or a drag queues one more.
   async render() {
@@ -526,6 +533,9 @@ class FocusRenderer extends MarkdownRenderChild {
   // Cmd/Ctrl-click (or Shift with nothing clicked before): this row in or out.
   select(task, e) {
     if (this.editing) document.activeElement?.blur();  // an open editor saves and closes
+    const leaf = this.leafOf();
+    // the hotkeys follow the active tab; focusing a note's editor could open the block's source instead
+    if (leaf && this.plugin.app.workspace.activeLeaf !== leaf) this.plugin.app.workspace.setActiveLeaf(leaf, { focus: false });
     const tasks = this.rows().map(([, x]) => x);
     const to = tasks.indexOf(task);
     if (to < 0) return;
@@ -552,6 +562,51 @@ class FocusRenderer extends MarkdownRenderChild {
       if (on) this.selected.add(task);
       el.toggleClass("is-selected", on);
     }
+    this.keys(this.selected.size > 0);
+  }
+
+  // While rows are selected and this tab is active: Mod+1 today, Mod+2 tomorrow, Mod+3 the picker,
+  // Mod+4 no date (as in the editor, over Obsidian's «go to tab»), Esc drops the selection. A menu, a
+  // modal or the editor pushes its own scope on top, so their keys come first.
+  keys(on) {
+    const keymap = this.plugin.app.keymap;
+    if (!on || this.plugin.app.workspace.activeLeaf !== this.leafOf()) {
+      if (this.scope) keymap.popScope(this.scope);
+      this.scope = null;
+      return;
+    }
+    if (this.scope) return;
+    this.scope = new Scope(this.plugin.app.scope);
+    const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
+    const run = { 1: () => this.dateSelection(day(0)), 2: () => this.dateSelection(day(1)), 3: () => this.pickDates(), 4: () => this.dateSelection(null) };
+    for (const [key, fn] of Object.entries(run)) {
+      this.scope.register(["Mod"], key, () => {
+        if (!this.editing) fn();
+        return false;
+      });
+    }
+    this.scope.register([], "Escape", () => {
+      if (this.editing) return;  // the picker's own Esc
+      this.clearSelection();
+      return false;
+    });
+    keymap.pushScope(this.scope);
+  }
+
+  // One date for the selected rows; the selection is done then.
+  dateSelection(day) {
+    const tasks = this.chosen();
+    this.clearSelection();
+    return this.plugin.setDates(tasks, day);
+  }
+
+  // The picker for the selected rows, at the date of `task` (the top one by default).
+  pickDates(task = this.chosen()[0]) {
+    const row = this.rows().find(([, x]) => x === task)?.[0];
+    const label = row?.querySelector(".ft-date");
+    if (!label) return;
+    row.scrollIntoView({ block: "nearest" });
+    this.editDate(task, label);
   }
 
   clearSelection() {
@@ -770,20 +825,12 @@ class FocusRenderer extends MarkdownRenderChild {
     window.addEventListener("pointercancel", cancel, true);
   }
 
-  // Obsidian closes a menu on Esc before the view hears the key, so the view keeps the flag a moment
-  // longer: that Esc must not drop the selection too.
-  popup(menu, e) {
-    this.menuOpen = true;
-    menu.onHide(() => setTimeout(() => { this.menuOpen = false; }, 0));
-    menu.showAtMouseEvent(e);
-  }
-
   openMenu(item, e, row) {
     if (item.type === "task") return this.taskMenu(item.task, e);
     const menu = new Menu();
     if (item.type === "area") this.areaMenu(menu, item.area);
     else this.projectMenu(menu, item.area, item.project, row);
-    this.popup(menu, e);
+    menu.showAtMouseEvent(e);
   }
 
   caret(parent, open, toggle) {
@@ -1003,7 +1050,7 @@ class FocusRenderer extends MarkdownRenderChild {
       e.stopPropagation();
       const menu = new Menu();
       build(menu);
-      this.popup(menu, e);
+      menu.showAtMouseEvent(e);
     };
     const btn = parent.createSpan({ cls: "ft-more", attr: { "aria-label": t("actions") } });
     setIcon(btn, "more-horizontal");
@@ -1070,27 +1117,22 @@ class FocusRenderer extends MarkdownRenderChild {
       i.setTitle(t("delete")).setIcon("trash-2").onClick(() => p.remove(task));
       if (i.setWarning) i.setWarning(true);
     });
-    this.popup(menu, e);
+    menu.showAtMouseEvent(e);
   }
 
   // The menu of a selected row when there are several: one date for all of them.
   selectionMenu(task, e) {
-    const tasks = this.chosen();
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
-    const set = (d) => { this.clearSelection(); return this.plugin.setDates(tasks, d); };
     const menu = new Menu();
-    menu.addItem((i) => i.setTitle(t("selected", tasks.length)).setIcon("list-checks").setDisabled(true));
+    menu.addItem((i) => i.setTitle(t("selected", this.selected.size)).setIcon("list-checks").setDisabled(true));
     menu.addSeparator();
-    menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => set(day(0))));
-    menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => set(day(1))));
-    menu.addItem((i) => i.setTitle(t("pickDate")).setIcon("calendar-days").onClick(() => {
-      const label = this.rows().find(([, x]) => x === task)?.[0].querySelector(".ft-date");
-      if (label) this.editDate(task, label);
-    }));
-    menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => set(null)));
+    menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => this.dateSelection(day(0))));
+    menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => this.dateSelection(day(1))));
+    menu.addItem((i) => i.setTitle(t("pickDate")).setIcon("calendar-days").onClick(() => this.pickDates(task)));
+    menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => this.dateSelection(null)));
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
-    this.popup(menu, e);
+    menu.showAtMouseEvent(e);
   }
 
   // The name of an area or a project opens its linked note, or the task file when there is none.
