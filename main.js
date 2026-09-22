@@ -1484,7 +1484,8 @@ module.exports = class FocusTasks extends Plugin {
     return true;
   }
 
-  // Done ⇄ open, with the day it was done.
+  // Done ⇄ open, with the day it was done. One write per task at a time (the same task can be on
+  // screen twice); a second click on the same row is held by the row itself until it is rebuilt.
   async toggle(task) {
     if (this.toggling.has(task.uid)) return false;
     this.toggling.add(task.uid);
@@ -1494,7 +1495,7 @@ module.exports = class FocusTasks extends Plugin {
       if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate: done ? today() : null });
       return ok;
     } finally {
-      setTimeout(() => this.toggling.delete(task.uid), 600);  // until the list has been re-read
+      this.toggling.delete(task.uid);
     }
   }
 

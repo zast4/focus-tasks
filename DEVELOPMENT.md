@@ -46,18 +46,23 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
 
 ## The data contract
 
-Other tools read the same files, so keep these stable:
+Other tools read the same notes, so keep these stable:
 
-- a task file = a note in the folder with `area:` in its frontmatter; `type:` = the project word
-  (`project` / `проект`) makes it a project, anything else an area;
-- other tools write the same notes (a phone over Sync, scripts): a task is found by its line, and
-  when that has changed, by the nearest line with the same text (`lineOf`);
-- a task = `- [ ] text` with Tasks emoji dates: ⏳ scheduled (the focus date), 📅 due, 🛫 start,
-  ✅ done; the earliest of ⏳📅🛫 is the date the view shows and edits (its emoji is kept); `[x]` with
-  ✅ today shows under «Completed» of its area (an area with only those stays in the focus);
-- priority emoji 🔺⏫🔼🔽⏬ stay in the text;
-- a project is listed in its area's note as `- 📁 [[project]]` under the projects heading;
-- a linked note = `note: "[[...]]"` in the task file.
+- an **area** = a note in the folder with `area:` in its frontmatter; `type:` = the project word
+  (`project` / `проект`) makes it a **project**, anything else an area;
+- a **task** = a note of its own in the tasks folder (`Задачи` by default) with `type: задача`:
+  - `uid` — its identity, never changes (a rename or a move keeps it);
+  - `status`: `open` / `done` / `cancelled` / `someday`;
+  - `area` — the area's name, `project` — a wikilink to the project's note (absent = a loose task);
+  - `scheduled` — the date the focus goes by, `due`, `done` — the day it was checked off;
+  - `priority`: `low` … `highest`; `title` — the whole text when the file name had to be cut;
+  - the body of the note is the task's description;
+- the file name is a readable label only: it follows the text, the `uid` does not;
+- a linked note = `note: "[[...]]"` in an area's or a project's note;
+- the order the rows were dragged into lives in `data.json` (`order.tasks["area:<name>" | "project:<note>"]`).
+
+Tasks the plugin does not touch: `cancelled` and `someday` (хотелки in ordinary notes are not migrated
+yet). The Tasks plugin is not part of this model — a task is no longer a checkbox line.
 
 ## Tests
 
@@ -68,11 +73,10 @@ through every feature with real mouse and keyboard input, checking the files on 
 ```sh
 open -a Obsidian --args --remote-debugging-port=9222   # any vault open
 npm install
-node test/e2e.mjs                                      # own ✅ toggle, no Tasks
-node test/e2e.mjs --with-tasks "<vault>/.obsidian/plugins/obsidian-tasks-plugin"
+node test/e2e.mjs                                      # --keep leaves the vault open
 ```
 
-Both must pass (37/37) before a release. On failure the vault stays open and screenshots go to
+It must pass (32/32) before a release. On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;
