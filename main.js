@@ -85,9 +85,10 @@ const STRINGS = {
     pickNote: "Pick a note", cmdToggleAll: "Show all / focus only", cmdFoldAll: "Collapse all",
     cmdUnfoldAll: "Expand all", cmdAddTask: "New task", cmdAddArea: "New area", cmdAreaFromNote: "New area from the current note",
     pickerPlaceholder: "DD.MM.YY or “tomorrow”", clearDate: "Clear date", completed: "Completed",
-    daysShort: "d", overdueBy: "Overdue by {0} days",
+    daysShort: "d", overdueBy: "Overdue by {0} days", moveUp: "Move up", moveDown: "Move down",
     repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
     undoKept: "Put back {0} of {1}: the rest changed in the meantime",
+    focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
     orphans: "Without an area", orphansHelp: "These tasks are in no area, so the focus cannot show them. Pick a place for each.",
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
@@ -138,9 +139,10 @@ const STRINGS = {
     pickNote: "Выбери заметку", cmdToggleAll: "Показать всё / только фокус", cmdFoldAll: "Свернуть всё",
     cmdUnfoldAll: "Развернуть всё", cmdAddTask: "Новая задача", cmdAddArea: "Новая область", cmdAreaFromNote: "Новая область из текущей заметки",
     pickerPlaceholder: "ДД.ММ.ГГ или «завтра»", clearDate: "Убрать дату", completed: "Выполненные",
-    daysShort: " дн", overdueBy: "Просрочено на {0} дн.",
+    daysShort: " дн", overdueBy: "Просрочено на {0} дн.", moveUp: "Выше", moveDown: "Ниже",
     repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
     undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
+    focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
     orphans: "Без области", orphansHelp: "Эти задачи ни в одной области, поэтому фокус их не показывает. Разложи их по местам.",
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
@@ -195,11 +197,27 @@ const keyOf = (task) => task.uid;
 // Shift or Cmd (Ctrl off the Mac) held: a click selects rather than edits.
 const picking = (e) => e.shiftKey || (Platform.isMacOS ? e.metaKey : e.ctrlKey);
 
-// "25.09", "25.09.26", "25/09/2026", "today", "завтра" → "YYYY-MM-DD" or null.
+// What someone types into the date field → "YYYY-MM-DD", or null when it means nothing:
+//   25.09 · 25.09.26 · 25/09/2026 · today · завтра · послезавтра · +3 · через 3 дня · пн · friday
+const WEEKDAYS = { пн: 1, вт: 2, ср: 3, чт: 4, пт: 5, сб: 6, вс: 7,
+  mon: 1, tue: 2, wed: 3, thu: 4, fri: 5, sat: 6, sun: 7 };
 function parseDay(text) {
-  const s = text.trim().toLowerCase();
-  if (["сегодня", "today"].includes(s)) return today();
-  if (["завтра", "tomorrow"].includes(s)) return moment().add(1, "day").format("YYYY-MM-DD");
+  const s = String(text).trim().toLowerCase();
+  if (!s) return null;
+  if (["сегодня", "today", "сг"].includes(s)) return today();
+  if (["завтра", "tomorrow", "зв"].includes(s)) return moment().add(1, "day").format("YYYY-MM-DD");
+  if (["послезавтра", "day after tomorrow"].includes(s)) return moment().add(2, "days").format("YYYY-MM-DD");
+  const plus = s.match(/^\+?\s*(\d{1,3})\s*(?:д|дн|дня|дней|d|day|days)?$/) || s.match(/^через\s+(\d{1,3})\s*(?:д|дн|дня|дней)?$/);
+  if (plus && (s.startsWith("+") || s.startsWith("через") || /^\d{1,3}\s*(д|дн|дня|дней|d|day|days)$/.test(s))) {
+    return moment().add(Number(plus[1]), "days").format("YYYY-MM-DD");
+  }
+  const weekday = Object.entries(WEEKDAYS).find(([k]) => s === k || s.startsWith(k) && s.length <= 12);
+  if (weekday) {
+    const want = weekday[1];
+    const d = moment();
+    do { d.add(1, "day"); } while (d.isoWeekday() !== want);  // the next one, never today
+    return d.format("YYYY-MM-DD");
+  }
   const m = s.match(/^(\d{1,2})[.\/-](\d{1,2})(?:[.\/-](\d{2}|\d{4}))?$/);
   if (!m) return null;
   const year = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : moment().year();
@@ -268,7 +286,11 @@ class DatePicker {
     this.outside = (e) => { if (!this.el.contains(e.target)) this.close(); };
     this.keys = (e) => { if (e.key === "Escape") { e.preventDefault(); this.close(); } };
     this.scrolled = (e) => { if (!this.el.contains(e.target)) this.close(); };
+    // The click that opened the picker is still travelling, so listening starts a tick later — and
+    // only if the picker is still open by then, or the listeners would outlive it.
     setTimeout(() => {
+      if (this.closed) return;
+      this.listening = true;
       document.addEventListener("pointerdown", this.outside, true);
       document.addEventListener("keydown", this.keys, true);
       document.addEventListener("scroll", this.scrolled, true);
@@ -282,6 +304,7 @@ class DatePicker {
     this.head.createDiv({ cls: "ft-picker-title", text: `${t("months")[this.month.month()]} ${this.month.year()}` });
     const nav = this.head.createDiv({ cls: "ft-picker-nav" });
     nav.createEl("button", { text: t("today"), cls: "ft-picker-today" }).onclick = () => this.pick(today());
+    nav.createEl("button", { text: t("tomorrow"), cls: "ft-picker-tomorrow" }).onclick = () => this.pick(moment().add(1, "day").format("YYYY-MM-DD"));
     for (const [icon, step] of [["chevron-left", -1], ["chevron-right", 1]]) {
       const b = nav.createEl("button", { cls: "ft-picker-arrow" });
       setIcon(b, icon);
@@ -317,9 +340,11 @@ class DatePicker {
   close(picked) {
     if (this.closed) return;
     this.closed = true;
-    document.removeEventListener("pointerdown", this.outside, true);
-    document.removeEventListener("keydown", this.keys, true);
-    document.removeEventListener("scroll", this.scrolled, true);
+    if (this.listening) {
+      document.removeEventListener("pointerdown", this.outside, true);
+      document.removeEventListener("keydown", this.keys, true);
+      document.removeEventListener("scroll", this.scrolled, true);
+    }
     this.el.remove();
     if (!picked) this.onCancel();
   }
@@ -486,7 +511,17 @@ class FocusRenderer extends MarkdownRenderChild {
     const el = createDiv();
     const none = !p.notes().length;
     if (none) el.createDiv({ cls: "ft-empty ft-onboarding", text: t("noAreas") });
-    else if (!areas.length) el.createDiv({ cls: "ft-empty", text: t("focusEmpty") });
+    else if (!areas.length) {
+      // An empty focus is not an empty vault: say how much is waiting and offer the way to it, or the
+      // list looks broken on the first quiet day.
+      const waiting = p.tasks().filter((x) => x.status !== STATUS_DONE && x.status !== STATUS_CANCELLED && x.status !== STATUS_SOMEDAY).length;
+      const line = el.createDiv({ cls: "ft-empty" });
+      line.createSpan({ text: waiting ? t("focusDone", waiting) : t("focusEmpty") });
+      if (waiting && !everything) {
+        const go = line.createEl("a", { cls: "ft-empty-link", text: t("showAll"), href: "#" });
+        go.onclick = (e) => { e.preventDefault(); p.setEverything(true); };
+      }
+    }
     for (const area of areas) await this.area(el, area, false, everything);
     if (everything) {
       if (rest.length) el.createDiv({ cls: "ft-rest-title", text: t("restTitle") });
@@ -718,6 +753,7 @@ class FocusRenderer extends MarkdownRenderChild {
         tag.createSpan({ cls: "ft-icon", text: "📁" });
         tag.createSpan({ text: task.project });
       }
+      this.grip(li, { type: "task", task });  // the phone has no right click: the grip is the way in
       li.oncontextmenu = (e) => {
         e.preventDefault();
         const menu = new Menu();
@@ -769,6 +805,7 @@ class FocusRenderer extends MarkdownRenderChild {
       const place = li.createSpan({ cls: "ft-place", text: t("place") });
       place.onclick = (e) => { e.stopPropagation(); p.placeTask(task); };
       li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(task, e); };
+      this.grip(li, { type: "task", task });
     }
   }
 
@@ -1244,6 +1281,10 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => p.setDate(task, day(1))));
     menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => p.setDate(task, null)));
     menu.addSeparator();
+    // A drag is not always possible — a finger loses to the scroll, a keyboard has no drag at all.
+    menu.addItem((i) => i.setTitle(t("moveUp")).setIcon("arrow-up").onClick(() => this.shift(task, -1)));
+    menu.addItem((i) => i.setTitle(t("moveDown")).setIcon("arrow-down").onClick(() => this.shift(task, 1)));
+    menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("place")).setIcon("folder-input").onClick(() => p.placeTask(task)));
     menu.addItem((i) => i.setTitle(t("toProject")).setIcon("folder-plus").onClick(() => p.toProject(task)));
     menu.addSeparator();
@@ -1268,6 +1309,18 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
     showMenu(menu, e);
+  }
+
+  // One step up or down among the rows it shares a list with (the steps of its project, or the loose
+  // tasks of its area) — the same order a drag would write.
+  async shift(task, by) {
+    const list = this.rows().map(([, x]) => x).filter((x) => listOf(x) === listOf(task));
+    const i = list.findIndex((x) => x.uid === task.uid);
+    const to = i + by;
+    if (i < 0 || to < 0 || to >= list.length) return;
+    const target = list[to];
+    await this.plugin.reorder([task], { into: false, after: by > 0, target: { type: "task", task: target } }, this.shown?.tasks || {});
+    this.plugin.refresh();
   }
 
   // The name of an area or a project opens its linked note, or the task file when there is none.
@@ -1382,6 +1435,9 @@ class FocusSettingTab extends PluginSettingTab {
 }
 
 // --- the plugin ------------------------------------------------------------------------------
+
+// The tests reach the small pure helpers through this.
+if (typeof globalThis !== "undefined") globalThis.__ftParseDay = parseDay;
 
 module.exports = class FocusTasks extends Plugin {
   async onload() {

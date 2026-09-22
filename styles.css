@@ -215,3 +215,13 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-text { margin-left: 0; }
 .focus-tasks-view li.ft-done > .ft-done-project,
 .focus-tasks-view .ft-future,
 .ft-picker-weekday { color: var(--text-muted); }
+
+/* «Tomorrow» next to «Today» in the picker. */
+.ft-picker-tomorrow { white-space: nowrap; }
+
+/* A dragged row is not the only way to reorder: the same rows answer the menu. Completed and lost
+   rows carry a grip too, because a phone has no right click. */
+.focus-tasks-view li.ft-done > .ft-grip, .focus-tasks-view li.ft-orphan > .ft-grip { top: 0.15em; }
+
+/* An empty focus tells how much is waiting and offers the way to it. */
+.focus-tasks-view .ft-empty-link { margin-left: 0.5em; cursor: pointer; }

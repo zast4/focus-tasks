@@ -743,6 +743,37 @@ test("reading the list twice does not read the vault twice as many times", async
   ok(reads <= perCollect * 1.2, `three reads of the same vault cost ${reads} lookups against ${perCollect} for one`);
 });
 
+// --- the date field -------------------------------------------------------------------------------
+
+test("the date field understands how people write dates", async () => {
+  const { plugin } = await stand((a) => areaNote(a, "Work"));
+  const parse = plugin.constructor.parseDay || globalThis.__ftParseDay;
+  ok(parse, "parseDay is reachable for tests");
+  eq(parse("сегодня"), TODAY, "сегодня");
+  eq(parse("завтра"), DAY(1), "завтра");
+  eq(parse("послезавтра"), DAY(2), "послезавтра");
+  eq(parse("+3"), DAY(3), "+3");
+  eq(parse("через 5 дней"), DAY(5), "через 5 дней");
+  eq(parse("25.12"), moment("25.12", "DD.MM").format("YYYY-MM-DD"), "25.12");
+  eq(parse("25.12.27"), "2027-12-25", "25.12.27");
+  eq(parse("ерунда"), null, "nonsense stays nonsense");
+  const monday = parse("пн");
+  eq(moment(monday).isoWeekday(), 1, "пн is a Monday");
+  ok(monday > TODAY, "and it is in the future, never today");
+});
+
+test("an empty focus still knows how much work is waiting", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Later one", { area: "Work" });
+    taskNote(a, "Later two", { area: "Work", scheduled: DAY(4) });
+    taskNote(a, "Old done", { area: "Work", status: "done", completedDate: DAY(-2) });
+  });
+  eq(areaNames(await plugin.collect(false)), [], "nothing is due today");
+  const waiting = plugin.tasks().filter((x) => !["done", "cancelled", "someday"].includes(x.status)).length;
+  eq(waiting, 2, "and the view can say how much is waiting");
+});
+
 // --- fuzzing: nothing may vanish ----------------------------------------------------------------
 
 // A pseudo-random vault of areas, projects and tasks with every kind of junk seen in the wild.
