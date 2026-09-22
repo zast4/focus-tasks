@@ -1051,7 +1051,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // the number of days is the ZFG signal that a task is stuck.
     const late = task.date < now ? moment(now).diff(moment(task.date), "days") : 0;
     if (late >= 2) {
-      el.createSpan({ cls: "ft-late", text: ` · ${late}${t("daysShort")}` });
+      el.createSpan({ cls: "ft-late", text: `· ${late}${t("daysShort")}` });
       el.setAttr("aria-label", t("overdueBy", late));
     }
   }
@@ -1725,8 +1725,9 @@ module.exports = class FocusTasks extends Plugin {
     let uid = null, wrong = false;
     try {
       await this.app.fileManager.processFrontMatter(file, (fm) => {
-        // The row was read a moment ago; a note with another identity may have taken this path since
-        // (Sync, a script, the user). Writing into it would change the wrong task.
+        // The row was read a moment ago; another note may have taken this path since (Sync, a script,
+        // the user). Writing into it would change the wrong task — or turn an ordinary note into one.
+        if (!this.isTaskType(fm.type)) { wrong = true; return; }
         if (fm.uid && task.uid && String(fm.uid) !== task.uid && /^ft-/.test(task.uid)) { wrong = true; return; }
         if (!fm.uid) fm.uid = uid = newUid();  // a note written by another plugin gets its identity here
         change(fm);
@@ -1834,7 +1835,11 @@ module.exports = class FocusTasks extends Plugin {
     const key = listOf(tasks[0]);
     const moved = tasks.map((x) => x.uid);
     const target = drop.into ? null : drop.target.task;
-    const list = [...new Set([...(this.data.order.tasks[key] || []), ...(shown[key] || []), ...moved])].filter((uid) => !moved.includes(uid));
+    // Tasks that no longer exist are dropped from the saved order here: the file is merged key by key
+    // between devices, so a list that only ever grows would carry dead ids forever.
+    const alive = new Set(this.tasks().map((x) => x.uid));
+    const list = [...new Set([...(this.data.order.tasks[key] || []), ...(shown[key] || []), ...moved])]
+      .filter((uid) => !moved.includes(uid) && alive.has(uid));
     const at = target && listOf(target) === key ? list.indexOf(target.uid) : -1;
     list.splice(at < 0 ? list.length : at + (drop.after ? 1 : 0), 0, ...moved);
     this.data.order.tasks[key] = list;

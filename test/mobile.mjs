@@ -219,6 +219,12 @@ step("the bottom buttons are reachable and readable", async () => {
   if (small.length) throw new Error("too small to tap: " + J(small));
 });
 
+step("a picture of the list on a phone, for the record", async () => {
+  await page.eval(`app.plugins.plugins['focus-tasks'].refresh(); return true;`);
+  await sleep(600);
+  await page.shot(path.join(SHOTS, "phone.png"));
+});
+
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));

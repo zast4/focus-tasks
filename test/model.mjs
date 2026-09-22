@@ -665,6 +665,19 @@ test("the saved order does not grow duplicates", async () => {
   eq(list.length, new Set(list).size, "no duplicates in " + JSON.stringify(list));
 });
 
+test("the saved order forgets tasks that no longer exist", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "A", { area: "Work", scheduled: TODAY });
+    taskNote(a, "B", { area: "Work", scheduled: TODAY });
+  });
+  const t = Object.fromEntries(plugin.tasks().map((x) => [x.text, x]));
+  plugin.data.order.tasks["area:Work"] = ["ft-long-gone", t.A.uid, t.B.uid];
+  await plugin.reorder([t.B], { into: false, after: false, target: { type: "task", task: t.A } }, {});
+  eq(plugin.data.order.tasks["area:Work"].includes("ft-long-gone"), false, "the dead id is gone");
+  eq(plugin.data.order.tasks["area:Work"].length, 2, "only the two that exist");
+});
+
 test("moving a task to another area puts it in that area's order", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Sport");
@@ -799,6 +812,19 @@ test("a write refuses to go into a different task that took the same file name",
   const ok1 = await plugin.setDate(stale, DAY(3));
   eq(ok1, false, "the write is refused");
   eq(frontmatter(app, "Tasks/Foo.md").scheduled, undefined, "the other task is untouched");
+});
+
+test("a write refuses to go into a note that is no longer a task", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Foo", { area: "Work", scheduled: TODAY });
+  });
+  const stale = plugin.tasks()[0];
+  app.vault.files.set("Tasks/Foo.md", "---\ntype: note\narea: Work\n---\n\nобычная заметка\n");
+  eq(await plugin.setDate(stale, DAY(7)), false, "the write is refused");
+  const fm = frontmatter(app, "Tasks/Foo.md");
+  eq(fm.scheduled, undefined, "the note was not given a date");
+  eq(fm.uid, undefined, "and not given an identity either");
 });
 
 test("two projects with the same name do not mix their tasks", async () => {
