@@ -220,7 +220,7 @@ step("+ Area creates an area note in the folder and shows it under «All»", asy
   await modalInput();
   await page.type("💪Sport");
   await page.key("Enter");
-  await fileHas("Tasks/Sport.md", '---\narea: "💪Sport"\ntype: area\n---\n');
+  await fileHas("Tasks/Sport.md", '---\nkind: focus-area\narea: "💪Sport"\ntype: area\n---\n');
   await until(() => page.eval(`return !!__ft.text('.ft-rest-title', 'Other areas') && !!__ft.text('.ft-empty-add', 'Empty')`), "Sport under Other areas, empty");
 });
 
@@ -246,7 +246,7 @@ step("the grip opens the area menu; New project makes a project note linked from
   await modalInput();
   await page.type("Marathon");
   await page.key("Enter");
-  await fileHas("Tasks/Marathon.md", '---\narea: "💪Sport"\ntype: project\n---\n\n## Steps\n');
+  await fileHas("Tasks/Marathon.md", '---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n\n## Steps\n');
   await fileHas("Tasks/Sport.md", "## Projects\n\n- 📁 [[Marathon]]\n");
   await until(() => page.eval(`return !!__ft.project('Marathon')`), "Marathon on screen");
 });
@@ -401,7 +401,7 @@ step("rename a project in place (links follow); Enter adds the next project afte
   await editing();
   await page.type("Half marathon");
   await page.key("Enter");
-  await fileHas("Tasks/Half marathon.md", '---\narea: "💪Sport"\ntype: project\n---\n');
+  await fileHas("Tasks/Half marathon.md", '---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n');
   await fileHas("Tasks/Sport.md", "- 📁 [[Marathon 2027]]\n- 📁 [[Half marathon]]\n");
   await until(() => J(data().order?.projects?.["💪Sport"]) === J(["Tasks/Marathon 2027.md", "Tasks/Half marathon.md"]), "project order");
   await editing();
@@ -586,7 +586,10 @@ async function openVault() {
     ${TASKS ? "await app.plugins.enablePluginAndSave('obsidian-tasks-plugin');" : ""}
     await app.plugins.enablePluginAndSave('focus-tasks');
     const p = app.plugins.plugins['focus-tasks'];
-    p.settings.language = 'en'; p.applyLanguage(); await p.saveAll();
+    p.settings.language = 'en'; p.applyLanguage();
+    p.settings.areaFrontmatter = 'kind: focus-area';
+    p.settings.projectFrontmatter = 'parents:\\n  - "[[{areaNote}]]"';
+    await p.saveAll();
     await app.commands.executeCommandById('focus-tasks:open');
     return true;`);
   await page.eval(HELPERS + " return true;");

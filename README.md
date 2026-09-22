@@ -57,7 +57,8 @@ task can be restored from the notice that appears.
 | Folder | `Tasks` | where task files live; created when needed |
 | Language | Auto | English / Русский |
 | Area note name | `{area}` | file name of a new area note (`{area}` = the name without a leading emoji) |
-| Extra frontmatter | — | YAML lines for every new area note, e.g. `parents: ["[[Projects]]"]` |
+| Extra frontmatter (areas) | — | YAML lines for every new area note, e.g. `parents: ["[[Projects]]"]` |
+| Extra frontmatter (projects) | — | YAML lines for every new project note; `{areaNote}` = its area's note, e.g. `parents: ["[[{areaNote}]]"]` |
 | `type` of an area / project | `area` / `project` | `project`/`проект` and `area`/`область` are always recognised |
 | Steps / Inbox / Projects headings | `Steps` / `Inbox` / `Projects` | sections new lines go to |
 | Date format | `DD.MM.YY` | any moment.js format |

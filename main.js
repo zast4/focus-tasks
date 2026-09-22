@@ -37,6 +37,7 @@ const DEFAULTS = {
   language: "auto",
   areaNoteName: "{area}",
   areaFrontmatter: "",
+  projectFrontmatter: "",
   typeArea: "area",
   typeProject: "project",
   stepsHeading: "Steps",
@@ -83,6 +84,7 @@ const STRINGS = {
     sLanguage: "Language", sLanguageDesc: "Interface language (Auto follows Obsidian).",
     sAreaName: "Area note name", sAreaNameDesc: "File name of a new area note; {area} is the area name without a leading emoji.",
     sAreaFm: "Extra frontmatter for new area notes", sAreaFmDesc: "YAML lines added to every new area note (optional).",
+    sProjectFm: "Extra frontmatter for new project notes", sProjectFmDesc: "YAML lines added to every new project note; {areaNote} is its area's note (optional).",
     sTypeArea: "“type” of an area note", sTypeProject: "“type” of a project note",
     sTypeDesc: "Value of the type property. project / проект and area / область are always recognised.",
     sSteps: "Steps heading", sStepsDesc: "Section of a project note that new steps go to.",
@@ -125,6 +127,7 @@ const STRINGS = {
     sLanguage: "Язык", sLanguageDesc: "Язык интерфейса (Auto — как в Obsidian).",
     sAreaName: "Имя заметки области", sAreaNameDesc: "Имя файла новой области; {area} — имя области без эмодзи в начале.",
     sAreaFm: "Дополнительный frontmatter новых областей", sAreaFmDesc: "YAML-строки, которые добавятся в каждую новую заметку области (необязательно).",
+    sProjectFm: "Дополнительный frontmatter новых проектов", sProjectFmDesc: "YAML-строки для каждой новой заметки проекта; {areaNote} — заметка его области (необязательно).",
     sTypeArea: "«type» заметки области", sTypeProject: "«type» заметки проекта",
     sTypeDesc: "Значение свойства type. project / проект и area / область узнаются всегда.",
     sSteps: "Раздел шагов", sStepsDesc: "Раздел заметки проекта, куда пишутся новые шаги.",
@@ -1047,6 +1050,11 @@ class FocusSettingTab extends PluginSettingTab {
         s.areaFrontmatter = v.replace(/\s+$/, "");
         await p.saveAll();
       }));
+    new Setting(containerEl).setName(t("sProjectFm")).setDesc(t("sProjectFmDesc")).addTextArea((c) => c
+      .setPlaceholder('parents:\n  - "[[{areaNote}]]"').setValue(s.projectFrontmatter).onChange(async (v) => {
+        s.projectFrontmatter = v.replace(/\s+$/, "");
+        await p.saveAll();
+      }));
     text("sTypeArea", "sTypeDesc", "typeArea");
     text("sTypeProject", "sTypeDesc", "typeProject");
     text("sSteps", "sStepsDesc", "stepsHeading");
@@ -1534,7 +1542,8 @@ module.exports = class FocusTasks extends Plugin {
     if (this.app.vault.getAbstractFileByPath(path)) { new Notice(t("noteExists", path)); return null; }
     const note = area.note || await this.createArea(area.name);
     if (!note) return null;
-    const file = await this.app.vault.create(path, ["---", `area: "${area.name.replace(/"/g, "'")}"`,
+    const extra = (this.settings.projectFrontmatter || "").trim().replaceAll("{areaNote}", this.app.metadataCache.fileToLinktext(note, path));
+    const file = await this.app.vault.create(path, ["---", ...(extra ? extra.split("\n") : []), `area: "${area.name.replace(/"/g, "'")}"`,
       `type: ${this.settings.typeProject}`, "---", "", `## ${this.settings.stepsHeading}`, ""].join("\n"));
     if (linkTo) await this.setLinked(file, linkTo, true);
     await this.app.vault.process(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading));
