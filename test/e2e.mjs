@@ -384,6 +384,7 @@ step("a note written by another plugin: no uid, no area — the project gives bo
   fs.writeFileSync(path.join(VAULT, taskPath("Written by TaskNotes")),
     `---\ntype: задача\nstatus: open\nscheduled: ${TODAY}\nprojects:\n  - "[[Marathon]]"\ntimeEntries:\n  - startTime: ${TODAY}T10:00:00Z\n    endTime: ${TODAY}T10:30:00Z\n---\n`);
   await until(() => page.eval(`return !!__ft.task('Written by TaskNotes')`), "the foreign task shows up in its project's area");
+  await settle();   // the row is rebuilt once the cache catches up: click the row that stays
   await click(`__ft.at(__ft.task('Written by TaskNotes').querySelector('input'))`);
   await taskIs("Written by TaskNotes", { status: "done", completedDate: TODAY });
   const f = fm("Written by TaskNotes");
@@ -525,6 +526,7 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
     await until(() => page.eval(`return !!__ft.task(${J(from)}) && !!__ft.task(${J(to)})`), `${from} … ${to} on screen`);
     await click(`__ft.at(__ft.task(${J(from)}).querySelector('.ft-text'))`, from, CMD);
     await click(`__ft.at(__ft.task(${J(to)}).querySelector('.ft-text'))`, to, SHIFT);
+    await until(async () => (await selected()).length >= 2, `${from} … ${to} selected`);
     return selected();
   };
   const names = await pick("Stretch", "Run 5k");
@@ -590,6 +592,23 @@ step("a ```focus-tasks``` block in a note renders the same list, and its boxes w
   await until(() => page.eval(`return !!(${row("Call coach")})?.closest('.ft-done-block')`), "the row moved to Completed in the block");
   await page.click(await page.eval(`return __ft.at((${row("Call coach")}).querySelector('input'))`));
   await taskIs("Call coach", { status: "open" });
+});
+
+step("closing the pane takes the editor, the picker and the hotkeys with it", async () => {
+  await toPane();
+  const row = await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view())[0]?.querySelector('.ft-text')?.textContent.trim() || null`), "a row to edit");
+  await click(`__ft.at(__ft.task(${J(row)}).querySelector('.ft-text'))`);
+  await editing();
+  const leaks = await page.eval(`
+    const leaf = app.workspace.getLeavesOfType('focus-tasks-view')[0];
+    const view = leaf?.view?.children?.[0] || leaf?.view;
+    leaf.detach();
+    await new Promise((r) => setTimeout(r, 400));
+    const el = document.querySelector('.ft-text.is-editing');
+    return { editing: !!el, picker: !!document.querySelector('.ft-picker'), dragLine: !!document.querySelector('.ft-drop-line') };`);
+  if (leaks.editing || leaks.picker) throw new Error("something stayed behind after the pane closed: " + J(leaks));
+  await page.eval(`await app.commands.executeCommandById('focus-tasks:open'); return true;`);
+  await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane li.ft-task')`), "the pane is back");
 });
 
 step("delete a project: its note goes to the trash, its tasks stay in the area", async () => {

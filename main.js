@@ -88,7 +88,7 @@ const STRINGS = {
     daysShort: "d", overdueBy: "Overdue by {0} days", moveUp: "Move up", moveDown: "Move down",
     repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
     undoKept: "Put back {0} of {1}: the rest changed in the meantime",
-    focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
+    allDone: "done {0}", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
     orphans: "Without an area", orphansHelp: "These tasks are in no area, so the focus cannot show them. Pick a place for each.",
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
@@ -142,7 +142,7 @@ const STRINGS = {
     daysShort: " дн", overdueBy: "Просрочено на {0} дн.", moveUp: "Выше", moveDown: "Ниже",
     repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
     undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
-    focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
+    allDone: "сделано {0}", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
     orphans: "Без области", orphansHelp: "Эти задачи ни в одной области, поэтому фокус их не показывает. Разложи их по местам.",
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
@@ -463,7 +463,16 @@ class FocusRenderer extends MarkdownRenderChild {
     this.plugin.views.add(this);
     this.render();
   }
-  onunload() { clearTimeout(this.timer); this.keys(false); this.plugin.views.delete(this); }
+  // Closing the pane (or switching a note out of preview) must take everything this view opened with
+  // it: the editor's hotkeys, the picker and its document listeners, a drag left mid-air.
+  onunload() {
+    clearTimeout(this.timer);
+    this.keys(false);
+    this.endEdit?.(false, false);
+    this.picker?.close();
+    this.stopDrag?.();
+    this.plugin.views.delete(this);
+  }
 
   // The tab the list is in: the pane, or the note with the block.
   leafOf() {
@@ -695,7 +704,11 @@ class FocusRenderer extends MarkdownRenderChild {
     const tasks = [...area.loose, ...area.projects.flatMap((pr) => pr.tasks)];
     const focus = tasks.filter(inFocus).length;
     if (all) title.createSpan({ cls: "ft-count", text: t("openCount", tasks.length) + (focus ? t("inFocus", focus) : "") });
-    else if (!open) title.createSpan({ cls: "ft-count", text: String(tasks.length) });
+    else if (!open) {
+      // «0» under an area's name reads as «broken»; when the day is simply finished here, say so.
+      const count = title.createSpan({ cls: "ft-count", text: tasks.length ? String(tasks.length) : area.done.length ? t("allDone", area.done.length) : "" });
+      if (!tasks.length && area.done.length) count.addClass("is-done");
+    }
     this.plus(title, t("addToArea"), async () => ({ area: area.name, project: null, noDate: all }),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
     this.more(title, (menu) => this.areaMenu(menu, area));
@@ -949,6 +962,7 @@ class FocusRenderer extends MarkdownRenderChild {
       window.removeEventListener("pointercancel", cancel, true);
       window.removeEventListener("touchmove", swallow, true);
       this.held = false;
+      this.stopDrag = null;
       marked?.removeClass("ft-drop-into");
       line.remove();
       moving.forEach((r) => r.removeClass("ft-dragging"));
@@ -961,12 +975,13 @@ class FocusRenderer extends MarkdownRenderChild {
         else this.openMenu(item, ev, row);
       }
       else if (commit && drop) {
-        if (group) this.clearSelection();
+        this.clearSelection();  // a finished move ends the selection, whatever was dragged
         await this.plugin.drop(item, drop, this.shown);
       }
       if (this.again) { this.again = false; this.render(); }
     };
     this.held = true;  // no re-render under the finger
+    this.stopDrag = () => end(false);
     grip.setPointerCapture(e.pointerId);
     window.addEventListener("touchmove", swallow, { capture: true });
     window.addEventListener("pointermove", move, true);
@@ -1050,14 +1065,16 @@ class FocusRenderer extends MarkdownRenderChild {
     this.anchor = task;
     this.editing = true;
     el.addClass("is-active");
-    new DatePicker(el, days.length === 1 ? days[0] : null, async (day) => {
+    this.picker = new DatePicker(el, days.length === 1 ? days[0] : null, async (day) => {
       this.editing = false;
+      this.picker = null;
       this.clearSelection();
       const change = tasks.filter((x) => (x.date || null) !== day);
       if (change.length) await this.plugin.setDates(change, day);
       this.render();
     }, () => {
       this.editing = false;
+      this.picker = null;
       el.removeClass("is-active");
       this.render();
     });
@@ -1182,6 +1199,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const finish = async (keep, rerender = true) => {
       if (done) return;
       done = true;
+      this.endEdit = null;
       this.plugin.app.keymap.popScope(scope);
       el.contentEditable = "false";
       el.removeClass("is-editing");
@@ -1201,6 +1219,7 @@ class FocusRenderer extends MarkdownRenderChild {
       });
     }
     this.plugin.app.keymap.pushScope(scope);
+    this.endEdit = finish;
     el.onkeydown = (ev) => {
       if (ev.key === "Enter" && !ev.isComposing && onEnter) {
         ev.preventDefault();
@@ -1561,9 +1580,8 @@ module.exports = class FocusTasks extends Plugin {
   // so that a note written by another tool never disappears without a trace.
   orphans() {
     const projects = this.notes().filter((n) => n.project);
-    const placed = (task) => projects.some((n) => this.samePlace(task.project, n.file));
     return this.tasks()
-      .filter((x) => !x.area && !placed(x) && x.status !== STATUS_DONE)
+      .filter((x) => !x.area && !this.projectFile(x, projects) && x.status !== STATUS_DONE)
       .sort((a, b) => collator()(a.text, b.text));
   }
 
@@ -1626,13 +1644,15 @@ module.exports = class FocusTasks extends Plugin {
       const area = areaOf(n.area);
       if (!n.project) { if (!area.note) area.note = n.file; continue; }
       const bucket = { file: n.file, area, tasks: [], later: [], first: "9999" };
-      if (!projects.has(n.file.basename)) projects.set(n.file.basename, bucket);  // a link by name
-      projects.set(n.file.path.replace(/\.md$/, ""), bucket);                     // a link by path
+      projects.set(n.file.path, bucket);
       area.buckets = [...(area.buckets || []), bucket];
     }
+    const noteList = this.notes().filter((n) => n.project);
     for (const task of this.tasks()) {
       if (task.status === STATUS_CANCELLED || task.status === STATUS_SOMEDAY) continue;
-      const bucket = task.project ? projects.get(task.project) : null;
+      const file = task.project ? this.projectFile(task, noteList) : null;
+      const bucket = file ? projects.get(file.path) : null;
+      if (file) task.project = file.basename;  // the row shows the note it really points at
       // A task written by another plugin has no `area`: its project tells us which one it belongs to.
       if (!task.area && bucket) task.area = bucket.area.name;
       if (!task.area) continue;
@@ -1702,13 +1722,24 @@ module.exports = class FocusTasks extends Plugin {
   async update(task, change) {
     const file = this.app.vault.getAbstractFileByPath(task.file.path) || task.file;
     if (!file || file.deleted) { new Notice(t("changed")); return false; }
-    let uid = null;
+    let uid = null, wrong = false;
     try {
       await this.app.fileManager.processFrontMatter(file, (fm) => {
+        // The row was read a moment ago; a note with another identity may have taken this path since
+        // (Sync, a script, the user). Writing into it would change the wrong task.
+        if (fm.uid && task.uid && String(fm.uid) !== task.uid && /^ft-/.test(task.uid)) { wrong = true; return; }
         if (!fm.uid) fm.uid = uid = newUid();  // a note written by another plugin gets its identity here
         change(fm);
       });
-      if (uid) task.uid = uid;
+      if (wrong) { new Notice(t("changed")); return false; }
+      if (uid) {
+        // it lived under its path until now: the order it was dragged into moves to the real identity
+        for (const [key, list] of Object.entries(this.data.order.tasks)) {
+          const i = list.indexOf(task.file.path);
+          if (i >= 0) { list[i] = uid; this.saveAll(); }
+        }
+        task.uid = uid;
+      }
       this.forgetScan();
     } catch (e) {
       new Notice(t("changed"));
@@ -1721,8 +1752,9 @@ module.exports = class FocusTasks extends Plugin {
   // Done ⇄ open, with the day it was done. One write per task at a time (the same task can be on
   // screen twice); a second click on the same row is held by the row itself until it is rebuilt.
   async toggle(task) {
-    if (this.toggling.has(task.uid)) return false;
-    this.toggling.add(task.uid);
+    const guard = task.uid;  // `update` may give the task a real uid on the way: unlock what was locked
+    if (this.toggling.has(guard)) return false;
+    this.toggling.add(guard);
     try {
       const repeats = this.app.metadataCache.getFileCache(task.file)?.frontmatter?.recurrence;
       if (repeats) {
@@ -1744,7 +1776,7 @@ module.exports = class FocusTasks extends Plugin {
       if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate: done ? today() : null });
       return ok;
     } finally {
-      this.toggling.delete(task.uid);
+      this.toggling.delete(guard);
     }
   }
 
@@ -1813,9 +1845,12 @@ module.exports = class FocusTasks extends Plugin {
   async moveTasks(tasks, drop, shown = {}) {
     const tg = drop.target;
     const area = drop.into ? tg.area.name : tg.task.area;
-    const project = drop.into ? (tg.type === "project" ? tg.project.file.basename : null) : tg.task.project;
+    const file = drop.into ? (tg.type === "project" ? tg.project.file : null) : (tg.task.project ? this.projectFile(tg.task) : null);
+    const project = file ? file.basename : null;
     for (const task of tasks) {
-      const ok = await this.setFields(task, { area, projects: project ? [`[[${project}]]`] : null });
+      // the link is written the way Obsidian writes links, so two notes of the same name stay apart
+      const link = file ? this.app.metadataCache.fileToLinktext(file, task.file.path) : null;
+      const ok = await this.setFields(task, { area, projects: link ? [`[[${link}]]`] : null });
       if (ok) Object.assign(task, { area, project });
     }
     await this.reorder(tasks, drop, shown);
@@ -1849,6 +1884,8 @@ module.exports = class FocusTasks extends Plugin {
       item.after = live ? await this.app.vault.read(live) : null;
     }
     this.undoStack = snap;
+    // Every notice holds its own snapshot: two deletes in a row must not undo each other's work.
+    const put = () => this.restore(snap);
     let undo;
     const notice = new Notice(createFragment((f) => {
       f.appendText(message + " ");
@@ -1857,8 +1894,9 @@ module.exports = class FocusTasks extends Plugin {
     if (undo) undo.onclick = async (e) => {
       e.preventDefault();
       notice.hide();
-      await this.undoLast();
+      await put();
     };
+    return put;
   }
 
   // Puts the last deleted notes back exactly as they were, uid and all — unless something has been
@@ -1866,6 +1904,11 @@ module.exports = class FocusTasks extends Plugin {
   async undoLast() {
     const snap = this.undoStack || [];
     this.undoStack = null;
+    return this.restore(snap);
+  }
+
+  // Writes a snapshot back, skipping anything that has changed at that path since.
+  async restore(snap) {
     let back = 0;
     for (const { path, text, after } of snap) {
       const file = this.app.vault.getAbstractFileByPath(path);
@@ -1881,8 +1924,11 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // The note goes to the trash; the notice puts it back with the same uid.
-  async remove(task) {
-    await this.undoable(t("deleted", task.text), [task.file], () => this.trash(task.file));
+  async remove(task) { return this.removeTask(task); }
+
+  // → the function that puts this very task back.
+  async removeTask(task) {
+    return this.undoable(t("deleted", task.text), [task.file], () => this.trash(task.file));
   }
 
   // A free file name in the tasks folder.
@@ -1952,9 +1998,14 @@ module.exports = class FocusTasks extends Plugin {
         day = null;  // the date the task carried goes to the first step only
       }
       await this.trash(task.file);
-    } else {
+    } else if (task.date) {
+      // It was in the focus today: it stays there as the project's first step, or the day would
+      // quietly lose it. The row reads the same as the project — one click renames it.
       await this.setFields(task, { projects: [`[[${name}]]`] });
       if (rest.trim()) await this.app.vault.process(task.file, (t0) => splitNote(t0)[0] + "\n");
+    } else {
+      // Nothing was due: the project starts empty, under «Show upcoming», with no twin row.
+      await this.trash(task.file);
     }
     new Notice(t("toProjectDone", name));
     this.refresh();
@@ -2131,10 +2182,11 @@ module.exports = class FocusTasks extends Plugin {
   // the note and the links its tasks had to it.
   async removeProject(area, project) {
     const name = project.file.basename;
-    const mine = this.tasks().filter((x) => this.samePlace(x.project, project.file));
+    const mine = this.tasks().filter((x) => this.samePlace(x, project.file));
     const touched = this.notes().filter((n) => !n.project && n.area === area.name).map((n) => n.file);
     await this.undoable(t("projectDeleted", name), [project.file, ...mine.map((x) => x.file), ...touched], async () => {
-      for (const task of mine) await this.setFields(task, { projects: null });
+      // a task that only knew where it was through this project keeps the area it was shown in
+      for (const task of mine) await this.setFields(task, { projects: null, area: task.area || area.name });
       await this.dropLinks(project.file, area.name);
       await this.trash(project.file);
       await this.forget("project:" + project.file.path);
@@ -2143,7 +2195,7 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   deleteProject(area, project) {
-    const mine = this.tasks().filter((x) => this.samePlace(x.project, project.file));
+    const mine = this.tasks().filter((x) => this.samePlace(x, project.file));
     new ConfirmModal(this.app, t("deleteProjectQ", project.file.basename), t("deleteProjectText", mine.length), t("delete"),
       () => this.removeProject(area, project)).open();
   }
@@ -2168,10 +2220,27 @@ module.exports = class FocusTasks extends Plugin {
       () => this.removeArea(area)).open();
   }
 
-  // Does a task's `projects` link name this project note? (by name, by path or with an alias)
-  samePlace(link, file) {
-    if (!link) return false;
-    return link === file.basename || link.replace(/\.md$/, "") === file.path.replace(/\.md$/, "");
+  // The project note a task points at. The link may be a name, a path or an alias; two notes may
+  // share a name, so Obsidian resolves it from the task's own note first, and an area of its own
+  // decides the rest.
+  projectFile(task, candidates = null) {
+    if (!task.project) return null;
+    const found = this.app.metadataCache.getFirstLinkpathDest(task.project, task.file.path);
+    const list = candidates || this.notes().filter((n) => n.project);
+    const known = found && list.some((n) => n.file.path === found.path);
+    // A link by path says exactly which note. A bare name may fit several, and then the task's own
+    // area decides — every task folder is equally far from every project note.
+    if (known && task.project.includes("/")) return found;
+    if (known && !(task.area && list.some((n) => n.file.basename === found.basename && n.area === task.area && n.file.path !== found.path))) return found;
+    const named = list.filter((n) => n.file.basename === task.project || n.file.path.replace(/\.md$/, "") === task.project.replace(/\.md$/, ""));
+    if (!named.length) return null;
+    return (task.area && named.find((n) => n.area === task.area) || named[0]).file;
+  }
+
+  // Does this task belong to that project note?
+  samePlace(task, file) {
+    const found = this.projectFile(task);
+    return !!found && found.path === file.path;
   }
 
   // Text first, then where it goes (a known place skips the question).

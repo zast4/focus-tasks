@@ -225,3 +225,22 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-text { margin-left: 0; }
 
 /* An empty focus tells how much is waiting and offers the way to it. */
 .focus-tasks-view .ft-empty-link { margin-left: 0.5em; cursor: pointer; }
+
+/* An area that is finished for today: the count says so instead of a bare zero. */
+.focus-tasks-view .ft-count.is-done { color: var(--color-green); }
+
+/* A row on a phone is a finger tall, not a mouse tall. */
+body.is-mobile .focus-tasks-view li.ft-task { padding: 0.3em 0; }
+body.is-mobile .focus-tasks-view .ft-area-title, body.is-mobile .focus-tasks-view .ft-project { padding: 0.15em 0; }
+
+/* Keyboard users see where they are. */
+.focus-tasks-view .ft-caret:focus-visible, .focus-tasks-view .ft-plus:focus-visible,
+.focus-tasks-view .ft-more:focus-visible, .focus-tasks-view .ft-date:focus-visible,
+.focus-tasks-view .ft-foot-button:focus-visible, .ft-picker button:focus-visible, .ft-picker-day:focus-visible {
+  outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
+
+/* Someone who asked the system for less motion gets none of ours. */
+@media (prefers-reduced-motion: reduce) {
+  .focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title,
+  .focus-tasks-view .ft-grip, .focus-tasks-view .ft-more { transition: none !important; }
+}

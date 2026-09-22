@@ -327,6 +327,18 @@ test("a task whose description was a checklist becomes a project with those step
   eq(frontmatter(app, "Areas/Get ready.md").uid?.startsWith("ft-"), true, "the project kept the task's identity");
 });
 
+test("an undated task that becomes a project leaves no twin row behind", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Someday thing", { area: "Sport" }, "мысли на будущее");
+  });
+  await plugin.toProject(plugin.tasks()[0]);
+  eq(app.vault.files.has("Tasks/Someday thing.md"), false, "the task note is gone");
+  ok(bodyOf(app, "Areas/Someday thing.md").includes("мысли на будущее"), "its text is in the project");
+  const area = areaOf(await plugin.collect(true), "Sport");
+  eq(area.projects.map((p) => p.file.basename), ["Someday thing"], "the project is there, empty");
+});
+
 test("a task cannot become a project when a note of that name exists", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Sport");
@@ -772,6 +784,131 @@ test("an empty focus still knows how much work is waiting", async () => {
   eq(areaNames(await plugin.collect(false)), [], "nothing is due today");
   const waiting = plugin.tasks().filter((x) => !["done", "cancelled", "someday"].includes(x.status)).length;
   eq(waiting, 2, "and the view can say how much is waiting");
+});
+
+// --- what the code review found -------------------------------------------------------------------
+
+test("a write refuses to go into a different task that took the same file name", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Foo", { area: "Work", scheduled: TODAY });
+  });
+  const stale = plugin.tasks()[0];                      // the row on screen
+  app.vault.files.delete("Tasks/Foo.md");               // another device deleted it
+  await app.vault.create("Tasks/Foo.md", "---\nuid: ft-someone-else\ntype: задача\nstatus: open\narea: Work\n---\n");
+  const ok1 = await plugin.setDate(stale, DAY(3));
+  eq(ok1, false, "the write is refused");
+  eq(frontmatter(app, "Tasks/Foo.md").scheduled, undefined, "the other task is untouched");
+});
+
+test("two projects with the same name do not mix their tasks", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    areaNote(a, "Home");
+    writeNote(a, "Areas/Work Plan.md", { area: "Work", type: "project" });
+    writeNote(a, "Areas/Home Plan.md", { area: "Home", type: "project" });
+    // both notes are called «Plan» to Obsidian once renamed; here the link says which one by path
+    writeNote(a, "Tasks/Work step.md", { uid: "ft-w", type: "задача", status: "open", area: "Work", projects: ["[[Areas/Work Plan]]"], scheduled: TODAY });
+    writeNote(a, "Tasks/Home step.md", { uid: "ft-h", type: "задача", status: "open", area: "Home", projects: ["[[Areas/Home Plan]]"], scheduled: TODAY });
+  });
+  const areas = await plugin.collect(false);
+  eq(names(projectOf(areaOf(areas, "Work"), "Work Plan").tasks), ["Work step"]);
+  eq(names(projectOf(areaOf(areas, "Home"), "Home Plan").tasks), ["Home step"]);
+});
+
+test("two project notes with the same name keep their own tasks", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    areaNote(a, "Home");
+    writeNote(a, "Areas/work/Plan.md", { area: "Work", type: "project" });
+    writeNote(a, "Areas/home/Plan.md", { area: "Home", type: "project" });
+    writeNote(a, "Tasks/Work step.md", { uid: "ft-w", type: "задача", status: "open", area: "Work", projects: ["[[Areas/work/Plan]]"], scheduled: TODAY });
+    writeNote(a, "Tasks/Home step.md", { uid: "ft-h", type: "задача", status: "open", area: "Home", projects: ["[[Plan]]"], scheduled: TODAY });
+  });
+  const areas = await plugin.collect(false);
+  eq(names(projectOf(areaOf(areas, "Work"), "Plan").tasks), ["Work step"], "the link by path went to its own project");
+  eq(names(projectOf(areaOf(areas, "Home"), "Plan").tasks), ["Home step"], "the link by name went to the project of its own area");
+});
+
+test("deleting one of two projects of the same name leaves the other one alone", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    areaNote(a, "Home");
+    writeNote(a, "Areas/work/Plan.md", { area: "Work", type: "project" });
+    writeNote(a, "Areas/home/Plan.md", { area: "Home", type: "project" });
+    writeNote(a, "Tasks/Work step.md", { uid: "ft-w", type: "задача", status: "open", area: "Work", projects: ["[[Areas/work/Plan]]"], scheduled: TODAY });
+    writeNote(a, "Tasks/Home step.md", { uid: "ft-h", type: "задача", status: "open", area: "Home", projects: ["[[Areas/home/Plan]]"], scheduled: TODAY });
+  });
+  const home = areaOf(await plugin.collect(false), "Home");
+  await plugin.removeProject(home, projectOf(home, "Plan"));
+  eq(frontmatter(app, "Tasks/Home step.md").projects, undefined, "its own task was freed");
+  eq(frontmatter(app, "Tasks/Work step.md").projects, ["[[Areas/work/Plan]]"], "the other project's task kept its link");
+});
+
+test("a task dropped into a project is linked to that very note", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    writeNote(a, "Areas/Plan.md", { area: "Work", type: "project" });
+    taskNote(a, "Step", { area: "Work", scheduled: TODAY });
+  });
+  const project = projectOf(areaOf(await plugin.collect(true), "Work"), "Plan");
+  await plugin.moveTasks([plugin.tasks()[0]], { into: true, target: { type: "project", area: { name: "Work" }, project } }, {});
+  const link = frontmatter(app, "Tasks/Step.md").projects[0];
+  ok(link.includes("Plan"), "the link names the project: " + link);
+  eq(names(projectOf(areaOf(await plugin.collect(false), "Work"), "Plan").tasks), ["Step"], "and it reads back into that project");
+});
+
+test("deleting a project keeps its tasks in the area, even the ones that had no area", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Plan");
+    taskNote(a, "Mine", { area: "Work", project: "Plan", scheduled: TODAY });
+    writeNote(a, "Tasks/Foreign.md", { uid: "ft-f", type: "задача", status: "open", projects: ["[[Plan]]"], scheduled: TODAY });
+  });
+  const area = areaOf(await plugin.collect(false), "Work");
+  await plugin.removeProject(area, projectOf(area, "Plan"));
+  eq(frontmatter(app, "Tasks/Foreign.md").area, "Work", "the task that had no area got the project's");
+  eq(plugin.orphans().length, 0, "nothing was left lost");
+});
+
+test("two deletes in a row: each notice puts back its own", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "First", { area: "Work", scheduled: TODAY });
+    taskNote(a, "Second", { area: "Work", scheduled: TODAY });
+  });
+  const [one, two] = plugin.tasks();
+  const undoOne = await plugin.removeTask(one);
+  const undoTwo = await plugin.removeTask(two);
+  await undoOne();
+  eq(plugin.tasks().map((x) => x.text), ["First"], "the first delete was undone, the second stands");
+  await undoTwo();
+  eq(plugin.tasks().map((x) => x.text).sort(), ["First", "Second"], "and then the second");
+});
+
+test("a task that gains a uid keeps the place it was dragged to", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    writeNote(a, "Tasks/Foreign.md", { type: "задача", status: "open", area: "Work", scheduled: TODAY });
+    taskNote(a, "Mine", { area: "Work", scheduled: TODAY });
+  });
+  const foreign = plugin.tasks().find((x) => x.text === "Foreign");
+  const mine = plugin.tasks().find((x) => x.text === "Mine");
+  await plugin.reorder([foreign], { into: false, after: false, target: { type: "task", task: mine } }, {});
+  eq(names((await plugin.collect(false))[0].loose), ["Foreign", "Mine"], "dragged to the top");
+  await plugin.setDate(plugin.tasks().find((x) => x.text === "Foreign"), TODAY);   // this writes the uid
+  eq(names((await plugin.collect(false))[0].loose), ["Foreign", "Mine"], "still at the top after it got its uid");
+});
+
+test("the guard on a task that had no uid lets the next tick through", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    writeNote(a, "Tasks/Foreign.md", { type: "задача", status: "open", area: "Work", scheduled: TODAY });
+  });
+  await plugin.toggle(plugin.tasks()[0]);
+  const second = await plugin.toggle(plugin.tasks()[0]);
+  eq(second, true, "the second tick is not blocked by a stale guard");
+  eq(frontmatter(app, "Tasks/Foreign.md").status, "open", "and it went back to open");
 });
 
 // --- fuzzing: nothing may vanish ----------------------------------------------------------------
