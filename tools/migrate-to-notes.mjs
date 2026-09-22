@@ -159,7 +159,24 @@ if (!APPLY) {
   for (const m of made.slice(0, 2)) console.log(`--- ${m.path}\n${m.text}`);
   process.exit(0);
 }
+// A heading left without its tasks says nothing: drop the empty ones («## Проекты» keeps its links).
+function tidy(text) {
+  const lines = text.replace(/\n{3,}/g, "\n\n").split("\n");
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const head = lines[i].match(/^#{1,6}\s+(.*)$/);
+    if (head) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j].trim()) j++;
+      const empty = j >= lines.length || /^#{1,6}\s/.test(lines[j]);
+      if (empty && !/проект/i.test(head[1])) { i = j - 1; continue; }
+    }
+    out.push(lines[i]);
+  }
+  return out.join("\n").replace(/\n{3,}/g, "\n\n").replace(/\n+$/, "\n");
+}
+
 fs.mkdirSync(path.join(VAULT, OUT), { recursive: true });
 for (const m of made) fs.writeFileSync(path.join(VAULT, m.path), m.text);
-for (const [rel, text] of edits) fs.writeFileSync(path.join(VAULT, rel), text.replace(/\n{3,}/g, "\n\n"));
+for (const [rel, text] of edits) fs.writeFileSync(path.join(VAULT, rel), tidy(text));
 console.log(`\nзаписано в ${OUT}/ и обновлено исходных заметок: ${edits.size}`);
