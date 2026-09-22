@@ -73,8 +73,8 @@ const STRINGS = {
     newAreaTitle: "New area", areaPlaceholder: "Name — an emoji in front works: 💪Sport",
     areaNameTitle: "Area name for “{0}”", newProjectTitle: "New project in {0}",
     projectPlaceholder: "Project name", create: "Create", cancel: "Cancel", next: "Next", ok: "OK",
-    deleteProjectQ: "Delete project “{0}”?", deleteProjectText: "Its task file goes to the trash; open steps in it: {0}. A linked note stays.",
-    deleteAreaQ: "Delete area {0}?", deleteAreaText: "The task files of the area and of its {0} projects go to the trash; open tasks in them: {1}. Linked notes stay.",
+    deleteProjectQ: "Delete project “{0}”?", deleteProjectText: "Its note goes to the trash; its {0} tasks stay in the area as loose ones. A linked note stays.",
+    deleteAreaQ: "Delete area {0}?", deleteAreaText: "The area, its {0} projects and its {1} tasks go to the trash. Linked notes stay.",
     taskIn: "Task added to “{0}”", where: "Where to: a project or an area (type a new name to create an area)",
     newAreaOption: "+ New area “{0}”", looseTasks: "(loose tasks)", whatToDo: "What to do",
     pickNote: "Pick a note", cmdToggleAll: "Show all / focus only", cmdFoldAll: "Collapse all",
@@ -119,8 +119,8 @@ const STRINGS = {
     newAreaTitle: "Новая область", areaPlaceholder: "Имя с эмодзи, например 💪Спорт",
     areaNameTitle: "Имя области для «{0}»", newProjectTitle: "Новый проект в {0}",
     projectPlaceholder: "Название проекта", create: "Создать", cancel: "Отмена", next: "Дальше", ok: "Готово",
-    deleteProjectQ: "Удалить проект «{0}»?", deleteProjectText: "Файл задач проекта уйдёт в корзину, открытых шагов в нём: {0}. Привязанная заметка останется.",
-    deleteAreaQ: "Удалить область {0}?", deleteAreaText: "В корзину уйдут файлы задач области и её проектов ({0}); открытых задач в них: {1}. Привязанные заметки останутся.",
+    deleteProjectQ: "Удалить проект «{0}»?", deleteProjectText: "Заметка проекта уйдёт в корзину, его задачи ({0}) останутся в области разовыми. Привязанная заметка останется.",
+    deleteAreaQ: "Удалить область {0}?", deleteAreaText: "В корзину уйдут область, её проекты ({0}) и её задачи ({1}). Привязанные заметки останутся.",
     taskIn: "Задача в «{0}»", where: "Куда: проект или область (новое имя — новая область)",
     newAreaOption: "＋ Новая область «{0}»", looseTasks: "(разовые задачи)", whatToDo: "Что сделать",
     pickNote: "Выбери заметку", cmdToggleAll: "Показать всё / только фокус", cmdFoldAll: "Свернуть всё",
@@ -163,6 +163,8 @@ const headText = (l) => l.replace(/^#+\s*/, "").trim();
 const indentOf = (l) => l.match(/^\s*/)[0].replace(/\t/g, "    ").length;
 const collator = () => (a, b) => a.localeCompare(b, LANG);
 const newUid = () => "ft-" + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
+// The list a task is dragged within: the steps of its project, or the loose tasks of its area.
+const listOf = (task) => (task.project ? "project:" + task.project : "area:" + task.area);
 // What a selected row is known by across re-renders: the task's own identity.
 const keyOf = (task) => task.uid;
 // Shift or Cmd (Ctrl off the Mac) held: a click selects rather than edits.
@@ -426,7 +428,16 @@ class FocusRenderer extends MarkdownRenderChild {
         ...a.future.projects.map((pr) => ["later:" + pr.file.path, false])]),
       ...rest.flatMap((a) => [["area:" + a.name, true], ...a.projects.map((pr) => ["project:" + pr.file.path, true])]),
     ];
-    this.shown = { areas: shownAreas.map((a) => a.name), projects: Object.fromEntries(shownAreas.map((a) => [a.name, a.projects.map((pr) => pr.file.path)])) };
+    const seen = {};
+    for (const a of shownAreas) {
+      seen["area:" + a.name] = [...a.loose, ...a.future.loose].map((x) => x.uid);
+      for (const pr of [...a.projects, ...a.future.projects]) {
+        const key = "project:" + pr.file.basename;
+        seen[key] = [...new Set([...(seen[key] || []), ...pr.tasks.map((x) => x.uid)])];
+      }
+    }
+    this.shown = { areas: shownAreas.map((a) => a.name), tasks: seen,
+      projects: Object.fromEntries(shownAreas.map((a) => [a.name, a.projects.map((pr) => pr.file.path)])) };
     const old = this.inner;
     this.inner = this.addChild(new Component());
     const el = createDiv();
@@ -1243,7 +1254,7 @@ module.exports = class FocusTasks extends Plugin {
   async onload() {
     const saved = (await this.loadData()) || {};
     this.settings = Object.assign({}, DEFAULTS, saved.settings);
-    this.data = { folded: saved.folded || {}, opened: saved.opened || {}, order: Object.assign({ areas: [], projects: {} }, saved.order) };
+    this.data = { folded: saved.folded || {}, opened: saved.opened || {}, order: Object.assign({ areas: [], projects: {}, tasks: {} }, saved.order) };
     this.applyLanguage();
     this.views = new Set();
     this.toggling = new Set();  // lines with a toggle in flight
@@ -1414,9 +1425,10 @@ module.exports = class FocusTasks extends Plugin {
       else if (focused || all) area.loose.push(task);
       else area.future.loose.push(task);
     }
-    // Notes have no order of their own: the nearest date first, then by name (a dragged order of
-    // tasks inside a list is a separate thing and is not kept yet).
-    const cmpTask = (x, y) => (x.date || "9999").localeCompare(y.date || "9999") || collator()(x.text, y.text);
+    // Notes have no order of their own: a dragged order wins, the rest follows the nearest date and
+    // then the name.
+    const seat = (task) => { const list = this.data.order.tasks[listOf(task)] || []; const i = list.indexOf(task.uid); return i < 0 ? 1e9 : i; };
+    const cmpTask = (x, y) => seat(x) - seat(y) || (x.date || "9999").localeCompare(y.date || "9999") || collator()(x.text, y.text);
     for (const area of byArea.values()) {
       area.loose.sort(cmpTask);
       area.future.loose.sort(cmpTask);
@@ -1509,9 +1521,45 @@ module.exports = class FocusTasks extends Plugin {
     task.text = text;
   }
 
-  // `drop` comes from FocusRenderer.target: onto a header means «into that area or project», onto a
-  // task means «where that task lives».
-  async moveTasks(tasks, drop) {
+  // `drop` comes from FocusRenderer.target; `shown` is the order on screen.
+  async drop(item, drop, shown) {
+    const place = (list, key, targetKey, after) => {
+      const out = list.filter((k) => k !== key);
+      const i = out.indexOf(targetKey);
+      out.splice(i < 0 ? out.length : i + (after ? 1 : 0), 0, key);
+      return out;
+    };
+    const merge = (...lists) => [...new Set(lists.flat())];
+    const cmp = collator();
+    if (item.type === "area") {
+      const rank = (a) => { const i = this.data.order.areas.indexOf(a); return i < 0 ? 1e9 : i; };
+      const all = [...new Set(this.notes().map((n) => n.area))].sort((a, b) => rank(a) - rank(b) || cmp(bare(a), bare(b)));
+      this.data.order.areas = place(all, item.area.name, drop.target.area.name, drop.after);
+    } else if (item.type === "project") {
+      const name = item.area.name;
+      const mine = this.notes().filter((n) => n.project && n.area === name).map((n) => n.file.path);
+      const all = merge(this.data.order.projects[name] || [], shown.projects[name] || [], mine);
+      this.data.order.projects[name] = place(all, item.project.file.path, drop.target.project.file.path, drop.after);
+    } else return this.moveTasks(item.tasks || [item.task], drop, shown.tasks || {});
+    await this.saveAll();
+    this.refresh();
+  }
+
+  // Where the dragged tasks now sit in their list: the order on screen is kept, so the rows that were
+  // not dragged stay where they were.
+  async reorder(tasks, drop, shown) {
+    const key = listOf(tasks[0]);
+    const moved = tasks.map((x) => x.uid);
+    const target = drop.into ? null : drop.target.task;
+    const list = [...new Set([...(this.data.order.tasks[key] || []), ...(shown[key] || []), ...moved])].filter((uid) => !moved.includes(uid));
+    const at = target && listOf(target) === key ? list.indexOf(target.uid) : -1;
+    list.splice(at < 0 ? list.length : at + (drop.after ? 1 : 0), 0, ...moved);
+    this.data.order.tasks[key] = list;
+    await this.saveAll();
+  }
+
+  // Into a header means «into that area or project», onto a task means «where that task lives».
+  async moveTasks(tasks, drop, shown = {}) {
     const tg = drop.target;
     const area = drop.into ? tg.area.name : tg.task.area;
     const project = drop.into ? (tg.type === "project" ? tg.project.file.basename : null) : tg.task.project;
@@ -1519,6 +1567,8 @@ module.exports = class FocusTasks extends Plugin {
       const ok = await this.setFields(task, { area, project: project ? `[[${project}]]` : null });
       if (ok) Object.assign(task, { area, project });
     }
+    await this.reorder(tasks, drop, shown);
+    this.refresh();
   }
 
   // The note goes to the trash; the notice puts it back with the same uid.
@@ -1718,9 +1768,12 @@ module.exports = class FocusTasks extends Plugin {
     return this.app.fileManager.trashFile ? this.app.fileManager.trashFile(file) : this.app.vault.trash(file, true);
   }
 
+  // The project's note goes to the trash; its tasks stay in the area as loose ones.
   deleteProject(area, project) {
     const name = project.file.basename;
-    new ConfirmModal(this.app, t("deleteProjectQ", name), t("deleteProjectText", project.tasks.length), t("delete"), async () => {
+    const mine = this.tasks().filter((x) => x.project === name);
+    new ConfirmModal(this.app, t("deleteProjectQ", name), t("deleteProjectText", mine.length), t("delete"), async () => {
+      for (const task of mine) await this.setFields(task, { project: null });
       await this.dropLinks(project.file, area.name);
       await this.trash(project.file);
       await this.forget("project:" + project.file.path);
@@ -1729,10 +1782,12 @@ module.exports = class FocusTasks extends Plugin {
     }).open();
   }
 
+  // The area, its projects and its tasks all go to the trash.
   deleteArea(area) {
     const files = this.notes().filter((n) => n.area === area.name).map((n) => n.file);
-    const open = area.loose.length + area.projects.reduce((s, pr) => s + pr.tasks.length, 0);
-    new ConfirmModal(this.app, t("deleteAreaQ", area.name), t("deleteAreaText", area.projects.length, open), t("delete"), async () => {
+    const mine = this.tasks().filter((x) => x.area === area.name);
+    new ConfirmModal(this.app, t("deleteAreaQ", area.name), t("deleteAreaText", area.projects.length, mine.length), t("delete"), async () => {
+      for (const task of mine) await this.trash(task.file);
       for (const f of files) {
         await this.trash(f);
         await this.forget("project:" + f.path);
