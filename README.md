@@ -41,6 +41,7 @@ What you can do in the view:
 | Add a task | **+** on an area or a project header; «Empty» in an empty area |
 | Menu | click the grip on the left, or right-click a row |
 | Reorder / move | drag the grip: areas among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
+| Select several | **Shift**-click selects every task from the last clicked one, **⌘/Ctrl**-click adds or drops one, **Esc** clears; the grip of a selected row drags them all, its date or its menu sets the date of all of them |
 | Upcoming | «Show upcoming» under an area opens its undated and future tasks |
 | Everything | «All» at the bottom shows every area (also those with nothing due); «Hide» goes back |
 | Fold | carets on headers; «Collapse all» / «Expand all» at the bottom |
@@ -95,13 +96,15 @@ Try these in a new vault (or a copy of yours):
 5. ⌘2 / ⌘4 / ⌘3 on a task; the date on the right → picker: «Today», a day, «Clear date».
 6. Check a task: `[x] … ✅ <today>` in the note; it leaves the list.
 7. Drag a task onto an area header; drag a task between two others; drag an area above another.
-8. Delete a task from its menu → «Undo» in the notice brings it back.
-9. «Hide» / «All»; «Collapse all» / «Expand all» — the screen stays where it was.
-10. Rename a project from its menu → links in the area note follow; Enter adds the next project.
-11. «Link a note…» on a project → its name opens your note; «Open task file» opens the task file.
-12. «+ Area from a note», «Project from a note».
-13. Change the folder in the settings → new areas go there.
-14. Delete a project, delete an area → files in the trash.
+8. Click a task, Shift-click another two rows down: three rows selected; the grip menu → «Tomorrow»
+   dates all three; drag one of them by the grip onto a project: all three move, in order.
+9. Delete a task from its menu → «Undo» in the notice brings it back.
+10. «Hide» / «All»; «Collapse all» / «Expand all» — the screen stays where it was.
+11. Rename a project from its menu → links in the area note follow; Enter adds the next project.
+12. «Link a note…» on a project → its name opens your note; «Open task file» opens the task file.
+13. «+ Area from a note», «Project from a note».
+14. Change the folder in the settings → new areas go there.
+15. Delete a project, delete an area → files in the trash.
 
 ## Automated end-to-end test
 
@@ -137,7 +140,9 @@ passes (`--keep` leaves it).
 Открыть: иконка на ленте или команда **Focus Tasks: Открыть Фокус**, либо блок ` ```focus-tasks``` `
 в любой заметке. Клик по тексту — правка на месте (Enter — сохранить и новая строка ниже, Esc —
 отмена; ⌘1 сегодня, ⌘2 завтра, ⌘3 календарь, ⌘4 без даты). Ручка слева — перетаскивание, клик по ней
-или правый клик — меню. Внизу — «Все» / «Скрыть», «+ Область», «+ Область из заметки»,
+или правый клик — меню. Shift+клик выделяет все задачи от последней кликнутой до этой, ⌘/Ctrl+клик
+добавляет или убирает одну, Esc снимает выделение; ручка выделенной строки тащит их все, а её дата
+или меню ставят дату всем сразу. Внизу — «Все» / «Скрыть», «+ Область», «+ Область из заметки»,
 «Свернуть всё» / «Развернуть всё». Язык интерфейса — в настройках (Auto / English / Русский).
 
 Установка прямо из Obsidian — через BRAT: *Настройки → Сторонние плагины → Обзор* → поставить и

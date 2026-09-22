@@ -79,6 +79,8 @@ body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.45; }
 .focus-tasks-view li.ft-task:hover, .focus-tasks-view .ft-project:hover, .focus-tasks-view .ft-area-title:hover { background-color: var(--background-modifier-hover); }
 body.is-mobile .focus-tasks-view li.ft-task:hover, body.is-mobile .focus-tasks-view .ft-project:hover,
 body.is-mobile .focus-tasks-view .ft-area-title:hover { background-color: transparent; }
+/* Selected rows (Shift / Cmd-click): the selection colour, also under the pointer. */
+.focus-tasks-view li.ft-task.is-selected, body.is-mobile .focus-tasks-view li.ft-task.is-selected { background-color: var(--text-selection); }
 .focus-tasks-view .ft-dragging { opacity: 0.35; }
 .focus-tasks-view .ft-drop-into { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
 .ft-drop-line { position: fixed; height: 2px; background: var(--interactive-accent); border-radius: 1px; pointer-events: none; z-index: 1000; display: none; }

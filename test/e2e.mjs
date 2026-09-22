@@ -86,15 +86,16 @@ class Page {
   // Input reaches a window only while it is in front (a second vault window starts behind).
   front() { return this.send("Page.bringToFront"); }
 
-  mouse(type, x, y, buttons = 1) {
-    return this.send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons, clickCount: 1 });
+  // modifiers: Alt 1, Ctrl 2, Meta 4, Shift 8
+  mouse(type, x, y, buttons = 1, modifiers = 0) {
+    return this.send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons, clickCount: 1, modifiers });
   }
 
-  async click({ x, y }) {
+  async click({ x, y }, modifiers = 0) {
     await this.front();
-    await this.mouse("mouseMoved", x, y, 0);
-    await this.mouse("mousePressed", x, y);
-    await this.mouse("mouseReleased", x, y, 0);
+    await this.mouse("mouseMoved", x, y, 0, modifiers);
+    await this.mouse("mousePressed", x, y, 1, modifiers);
+    await this.mouse("mouseReleased", x, y, 0, modifiers);
     await sleep(150);
   }
 
@@ -189,7 +190,13 @@ const pos = async (expr, what) => {
   if (!p) throw new Error(`not on screen: ${what || expr}`);
   return p;
 };
-const click = async (expr, what) => page.click(await pos(expr, what));
+const click = async (expr, what, modifiers = 0) => page.click(await pos(expr, what), modifiers);
+const SHIFT = 8, CMD = process.platform === "darwin" ? 4 : 2;
+const selected = async () => {
+  if (!(await page.eval(`return !!__ft.view()`))) await toPane();  // a key may bring a note tab to the front
+  return page.eval(`return __ft.all('li.ft-task.is-selected', __ft.view()).map((e) => e.querySelector('.ft-text').textContent.trim())`);
+};
+const selectedAre = (names) => until(async () => J(await selected()) === J(names), "selected: " + J(names));
 const menu = async (title) => {
   await until(() => page.eval(`return !!__ft.text('.menu .menu-item-title', ${J(title)})`), `menu item «${title}»`);
   await click(`__ft.at(__ft.text('.menu .menu-item-title', ${J(title)}))`, `menu item «${title}»`);
@@ -482,6 +489,73 @@ step(TASKS ? "the task menu offers the Tasks dialog" : "no Tasks dialog without 
   const has = await page.eval(`return !!__ft.text('.menu .menu-item-title', 'Tasks dialog (date, priority)')`);
   await page.key("Escape");
   if (has !== !!TASKS) throw new Error("Tasks dialog item: " + has);
+});
+
+step("click, then Shift-click selects the rows between; Cmd-click drops one; the menu dates them all", async () => {
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Stretch') && !!__ft.task('Run 5k')`), "Sport's tasks on screen");
+  await click(`__ft.at(__ft.task('Stretch').querySelector('.ft-text'))`);
+  await editing();
+  await click(`__ft.at(__ft.task('Run 5k').querySelector('.ft-text'))`, "Run 5k", SHIFT);
+  await idle();
+  await selectedAre(["Stretch", "Plan route", "Run 5k"]);
+  await settle();
+  await page.key("Escape");
+  await selectedAre([]);
+  await click(`__ft.at(__ft.task('Run 5k').querySelector('.ft-text'))`, "Run 5k", SHIFT);
+  await selectedAre(["Stretch", "Plan route", "Run 5k"]);
+  await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-text'))`, "Plan route", CMD);
+  await selectedAre(["Stretch", "Run 5k"]);
+  await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-text'))`, "Plan route", CMD);
+  await selectedAre(["Stretch", "Plan route", "Run 5k"]);
+  const selectionMenu = async () => {
+    await click(`__ft.grip(__ft.task('Run 5k'))`);
+    await until(() => page.eval(`return !!__ft.text('.menu .menu-item-title', 'Selected: 3')`), "the selection menu");
+  };
+  await selectionMenu();
+  await page.key("Escape");  // closes the menu only
+  await until(() => page.eval(`return !document.querySelector('.menu')`), "the menu closed");
+  await selectedAre(["Stretch", "Plan route", "Run 5k"]);
+  await selectionMenu();
+  await menu("Tomorrow");
+  await fileHas("Tasks/Sport.md", `## Inbox\n\n- [ ] Stretch ⏳ ${TOMORROW}\n- [ ] Plan route ⏳ ${TOMORROW}\n- [ ] Run 5k ⏳ ${TOMORROW}\n`);
+  await selectedAre([]);
+});
+
+step("the grip of a selected row drags them all, the date picker dates them all", async () => {
+  const pick = async (from, to) => {
+    await until(() => page.eval(`return !!__ft.task(${J(from)}) && !!__ft.task(${J(to)})`), `${from} … ${to} on screen`);
+    await click(`__ft.at(__ft.task(${J(from)}).querySelector('.ft-text'))`, from, CMD);
+    await click(`__ft.at(__ft.task(${J(to)}).querySelector('.ft-text'))`, to, SHIFT);
+    await selectedAre(["Stretch", "Plan route", "Run 5k"]);
+  };
+  // into a project of another note: written in the screen order, cut from the area
+  await pick("Stretch", "Run 5k");
+  let from = await pos(`__ft.grip(__ft.task('Plan route'))`, "grip of Plan route");
+  let to = await pos(`__ft.at(__ft.project('Marathon 2027'))`, "Marathon 2027 header");
+  await page.drag(from, to);
+  await fileHas("Tasks/Marathon 2027.md", `- [ ] Call coach ⏳ ${TODAY}\n- [ ] Stretch ⏳ ${TOMORROW}\n- [ ] Plan route ⏳ ${TOMORROW}\n- [ ] Run 5k ⏳ ${TOMORROW}\n`);
+  await fileLacks("Tasks/Sport.md", /Stretch|Plan route|Run 5k/);
+  await selectedAre([]);
+  // Obsidian re-reads Sport.md a moment later; until then the moved rows show there too
+  await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view()).filter((e) => /^(Stretch|Plan route|Run 5k)$/.test(e.querySelector('.ft-text').textContent.trim()))
+    .every((e) => e.closest('.ft-project-body'))`), "the moved rows only in Marathon 2027");
+  // the date on the right of a selected row
+  await settle();
+  await pick("Stretch", "Run 5k");
+  await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-date'))`);
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker')`), "picker");
+  await click(`__ft.at(document.querySelector('.ft-picker-today'))`);
+  await fileHas("Tasks/Marathon 2027.md", `- [ ] Stretch ⏳ ${TODAY}\n- [ ] Plan route ⏳ ${TODAY}\n- [ ] Run 5k ⏳ ${TODAY}\n`);
+  await idle();
+  // above another task of the same note
+  await settle();
+  await pick("Stretch", "Run 5k");
+  from = await pos(`__ft.grip(__ft.task('Run 5k'))`, "grip of Run 5k");
+  to = await pos(`__ft.at(__ft.task('Buy shoes fast'), 0.15)`, "top of Buy shoes fast");
+  await page.drag(from, to);
+  await fileHas("Tasks/Marathon 2027.md", `## Steps\n\n- [ ] Stretch ⏳ ${TODAY}\n- [ ] Plan route ⏳ ${TODAY}\n- [ ] Run 5k ⏳ ${TODAY}\n- [ ] Buy shoes fast ⏳ ${TODAY}\n- [x] Lace them`);
+  await fileHas("Tasks/Marathon 2027.md", /Lace them[^\n]*\n- \[ \] Call coach ⏳ \d{4}-\d{2}-\d{2}\n?$/);
 });
 
 step("the folder setting: new areas go to the new folder, created if missing", async () => {

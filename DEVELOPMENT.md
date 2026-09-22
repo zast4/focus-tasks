@@ -19,13 +19,17 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
     after a re-render).
   - Drag: pointer events on the grip, listened on `window` (a row that re-renders mid-drag must not
     leave the drag hanging); a click without moving opens the row's menu.
+  - Selection: `select` (Shift / Cmd-click, on mousedown), `paint` (after every render the selection
+    follows its tasks by note + line), `chosen` (screen order); the grip of a selected row drags the
+    group, `editDate` and `selectionMenu` date it. The row map `items` is swapped together with the
+    DOM (`fresh` while building), so a click during a render still finds its row.
   - Inline editing: `editor()` (contenteditable, Enter / Esc / blur, Mod+digit hotkeys via a `Scope`),
     `editInline`, `rowAfter`, `draft`, `renameProject`, `projectRow`.
   - `open(file)` never replaces the pane itself with the note.
 - **FocusSettingTab**.
 - **Plugin** — settings + `data` (`folded`, `opened`, `order`) in `data.json`; «All» per device in
   local storage; `classify` / `notes` / `collect` (the model); task edits (`replace`, `setDate`,
-  `moveTask`, `remove` with undo, `rename`, `insertAfter`, `addLine`, `toggle`); areas and projects
+  `setDates`, `moveTasks`, `remove` with undo, `rename`, `insertAfter`, `addLine`, `toggle`); areas and projects
   (`createArea`, `createProject`, `renameProject`, `deleteProject` / `deleteArea`, linked notes:
   `linked`, `setLinked`, `pickNote`, `areaFromNote`, `projectFromNote`).
 
@@ -54,7 +58,7 @@ node test/e2e.mjs                                      # own ✅ toggle, no Task
 node test/e2e.mjs --with-tasks "<vault>/.obsidian/plugins/obsidian-tasks-plugin"
 ```
 
-Both must pass (29/29) before a release. On failure the vault stays open and screenshots go to
+Both must pass (31/31) before a release. On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

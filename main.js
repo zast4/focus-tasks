@@ -18,6 +18,8 @@
  * ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date). The date on the right opens a date picker.
  * The checkbox completes a task (through the Tasks plugin when it is installed: recurrence, ✅).
  * The grip on the left drags areas, projects and tasks; a plain click on it opens the row's menu.
+ * Shift-click selects every task from the last clicked one, Cmd/Ctrl-click adds or drops one; the
+ * grip of a selected row then drags them all, and its date or its menu sets the date of all of them.
  * Dates use the Tasks emoji format (⏳ scheduled, 📅 due, 🛫 start, ✅ done), so both plugins agree.
  */
 const {
@@ -78,6 +80,7 @@ const STRINGS = {
     pickNote: "Pick a note", cmdToggleAll: "Show all / focus only", cmdFoldAll: "Collapse all",
     cmdUnfoldAll: "Expand all", cmdAddTask: "New task", cmdAddArea: "New area", cmdAreaFromNote: "New area from the current note",
     pickerPlaceholder: "DD.MM.YY or “tomorrow”", clearDate: "Clear date",
+    selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
     sFolder: "Folder", sFolderDesc: "Where the task files of areas and projects live. Notes linked to them can be anywhere.",
@@ -121,6 +124,7 @@ const STRINGS = {
     pickNote: "Выбери заметку", cmdToggleAll: "Показать всё / только фокус", cmdFoldAll: "Свернуть всё",
     cmdUnfoldAll: "Развернуть всё", cmdAddTask: "Новая задача", cmdAddArea: "Новая область", cmdAreaFromNote: "Новая область из текущей заметки",
     pickerPlaceholder: "ДД.ММ.ГГ или «завтра»", clearDate: "Убрать дату",
+    selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
     sFolder: "Папка", sFolderDesc: "Где лежат файлы задач областей и проектов. Привязанные к ним заметки могут быть где угодно.",
@@ -155,6 +159,10 @@ const isHead = (l) => /^#{1,6}\s/.test(l);
 const headText = (l) => l.replace(/^#+\s*/, "").trim();
 const indentOf = (l) => l.match(/^\s*/)[0].replace(/\t/g, "    ").length;
 const collator = () => (a, b) => a.localeCompare(b, LANG);
+// What a selected row is known by across re-renders: its note and its line.
+const keyOf = (task) => task.file.path + "\n" + task.line;
+// Shift or Cmd (Ctrl off the Mac) held: a click selects rather than edits.
+const picking = (e) => e.shiftKey || (Platform.isMacOS ? e.metaKey : e.ctrlKey);
 
 // "25.09", "25.09.26", "25/09/2026", "today", "завтра" → "YYYY-MM-DD" or null.
 function parseDay(text) {
@@ -189,6 +197,23 @@ function blockAt(lines, i) {
   return end;
 }
 
+// The line of `task` in `lines`: where it was read, else the same text elsewhere (lines above it
+// changed); -1 when it is gone.
+const lineOf = (lines, task) => (lines[task.lineNo] === task.line ? task.lineNo : lines.indexOf(task.line));
+
+// Where the blocks of `tasks` are in `lines`, top down: [{task, i, end}]; a task nested in another
+// one's block goes along with it and has no span of its own. null when one is gone (`loose`: skipped).
+function spansOf(lines, tasks, loose = false) {
+  const spans = [];
+  for (const task of tasks) {
+    const i = lineOf(lines, task);
+    if (i < 0) { if (loose) continue; return null; }
+    spans.push({ task, i, end: blockAt(lines, i) });
+  }
+  spans.sort((a, b) => a.i - b.i);
+  return spans.filter((s, k) => !spans.slice(0, k).some((o) => s.i < o.end));
+}
+
 // Shifts a block so its first line sits at `indent` spaces; tabs become four spaces.
 function reindent(block, indent) {
   const base = indentOf(block[0]);
@@ -205,6 +230,13 @@ function parseLine(line) {
   dates.sort((a, b) => a.day.localeCompare(b.day));
   return { indent: Math.floor(m[1].replace(/\t/g, "    ").length / 4), status: m[2],
     text: m[3].replace(DATE_RE, "").trim(), date: dates[0]?.day || null, mark: dates[0]?.mark || null };
+}
+
+// `line` with its date (the one marked `mark`; ⏳ when it has none) set to `day`, or dropped for null.
+function withDate(line, mark, day) {
+  mark = mark || "⏳";
+  const body = line.replace(new RegExp(`\\s*${mark}\\uFE0F?\\s*\\d{4}-\\d{2}-\\d{2}`, "g"), "").replace(/\s+$/, "");
+  return day ? `${body} ${mark} ${day}` : body;
 }
 
 // "- [ ] Task ⏳ 2026-09-22" → "- [x] Task ⏳ 2026-09-22 ✅ <today>" and back.
@@ -381,6 +413,8 @@ class FocusRenderer extends MarkdownRenderChild {
   constructor(plugin, el, sourcePath, leaf = null) {
     super(el);
     Object.assign(this, { plugin, sourcePath, leaf });
+    this.selected = new Set();  // tasks of the selected rows
+    this.anchor = null;         // the last clicked task: Shift-click selects from it
   }
 
   // Opens a note: Cmd/Ctrl-click in a new tab; from the pane never over the list itself.
@@ -392,9 +426,11 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // Every draggable row maps to what it shows: {type: "area" | "area-title" | "project" | "task", ...}.
+  // The rows of a build in progress go to `fresh` and replace `items` with the DOM, so a click or a
+  // drag meanwhile still finds the rows on screen.
   track(el, item) {
     el.setAttr("data-ft", item.type);
-    this.items.set(el, item);
+    this.fresh.set(el, item);
   }
 
   get scroller() { return this.containerEl.closest(".markdown-preview-view, .view-content"); }
@@ -404,6 +440,11 @@ class FocusRenderer extends MarkdownRenderChild {
     this.registerEvent(this.plugin.app.metadataCache.on("changed", later));
     this.registerEvent(this.plugin.app.vault.on("delete", later));
     this.registerEvent(this.plugin.app.vault.on("rename", later));
+    // a plain click anywhere else or Esc drops the selection (not the Esc that closes a menu)
+    this.registerDomEvent(this.containerEl, "click", (e) => { if (!picking(e)) this.clearSelection(); });
+    this.registerDomEvent(window, "keydown", (e) => {
+      if (e.key === "Escape" && this.selected.size && !this.editing && !this.menuOpen && !document.querySelector(".modal-container")) this.clearSelection();
+    }, true);
     this.plugin.views.add(this);
     this.render();
   }
@@ -425,7 +466,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const areas = await p.collect(false);
     const rest = everything ? (await p.collect(true)).filter((a) => !a.focus) : [];
     const shownAreas = [...areas, ...rest];
-    this.items = new WeakMap();
+    this.fresh = new WeakMap();
     // [key, all] of every foldable header on screen (also inside folded areas)
     this.folds = [
       ...areas.flatMap((a) => [["area:" + a.name, false], ...a.projects.map((pr) => ["project:" + pr.file.path, false]),
@@ -468,7 +509,55 @@ class FocusRenderer extends MarkdownRenderChild {
     if (old) this.removeChild(old);
     this.containerEl.addClass("focus-tasks-view");
     this.containerEl.replaceChildren(...el.childNodes);
+    this.items = this.fresh;
+    this.paint();
     this.hold();
+  }
+
+  // The task rows on screen, top down: [row, task].
+  rows() {
+    return [...this.containerEl.querySelectorAll("li.ft-task[data-ft]")].map((el) => [el, this.items?.get(el)?.task]).filter(([, x]) => x);
+  }
+
+  // The selected tasks in screen order.
+  chosen() { return this.rows().map(([, x]) => x).filter((x) => this.selected.has(x)); }
+
+  // Shift-click: every row from the anchor to this one (with Cmd/Ctrl too: added to the selection);
+  // Cmd/Ctrl-click (or Shift with nothing clicked before): this row in or out.
+  select(task, e) {
+    if (this.editing) document.activeElement?.blur();  // an open editor saves and closes
+    const tasks = this.rows().map(([, x]) => x);
+    const to = tasks.indexOf(task);
+    if (to < 0) return;
+    const a = this.anchor;
+    const from = a ? tasks.findIndex((x) => x === a || keyOf(x) === keyOf(a)) : -1;
+    if (e.shiftKey && from >= 0) {
+      if (!(Platform.isMacOS ? e.metaKey : e.ctrlKey)) this.selected.clear();
+      for (const x of tasks.slice(Math.min(from, to), Math.max(from, to) + 1)) this.selected.add(x);
+    } else {
+      if (this.selected.has(task)) this.selected.delete(task);
+      else this.selected.add(task);
+      this.anchor = task;
+    }
+    this.paint();
+  }
+
+  // Marks the selected rows. After a re-render the selection follows its tasks to their new rows (by
+  // note and line); those no longer on screen drop out.
+  paint() {
+    const keys = new Set([...this.selected].map(keyOf));
+    this.selected = new Set();
+    for (const [el, task] of this.rows()) {
+      const on = keys.has(keyOf(task));
+      if (on) this.selected.add(task);
+      el.toggleClass("is-selected", on);
+    }
+  }
+
+  clearSelection() {
+    if (!this.selected.size) return;
+    this.selected.clear();
+    this.paint();
   }
 
   // Obsidian may move the scroll a moment after a re-render; a pinned spot is held for a second,
@@ -608,7 +697,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (!target) return null;
     if (item.type === "area" && target.area.name === item.area.name) return null;
     if (item.type === "project" && (target.area.name !== item.area.name || target.project.file === item.project.file)) return null;
-    if (item.type === "task" && target.type === "task" && target.task.file === item.task.file && target.task.lineNo === item.task.lineNo) return null;
+    if (item.type === "task" && target.type === "task" && (item.tasks || [item.task]).some((x) => x.file === target.task.file && x.lineNo === target.task.lineNo)) return null;
     const r = hit.getBoundingClientRect();
     const into = item.type === "task" && target.type !== "task";
     return { el: hit, target, into, after: !into && y > r.top + r.height / 2 };
@@ -619,6 +708,10 @@ class FocusRenderer extends MarkdownRenderChild {
     e.preventDefault();
     e.stopPropagation();
     const row = item.type === "area" ? grip.closest(".ft-area") : grip.closest(".ft-project, .ft-task");
+    // the grip of a selected row carries the whole selection
+    const group = item.type === "task" && this.selected.has(item.task) && this.selected.size > 1;
+    if (group) item = { ...item, tasks: this.chosen() };
+    const moving = group ? this.rows().filter(([, x]) => this.selected.has(x)).map(([el]) => el) : [row];
     const scroller = this.scroller;
     const line = document.body.createDiv({ cls: "ft-drop-line" });
     const x0 = e.clientX, y0 = e.clientY;
@@ -644,7 +737,7 @@ class FocusRenderer extends MarkdownRenderChild {
       lastX = ev.clientX;
       lastY = ev.clientY;
       if (!dragging && Math.hypot(lastX - x0, lastY - y0) < 5) return;
-      if (!dragging) { dragging = true; row.addClass("ft-dragging"); document.body.addClass("ft-drag-active"); }
+      if (!dragging) { dragging = true; moving.forEach((r) => r.addClass("ft-dragging")); document.body.addClass("ft-drag-active"); }
       drop = this.target(item, lastX, lastY);
       show();
     };
@@ -661,10 +754,13 @@ class FocusRenderer extends MarkdownRenderChild {
       this.held = false;
       marked?.removeClass("ft-drop-into");
       line.remove();
-      row.removeClass("ft-dragging");
+      moving.forEach((r) => r.removeClass("ft-dragging"));
       document.body.removeClass("ft-drag-active");
       if (commit && !dragging) this.openMenu(item, ev, row);
-      else if (commit && drop) await this.plugin.drop(item, drop, this.shown);
+      else if (commit && drop) {
+        if (group) this.clearSelection();
+        await this.plugin.drop(item, drop, this.shown);
+      }
       if (this.again) { this.again = false; this.render(); }
     };
     this.held = true;  // no re-render under the finger
@@ -674,12 +770,20 @@ class FocusRenderer extends MarkdownRenderChild {
     window.addEventListener("pointercancel", cancel, true);
   }
 
+  // Obsidian closes a menu on Esc before the view hears the key, so the view keeps the flag a moment
+  // longer: that Esc must not drop the selection too.
+  popup(menu, e) {
+    this.menuOpen = true;
+    menu.onHide(() => setTimeout(() => { this.menuOpen = false; }, 0));
+    menu.showAtMouseEvent(e);
+  }
+
   openMenu(item, e, row) {
     if (item.type === "task") return this.taskMenu(item.task, e);
     const menu = new Menu();
     if (item.type === "area") this.areaMenu(menu, item.area);
     else this.projectMenu(menu, item.area, item.project, row);
-    menu.showAtMouseEvent(e);
+    this.popup(menu, e);
   }
 
   caret(parent, open, toggle) {
@@ -715,13 +819,20 @@ class FocusRenderer extends MarkdownRenderChild {
     el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
   }
 
+  // The picker for the date of the row, or of every selected row when this is one of them.
   editDate(task, el) {
     if (this.editing) return;
+    if (!this.selected.has(task)) this.clearSelection();
+    const tasks = this.selected.size ? this.chosen() : [task];
+    const days = [...new Set(tasks.map((x) => x.date || null))];
+    this.anchor = task;
     this.editing = true;
     el.addClass("is-active");
-    new DatePicker(el, task.date, async (day) => {
+    new DatePicker(el, days.length === 1 ? days[0] : null, async (day) => {
       this.editing = false;
-      if (day !== (task.date || null)) await this.plugin.setDate(task, day);
+      this.clearSelection();
+      const change = tasks.filter((x) => (x.date || null) !== day);
+      if (change.length) await this.plugin.setDates(change, day);
       this.render();
     }, () => {
       this.editing = false;
@@ -734,6 +845,8 @@ class FocusRenderer extends MarkdownRenderChild {
   // character (proportional when links render shorter than their source).
   editInline(task, el, e) {
     if (el.isContentEditable || this.editing) return;
+    this.clearSelection();
+    this.anchor = task;
     let offset = null;
     const hit = e && document.caretRangeFromPoint?.(e.clientX, e.clientY);
     if (hit && el.contains(hit.startContainer)) {
@@ -890,7 +1003,7 @@ class FocusRenderer extends MarkdownRenderChild {
       e.stopPropagation();
       const menu = new Menu();
       build(menu);
-      menu.showAtMouseEvent(e);
+      this.popup(menu, e);
     };
     const btn = parent.createSpan({ cls: "ft-more", attr: { "aria-label": t("actions") } });
     setIcon(btn, "more-horizontal");
@@ -943,6 +1056,7 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   taskMenu(task, e) {
+    if (this.selected.has(task) && this.selected.size > 1) return this.selectionMenu(task, e);
     const p = this.plugin;
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     const menu = new Menu();
@@ -956,7 +1070,27 @@ class FocusRenderer extends MarkdownRenderChild {
       i.setTitle(t("delete")).setIcon("trash-2").onClick(() => p.remove(task));
       if (i.setWarning) i.setWarning(true);
     });
-    menu.showAtMouseEvent(e);
+    this.popup(menu, e);
+  }
+
+  // The menu of a selected row when there are several: one date for all of them.
+  selectionMenu(task, e) {
+    const tasks = this.chosen();
+    const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
+    const set = (d) => { this.clearSelection(); return this.plugin.setDates(tasks, d); };
+    const menu = new Menu();
+    menu.addItem((i) => i.setTitle(t("selected", tasks.length)).setIcon("list-checks").setDisabled(true));
+    menu.addSeparator();
+    menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => set(day(0))));
+    menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => set(day(1))));
+    menu.addItem((i) => i.setTitle(t("pickDate")).setIcon("calendar-days").onClick(() => {
+      const label = this.rows().find(([, x]) => x === task)?.[0].querySelector(".ft-date");
+      if (label) this.editDate(task, label);
+    }));
+    menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => set(null)));
+    menu.addSeparator();
+    menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
+    this.popup(menu, e);
   }
 
   // The name of an area or a project opens its linked note, or the task file when there is none.
@@ -984,16 +1118,26 @@ class FocusRenderer extends MarkdownRenderChild {
       if (para) para.replaceWith(...para.childNodes);
       const date = li.createSpan();
       this.dateLabel(date, task);
-      date.onclick = (e) => { e.stopPropagation(); this.editDate(task, date); };
+      date.onclick = (e) => {
+        if (picking(e)) return;
+        e.stopPropagation();
+        this.editDate(task, date);
+      };
       text.onclick = (e) => {
-        if (e.target.closest("a")) return;
+        if (e.target.closest("a") || picking(e)) return;
         e.stopPropagation();
         this.editInline(task, text, e);
       };
       li.onclick = (e) => {
-        if (e.target.closest("a, input, .ft-grip, .ft-date")) return;
+        if (e.target.closest("a, input, .ft-grip, .ft-date") || picking(e)) return;
         this.editInline(task, text, null);
       };
+      // on mousedown, so that Shift doesn't select text and an open editor isn't left mid-way
+      li.addEventListener("mousedown", (e) => {
+        if (e.button !== 0 || !picking(e) || e.target.closest("a, input, .ft-grip")) return;
+        e.preventDefault();
+        this.select(task, e);
+      });
       li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(task, e); };
       this.track(li, { type: "task", task });
       this.grip(li, { type: "task", task });
@@ -1254,7 +1398,7 @@ module.exports = class FocusTasks extends Plugin {
     let ok = false;
     await this.app.vault.process(task.file, (data) => {
       const lines = data.split("\n");
-      const i = lines[task.lineNo] === task.line ? task.lineNo : lines.indexOf(task.line);
+      const i = lineOf(lines, task);
       if (i < 0) return data;
       ok = true;
       lines.splice(i, 1, ...text.replace(/\n$/, "").split("\n"));
@@ -1268,10 +1412,25 @@ module.exports = class FocusTasks extends Plugin {
   // Changes the date the row shows (its emoji kept: ⏳ stays ⏳, 📅 stays 📅); a task without one gets
   // ⏳; null drops it.
   async setDate(task, day) {
-    const mark = task.mark || "⏳";
-    const re = new RegExp(`\\s*${mark}\\uFE0F?\\s*\\d{4}-\\d{2}-\\d{2}`, "g");
-    const body = task.line.replace(re, "").replace(/\s+$/, "");
-    await this.replace(task, day ? `${body} ${mark} ${day}` : body);
+    await this.replace(task, withDate(task.line, task.mark, day));
+  }
+
+  // One date for several tasks, one write per note.
+  async setDates(tasks, day) {
+    let missed = false;
+    for (const file of new Set(tasks.map((x) => x.file))) {
+      await this.app.vault.process(file, (data) => {
+        const lines = data.split("\n");
+        for (const task of tasks.filter((x) => x.file === file)) {
+          const i = lineOf(lines, task);
+          if (i < 0) { missed = true; continue; }
+          lines[i] = task.line = withDate(lines[i], task.mark, day);
+          task.lineNo = i;
+        }
+        return lines.join("\n");
+      });
+    }
+    if (missed) new Notice(t("changed"));
   }
 
   // `drop` comes from FocusRenderer.target; `shown` is the order on screen.
@@ -1293,16 +1452,16 @@ module.exports = class FocusTasks extends Plugin {
       const mine = this.notes().filter((n) => n.project && n.area === name).map((n) => n.file.path);
       const all = merge(this.data.order.projects[name] || [], shown.projects[name] || [], mine);
       this.data.order.projects[name] = place(all, item.project.file.path, drop.target.project.file.path, drop.after);
-    } else return this.moveTask(item.task, drop);
+    } else return this.moveTasks(item.tasks || [item.task], drop);
     await this.saveAll();
     this.refresh();
   }
 
-  // Moves a task with its nested lines. Into another note it is written there first and only then
-  // cut from its old place, so a failure leaves a copy rather than a loss.
-  async moveTask(task, drop) {
+  // Moves tasks with their nested lines to one place, in the given order. Into another note they are
+  // written there first and only then cut from their old places, so a failure leaves copies rather
+  // than a loss.
+  async moveTasks(tasks, drop) {
     const eol = (before, after) => (before.endsWith("\n") && !after.endsWith("\n") ? after + "\n" : after);
-    const find = (lines) => (lines[task.lineNo] === task.line ? task.lineNo : lines.indexOf(task.line));
     let dest, section = null;
     if (drop.into) {
       const tg = drop.target;
@@ -1310,54 +1469,45 @@ module.exports = class FocusTasks extends Plugin {
       if (!dest) return;
       section = tg.type === "project" ? this.settings.stepsHeading : null;
     } else dest = drop.target.task.file;
-    const insert = (lines, block) => {
-      if (drop.into) {
-        const text = lines.join("\n");
-        return insertBlock(text, reindent(block, 0), section || this.areaSection(text)).replace(/\n$/, "").split("\n");
-      }
-      const tg = drop.target.task;
-      let j = lines[tg.lineNo] === tg.line ? tg.lineNo : lines.indexOf(tg.line);
-      if (j < 0) return null;
-      const indent = indentOf(lines[j]);
-      if (drop.after) j = blockAt(lines, j);
-      lines.splice(j, 0, ...reindent(block, indent));
-      return lines;
-    };
-    let ok = false;
-    if (dest === task.file) {
-      await this.app.vault.process(dest, (data) => {
-        const lines = data.split("\n");
-        const i = find(lines);
-        if (i < 0) return data;
-        const end = blockAt(lines, i);
-        const tg = drop.into ? null : drop.target.task;
-        if (tg && tg.lineNo >= i && tg.lineNo < end && lines[tg.lineNo] === tg.line) return data;  // onto its own step
-        const block = lines.splice(i, end - i);
-        const out = insert(lines, block);
-        if (!out) return data;
-        ok = true;
-        return eol(data, out.join("\n"));
-      });
-    } else {
-      const src = (await this.app.vault.read(task.file)).split("\n");
-      const i = find(src);
-      if (i >= 0) {
-        const block = src.slice(i, blockAt(src, i));
-        await this.app.vault.process(dest, (data) => {
-          const out = insert(data.split("\n"), block);
-          if (!out) return data;
-          ok = true;
-          return eol(data, out.join("\n"));
-        });
-        if (ok) await this.app.vault.process(task.file, (data) => {
-          const lines = data.split("\n");
-          const k = find(lines);
-          if (k >= 0) lines.splice(k, blockAt(lines, k) - k);
-          return lines.join("\n");
-        });
-      }
+    const target = drop.into ? null : drop.target.task;
+    const blocks = new Map();  // task → its lines
+    const away = new Map();    // another note → its tasks
+    for (const task of tasks) if (task.file !== dest) away.set(task.file, [...(away.get(task.file) || []), task]);
+    for (const [file, list] of away) {
+      const lines = (await this.app.vault.read(file)).split("\n");
+      const spans = spansOf(lines, list);
+      if (!spans) { new Notice(t("changed")); return; }
+      for (const s of spans) blocks.set(s.task, lines.slice(s.i, s.end));
     }
-    if (!ok) new Notice(t("changed"));
+    let ok = false;
+    await this.app.vault.process(dest, (data) => {
+      const lines = data.split("\n");
+      let j = target ? lineOf(lines, target) : -1;
+      const spans = spansOf(lines, tasks.filter((x) => x.file === dest));
+      if (!spans || (target && j < 0)) return data;
+      if (target && spans.some((s) => j >= s.i && j < s.end)) return data;  // onto a moved task's own step
+      for (const s of [...spans].reverse()) {
+        blocks.set(s.task, lines.splice(s.i, s.end - s.i));
+        if (j > s.i) j -= s.end - s.i;
+      }
+      const indent = target ? indentOf(lines[j]) : 0;
+      const moved = tasks.filter((x) => blocks.has(x)).flatMap((x) => reindent(blocks.get(x), indent));
+      ok = true;
+      if (target) {
+        lines.splice(drop.after ? blockAt(lines, j) : j, 0, ...moved);
+        return eol(data, lines.join("\n"));
+      }
+      const text = lines.join("\n");
+      return eol(data, insertBlock(text, moved, section || this.areaSection(text)).replace(/\n$/, ""));
+    });
+    if (!ok) { new Notice(t("changed")); return; }
+    for (const [file, list] of away) {
+      await this.app.vault.process(file, (data) => {
+        const lines = data.split("\n");
+        for (const s of spansOf(lines, list, true).reverse()) lines.splice(s.i, s.end - s.i);
+        return lines.join("\n");
+      });
+    }
   }
 
   // Deletes the task line and the lines nested under it; the notice can undo.
@@ -1365,7 +1515,7 @@ module.exports = class FocusTasks extends Plugin {
     let removed = null, at = -1;
     await this.app.vault.process(task.file, (data) => {
       const lines = data.split("\n");
-      const i = lines[task.lineNo] === task.line ? task.lineNo : lines.indexOf(task.line);
+      const i = lineOf(lines, task);
       if (i < 0) return data;
       const end = blockAt(lines, i);
       removed = lines.splice(i, end - i);
@@ -1403,7 +1553,7 @@ module.exports = class FocusTasks extends Plugin {
     let made = null;
     await this.app.vault.process(anchor.file, (data) => {
       const lines = data.split("\n");
-      const i = lines[anchor.lineNo] === anchor.line ? anchor.lineNo : lines.indexOf(anchor.line);
+      const i = lineOf(lines, anchor);
       if (i < 0) return data;
       const at = blockAt(lines, i);
       const line = `${lines[i].match(/^\s*/)[0]}- [ ] ${text}` + (day ? ` ⏳ ${day}` : "");
