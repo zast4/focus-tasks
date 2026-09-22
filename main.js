@@ -1,8 +1,14 @@
 /*
  * Focus Tasks — a focus list over plain Markdown notes.
  *
- * Tasks are ordinary checkbox lines in the plugin's task files, all in the folder from the settings.
- * A file with frontmatter `area: <name>` is an area (it holds loose tasks); with
+ * A task is a note of its own in the tasks folder: `type: задача`, everything else in the
+ * frontmatter — `uid` (its identity, never rewritten), `status`, `area`, `projects`, `scheduled`,
+ * `due`, `completedDate`, `priority`, `title` (only when the file name had to be cut); the body is
+ * the description. The field names are TaskNotes' own, so that plugin reads and writes the same
+ * notes; `uid` and `area` are ours and it keeps them untouched.
+ *
+ * Areas and projects are notes too, in the folder from the settings: a file with frontmatter
+ * `area: <name>` is an area (it holds loose tasks); with
  * `type: <project word>` it is a project of that area (its tasks are the steps). A task file can be
  * linked to any note of the vault (`note: "[[...]]"`): a click on the area or project then opens
  * that note, and the task file stays one menu item away. Linked notes are never changed.
@@ -16,13 +22,12 @@
  *
  * A click on a task's text edits it in place (Enter saves and opens the next row, Esc cancels;
  * ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date). The date on the right opens a date picker.
- * The checkbox completes a task (through the Tasks plugin when it is installed: recurrence, ✅); for
- * the rest of the day it stays at the bottom of its area under «Completed», where its box brings it back.
+ * The checkbox completes a task (`status: done` + `completedDate`); for the rest of the day it stays
+ * at the bottom of its area under «Completed», where its box brings it back.
  * The grip on the left drags areas, projects and tasks; a plain click on it opens the row's menu.
  * Shift-click selects every task from the last clicked one, Cmd/Ctrl-click adds or drops one; the
  * grip of a selected row then drags them all, and its date, its menu or ⌘1–4 (as in the editor)
  * set the date of all of them.
- * Dates use the Tasks emoji format (⏳ scheduled, 📅 due, 🛫 start, ✅ done), so both plugins agree.
  */
 const {
   Plugin, PluginSettingTab, Setting, ItemView, Modal, SuggestModal, FuzzySuggestModal, Notice, Menu,
@@ -1376,11 +1381,14 @@ module.exports = class FocusTasks extends Plugin {
     if (folder && folder !== "/" && !file.path.startsWith(folder + "/")) return null;
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm || !TASK_WORDS.includes(String(fm.type ?? "").trim().toLowerCase())) return null;
-    const link = (v) => (typeof v === "string" ? (v.match(/\[\[([^\]|#]+)/)?.[1] || v).trim() : null);
+    const link = (v) => {
+      const one = Array.isArray(v) ? v[0] : v;  // `projects` is a list; we keep a task in one project
+      return typeof one === "string" ? (one.match(/\[\[([^\]|#]+)/)?.[1] || one).trim() : null;
+    };
     return { file, uid: fm.uid ? String(fm.uid) : file.path, text: String(fm.title ?? file.basename),
       status: String(fm.status ?? STATUS_OPEN), date: fm.scheduled || null, due: fm.due || null,
-      doneDate: fm.done || null, priority: fm.priority || null,
-      area: fm.area ? String(fm.area) : null, project: link(fm.project), source: link(fm.source) };
+      doneDate: fm.completedDate || null, priority: fm.priority || null,
+      area: fm.area ? String(fm.area) : null, project: link(fm.projects), source: link(fm.source) };
   }
 
   tasks() {
@@ -1491,7 +1499,7 @@ module.exports = class FocusTasks extends Plugin {
     this.toggling.add(task.uid);
     try {
       const done = task.status !== STATUS_DONE;
-      const ok = await this.setFields(task, { status: done ? STATUS_DONE : STATUS_OPEN, done: done ? today() : null });
+      const ok = await this.setFields(task, { status: done ? STATUS_DONE : STATUS_OPEN, completedDate: done ? today() : null });
       if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate: done ? today() : null });
       return ok;
     } finally {
@@ -1565,7 +1573,7 @@ module.exports = class FocusTasks extends Plugin {
     const area = drop.into ? tg.area.name : tg.task.area;
     const project = drop.into ? (tg.type === "project" ? tg.project.file.basename : null) : tg.task.project;
     for (const task of tasks) {
-      const ok = await this.setFields(task, { area, project: project ? `[[${project}]]` : null });
+      const ok = await this.setFields(task, { area, projects: project ? [`[[${project}]]`] : null });
       if (ok) Object.assign(task, { area, project });
     }
     await this.reorder(tasks, drop, shown);
@@ -1603,7 +1611,7 @@ module.exports = class FocusTasks extends Plugin {
     const name = await this.freeName(fileName(text).slice(0, 60) || t("newTask"));
     const front = ["---", `uid: ${newUid()}`, "type: задача", `status: ${STATUS_OPEN}`];
     if (target.area) front.push(`area: ${JSON.stringify(target.area)}`);
-    if (target.project) front.push(`project: "[[${target.project}]]"`);
+    if (target.project) front.push("projects:", `  - "[[${target.project}]]"`);
     if (day) front.push(`scheduled: ${day}`);
     if (name !== text) front.push(`title: ${JSON.stringify(text)}`);
     front.push("---", "");
@@ -1774,7 +1782,7 @@ module.exports = class FocusTasks extends Plugin {
     const name = project.file.basename;
     const mine = this.tasks().filter((x) => x.project === name);
     new ConfirmModal(this.app, t("deleteProjectQ", name), t("deleteProjectText", mine.length), t("delete"), async () => {
-      for (const task of mine) await this.setFields(task, { project: null });
+      for (const task of mine) await this.setFields(task, { projects: null });
       await this.dropLinks(project.file, area.name);
       await this.trash(project.file);
       await this.forget("project:" + project.file.path);

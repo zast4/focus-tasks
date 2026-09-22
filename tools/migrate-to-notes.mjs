@@ -21,8 +21,9 @@ const OUT = flag("out", "Задачи");
 const WISHES = has("wishes");
 const APPLY = has("apply");
 
-const DATES = { "⏳": "scheduled", "📅": "due", "🛫": "start", "✅": "done", "➕": "created", "❌": "cancelled" };
-const PRIORITY = { "🔺": "highest", "⏫": "high", "🔼": "medium", "🔽": "low", "⏬": "lowest" };
+// Field names and values are TaskNotes' own, so that plugin reads the same notes.
+const DATES = { "⏳": "scheduled", "📅": "due", "🛫": "start", "✅": "completedDate", "➕": "dateCreated", "❌": "cancelled" };
+const PRIORITY = { "🔺": "high", "⏫": "high", "🔼": "normal", "🔽": "low", "⏬": "low" };
 const DATE_RE = /\s*(⏳|📅|🛫|✅|➕|❌)️?\s*(\d{4}-\d{2}-\d{2})/g;
 const STATUS = { " ": "open", x: "done", X: "done", "-": "cancelled" };
 
@@ -93,11 +94,12 @@ function takeTasks(rel, lines, meta) {
     const front = { uid: uid(), type: "задача", status: meta.someday ? "someday" : task.status };
     if (meta.area) front.area = meta.area;
     if (fileName(task.title) !== task.title) front.title = task.title;  // the name was cut, keep the whole text
-    if (meta.project) front.project = `[[${meta.project}]]`;
+    if (meta.project) front.projects = [`[[${meta.project}]]`];
     if (meta.source) front.source = `[[${meta.source}]]`;
     if (task.priority) front.priority = task.priority;
     for (const [key, day] of Object.entries(task.dates)) front[key] = day;
-    const text = ["---", ...Object.entries(front).map(([k, v]) => `${k}: ${yaml(String(v))}`), "---", "",
+    const line = ([k, v]) => (Array.isArray(v) ? [`${k}:`, ...v.map((x) => `  - ${yaml(String(x))}`)] : [`${k}: ${yaml(String(v))}`]);
+    const text = ["---", ...Object.entries(front).flatMap(line), "---", "",
       ...(body.length ? [body.map((l) => l.replace(/^\s{1,4}/, "")).join("\n"), ""] : [])].join("\n");
     made.push({ path: notePath(task.title), text, title: task.title, from: rel });
   }

@@ -222,9 +222,15 @@ function fm(name) {
   if (text === null || !text.startsWith("---")) return null;
   const end = text.indexOf("\n---", 3);
   const out = { body: end < 0 ? "" : text.slice(end + 4).trim() };
+  let list = null;
   for (const line of text.slice(4, end < 0 ? undefined : end).split("\n")) {
+    const item = line.match(/^\s+-\s+(.*)$/);
+    if (item && list) { out[list].push(item[1].replace(/^["']|["']$/g, "").trim()); continue; }
     const m = line.match(/^([a-zA-Zа-яА-Я_-]+):\s*(.*)$/);
-    if (m) out[m[1]] = m[2].replace(/^["']|["']$/g, "").trim();
+    list = null;
+    if (!m) continue;
+    if (m[2].trim()) out[m[1]] = m[2].replace(/^["']|["']$/g, "").trim();
+    else { list = m[1]; out[list] = []; }
   }
   return out;
 }
@@ -263,7 +269,7 @@ step("a click on «Empty» types a task: one note per task", async () => {
   await editing();
   await page.type("Run 5k");
   await page.key("Enter");
-  await taskIs("Run 5k", { type: "задача", status: "open", area: "💪Sport", scheduled: null, project: null });
+  await taskIs("Run 5k", { type: "задача", status: "open", area: "💪Sport", scheduled: null, projects: null });
   await editing();
   await page.type("Stretch");
   await page.key("Enter");
@@ -290,11 +296,11 @@ step("+ on a project makes steps that point at it", async () => {
   await editing();
   await page.type("Buy shoes");
   await page.key("Enter");
-  await taskIs("Buy shoes", { area: "💪Sport", project: "[[Marathon]]", scheduled: null });
+  await taskIs("Buy shoes", { area: "💪Sport", projects: "[[Marathon]]", scheduled: null });
   await editing();
   await page.type("Plan route");
   await page.key("Enter");
-  await taskIs("Plan route", { project: "[[Marathon]]" });
+  await taskIs("Plan route", { projects: "[[Marathon]]" });
   await editing();
   await page.key("Escape");
   await idle();
@@ -309,12 +315,12 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
   await page.key("Meta+1");
   await taskIs("Buy shoes", { scheduled: TODAY });
   await page.key("Enter");
-  await taskIs("Buy shoes fast", { scheduled: TODAY, project: "[[Marathon]]" });
+  await taskIs("Buy shoes fast", { scheduled: TODAY, projects: "[[Marathon]]" });
   await noTask("Buy shoes");
   await editing();
   await page.type("Lace them");
   await page.key("Enter");
-  await taskIs("Lace them", { scheduled: TODAY, project: "[[Marathon]]" });
+  await taskIs("Lace them", { scheduled: TODAY, projects: "[[Marathon]]" });
   await editing();
   await page.key("Escape");
   await idle();
@@ -368,7 +374,7 @@ step("the date on the right: Today button, a day of the month, Clear date", asyn
 step("the box completes the task: status and the day; «Completed» of its project brings it back", async () => {
   const done = `(() => { const r = __ft.task('Lace them'); return !!r && !!r.closest('.ft-done-block') && r.querySelector('input').checked; })()`;
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
-  await taskIs("Lace them", { status: "done", done: TODAY });
+  await taskIs("Lace them", { status: "done", completedDate: TODAY });
   await until(() => page.eval(`return ${done} && !!__ft.task('Lace them').closest('.ft-project-body')`), "Lace them under the project's Completed");
   if (await page.eval(`return !!document.querySelector('.ft-done-project')`)) throw new Error("the project label is back");
   await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
@@ -376,7 +382,7 @@ step("the box completes the task: status and the day; «Completed» of its proje
   await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
   await until(() => page.eval(`return ${done}`), "Completed open again");
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
-  await taskIs("Lace them", { status: "open", done: null });
+  await taskIs("Lace them", { status: "open", completedDate: null });
   await until(() => page.eval(`const r = __ft.task('Lace them'); return !!r && !r.closest('.ft-done-block')`), "Lace them open again");
 });
 
@@ -407,7 +413,7 @@ step("the note renamed by another device: the box still completes the task", asy
   await until(() => fm("Lace them tight") !== null, "the note renamed");
   await until(() => page.eval(`return !!__ft.task('Lace them tight')`), "the row shows the new name");
   await click(`__ft.at(__ft.task('Lace them tight').querySelector('input'))`);
-  await taskIs("Lace them tight", { status: "done", done: TODAY });
+  await taskIs("Lace them tight", { status: "done", completedDate: TODAY });
   await until(() => page.eval(`return !!__ft.task('Lace them tight')?.closest('.ft-done-block')`), "the row moved to Completed");
   await click(`__ft.at(__ft.task('Lace them tight').querySelector('input'))`);
   await taskIs("Lace them tight", { status: "open" });
@@ -417,7 +423,7 @@ step("drag a task onto an area header moves it out of its project", async () => 
   const from = await pos(`__ft.grip(__ft.task('Plan route'))`, "grip of Plan route");
   const to = await pos(`__ft.at(__ft.area('Sport'))`, "Sport header");
   await page.drag(from, to);
-  await taskIs("Plan route", { area: "💪Sport", project: null });
+  await taskIs("Plan route", { area: "💪Sport", projects: null });
 });
 
 step("drag a task below another keeps the order the plugin remembers", async () => {
@@ -478,7 +484,7 @@ step("rename a project in place; its tasks follow it", async () => {
   await page.key("Enter");
   await until(() => exists("Tasks/Marathon 2027.md") && !exists("Tasks/Marathon.md"), "renamed file");
   await fileHas("Tasks/Sport.md", "- 📁 [[Marathon 2027]]\n");
-  await taskIs("Buy shoes fast", { project: "[[Marathon 2027]]" }, "the task points at the renamed project");
+  await taskIs("Buy shoes fast", { projects: "[[Marathon 2027]]" }, "the task points at the renamed project");
   await editing();
   await page.key("Escape");
   await idle();
@@ -531,7 +537,7 @@ step("New task command: text, then the place", async () => {
   await page.type("Marathon 2027");
   await sleep(200);
   await page.key("Enter");
-  await taskIs("Call coach", { project: "[[Marathon 2027]]", scheduled: TODAY });
+  await taskIs("Call coach", { projects: "[[Marathon 2027]]", scheduled: TODAY });
 });
 
 step("click, then Shift-click selects the rows between; Cmd-click drops one; the menu dates them all", async () => {
@@ -566,7 +572,7 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
   const from = await pos(`__ft.grip(__ft.task(${J(names[0])}))`, "grip of the first selected row");
   const to = await pos(`__ft.at(__ft.project('Marathon 2027'))`, "Marathon 2027 header");
   await page.drag(from, to);
-  for (const name of names) await taskIs(name, { project: "[[Marathon 2027]]" });
+  for (const name of names) await taskIs(name, { projects: "[[Marathon 2027]]" });
   await selectedAre([]);
   await settle();
   await pick(names[0], names[names.length - 1]);
@@ -621,7 +627,7 @@ step("a ```focus-tasks``` block in a note renders the same list, and its boxes w
   const row = (name) => `__ft.all('li.ft-task', ${block}).find((e) => e.querySelector('.ft-text')?.textContent.trim() === ${J(name)})`;
   await until(() => page.eval(`return !!(${row("Call coach")})`), "Call coach in the block");
   await page.click(await page.eval(`return __ft.at((${row("Call coach")}).querySelector('input'))`));
-  await taskIs("Call coach", { status: "done", done: TODAY });
+  await taskIs("Call coach", { status: "done", completedDate: TODAY });
   await until(() => page.eval(`return !!(${row("Call coach")})?.closest('.ft-done-block')`), "the row moved to Completed in the block");
   await page.click(await page.eval(`return __ft.at((${row("Call coach")}).querySelector('input'))`));
   await taskIs("Call coach", { status: "open" });
@@ -635,7 +641,7 @@ step("delete a project: its note goes to the trash, its tasks stay in the area",
   await until(() => page.eval(`return !!document.querySelector('.modal .mod-warning')`), "confirm");
   await click(`__ft.at(document.querySelector('.modal .mod-warning'))`);
   await until(() => !exists("Tasks/Marathon 2027.md") && exists(".trash/Marathon 2027.md"), "in .trash");
-  await taskIs("Buy shoes fast", { area: "💪Sport", project: null }, "its tasks stayed in the area");
+  await taskIs("Buy shoes fast", { area: "💪Sport", projects: null }, "its tasks stayed in the area");
 });
 
 step("delete an area: its projects and tasks go with it", async () => {
