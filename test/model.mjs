@@ -294,6 +294,17 @@ test("deleting an area takes its tasks, and undo brings everything back", async 
 
 // --- a task becomes a project ---------------------------------------------------------------------
 
+test("a task that holds a description is marked as one", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Plain", { area: "Work", scheduled: TODAY });
+    taskNote(a, "With a plan", { area: "Work", scheduled: TODAY }, "сначала одно, потом другое");
+  });
+  const tasks = Object.fromEntries(plugin.tasks().map((x) => [x.text, x]));
+  eq(tasks["Plain"].described, false, "a service note is not marked");
+  eq(tasks["With a plan"].described, true, "one with a plan is");
+});
+
 test("a task with a description becomes a project and stays in the focus as its first step", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Sport");
@@ -935,6 +946,79 @@ test("the guard on a task that had no uid lets the next tick through", async () 
   const second = await plugin.toggle(plugin.tasks()[0]);
   eq(second, true, "the second tick is not blocked by a stale guard");
   eq(frontmatter(app, "Tasks/Foreign.md").status, "open", "and it went back to open");
+});
+
+// --- the second review ------------------------------------------------------------------------------
+
+test("a row read before the note had an identity does not write into a replacement", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    writeNote(a, "Tasks/Foo.md", { type: "задача", status: "open", area: "Work", scheduled: TODAY });
+  });
+  const stale = plugin.tasks()[0];
+  app.vault.files.set("Tasks/Foo.md", "---\nuid: ft-other\ntype: задача\nstatus: open\narea: Work\n---\n");
+  eq(await plugin.setDate(stale, DAY(2)), false, "the write is refused");
+  eq(frontmatter(app, "Tasks/Foo.md").scheduled, undefined, "the replacement keeps its own state");
+});
+
+test("a refused write does not rename the note either", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Foo", { area: "Work", scheduled: TODAY });
+  });
+  const stale = plugin.tasks()[0];
+  app.vault.files.set("Tasks/Foo.md", "---\nuid: ft-other\ntype: задача\nstatus: open\narea: Work\n---\n");
+  await plugin.rename(stale, "Bar");
+  ok(app.vault.files.has("Tasks/Foo.md"), "the other task kept its name");
+  eq(app.vault.files.has("Tasks/Bar.md"), false, "nothing was renamed");
+});
+
+test("a task whose area and project disagree is shown where its project is", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    areaNote(a, "Home");
+    projectNote(a, "Home", "Plan");
+    writeNote(a, "Tasks/Odd.md", { uid: "ft-odd", type: "задача", status: "open", area: "Work", projects: ["[[Plan]]"], scheduled: TODAY });
+  });
+  const areas = await plugin.collect(false);
+  eq(areaNames(areas), ["Home"], "the area of its project");
+  eq(names(projectOf(areaOf(areas, "Home"), "Plan").tasks), ["Odd"], "and the row is there, not lost between two areas");
+});
+
+test("renaming a project keeps the order of its steps", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Plan");
+    taskNote(a, "A", { area: "Work", project: "Plan", scheduled: TODAY });
+    taskNote(a, "B", { area: "Work", project: "Plan", scheduled: TODAY });
+  });
+  const t = Object.fromEntries(plugin.tasks().map((x) => [x.text, x]));
+  await plugin.reorder([t.B], { into: false, after: false, target: { type: "task", task: t.A } }, {});
+  eq(names(projectOf(areaOf(await plugin.collect(false), "Work"), "Plan").tasks), ["B", "A"], "B was put first");
+  await plugin.renameProject(app.vault.getAbstractFileByPath("Areas/Plan.md"), "Plan 2027");
+  eq(names(projectOf(areaOf(await plugin.collect(false), "Work"), "Plan 2027").tasks), ["B", "A"], "and stays first after the rename");
+});
+
+test("making a project out of a row that has since changed is refused", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Big thing", { area: "Work", scheduled: TODAY }, "план");
+  });
+  const stale = plugin.tasks()[0];
+  app.vault.files.set("Tasks/Big thing.md", "---\nuid: ft-other\ntype: задача\nstatus: open\narea: Work\n---\n");
+  const made = await plugin.toProject(stale);
+  eq(made, null, "refused");
+  eq(app.vault.files.has("Areas/Big thing.md"), false, "no project was created from stale data");
+  ok(app.vault.files.has("Tasks/Big thing.md"), "and the note that is there now was not trashed");
+});
+
+test("a cancelled task with no area is not asked about", async () => {
+  const { plugin } = await stand((a) => {
+    writeNote(a, "Tasks/Dropped.md", { uid: "ft-d", type: "задача", status: "cancelled" });
+    writeNote(a, "Tasks/Maybe.md", { uid: "ft-m", type: "задача", status: "someday" });
+    writeNote(a, "Tasks/Real.md", { uid: "ft-r", type: "задача", status: "open", scheduled: TODAY });
+  });
+  eq(names(plugin.orphans()), ["Real"], "only the open one needs a home");
 });
 
 // --- fuzzing: nothing may vanish ----------------------------------------------------------------

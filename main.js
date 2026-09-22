@@ -85,7 +85,7 @@ const STRINGS = {
     pickNote: "Pick a note", cmdToggleAll: "Show all / focus only", cmdFoldAll: "Collapse all",
     cmdUnfoldAll: "Expand all", cmdAddTask: "New task", cmdAddArea: "New area", cmdAreaFromNote: "New area from the current note",
     pickerPlaceholder: "DD.MM.YY or “tomorrow”", clearDate: "Clear date", completed: "Completed",
-    daysShort: "d", overdueBy: "Overdue by {0} days", moveUp: "Move up", moveDown: "Move down",
+    daysShort: "d", overdueBy: "Overdue by {0} days", described: "This task holds a description — a plan belongs in a project", moveUp: "Move up", moveDown: "Move down",
     repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
     undoKept: "Put back {0} of {1}: the rest changed in the meantime",
     allDone: "done {0}", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
@@ -139,7 +139,7 @@ const STRINGS = {
     pickNote: "Выбери заметку", cmdToggleAll: "Показать всё / только фокус", cmdFoldAll: "Свернуть всё",
     cmdUnfoldAll: "Развернуть всё", cmdAddTask: "Новая задача", cmdAddArea: "Новая область", cmdAreaFromNote: "Новая область из текущей заметки",
     pickerPlaceholder: "ДД.ММ.ГГ или «завтра»", clearDate: "Убрать дату", completed: "Выполненные",
-    daysShort: " дн", overdueBy: "Просрочено на {0} дн.", moveUp: "Выше", moveDown: "Ниже",
+    daysShort: " дн", overdueBy: "Просрочено на {0} дн.", described: "В задаче есть описание — план должен жить в проекте", moveUp: "Выше", moveDown: "Ниже",
     repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
     undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
     allDone: "сделано {0}", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
@@ -467,6 +467,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // it: the editor's hotkeys, the picker and its document listeners, a drag left mid-air.
   onunload() {
     clearTimeout(this.timer);
+    clearTimeout(this.menuTimer);
     this.keys(false);
     this.endEdit?.(false, false);
     this.picker?.close();
@@ -971,7 +972,7 @@ class FocusRenderer extends MarkdownRenderChild {
         // A tap ends with a click that Obsidian's menu treats as «somewhere else» and closes itself,
         // so on a finger the menu opens just after that click, not on the pointer-up before it.
         const where = { clientX: ev?.clientX ?? 0, clientY: ev?.clientY ?? 0 };
-        if (touch) setTimeout(() => this.openMenu(item, where, row), 80);
+        if (touch) this.menuTimer = setTimeout(() => this.openMenu(item, where, row), 80);
         else this.openMenu(item, ev, row);
       }
       else if (commit && drop) {
@@ -1018,6 +1019,11 @@ class FocusRenderer extends MarkdownRenderChild {
   // mark of a task an agent added and the user has not looked at yet) and its deadline, when that is
   // a different day from the one the focus goes by.
   marks(li, task) {
+    if (task.described) {
+      const note = li.createSpan({ cls: "ft-described" });
+      note.setAttr("aria-label", t("described"));
+      setIcon(note, "text");
+    }
     const level = String(task.priority || "").toLowerCase();
     if (["low", "normal", "high", "highest", "lowest", "medium"].includes(level)) {
       const rank = ["high", "highest"].includes(level) ? "high" : ["low", "lowest"].includes(level) ? "low" : "normal";
@@ -1581,7 +1587,7 @@ module.exports = class FocusTasks extends Plugin {
   orphans() {
     const projects = this.notes().filter((n) => n.project);
     return this.tasks()
-      .filter((x) => !x.area && !this.projectFile(x, projects) && x.status !== STATUS_DONE)
+      .filter((x) => !x.area && !this.projectFile(x, projects) && ![STATUS_DONE, STATUS_CANCELLED, STATUS_SOMEDAY].includes(x.status))
       .sort((a, b) => collator()(a.text, b.text));
   }
 
@@ -1612,8 +1618,12 @@ module.exports = class FocusTasks extends Plugin {
   taskOf(file) {
     const folder = this.tasksFolder;
     if (folder && folder !== "/" && !file.path.startsWith(folder + "/")) return null;
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (!fm || !TASK_WORDS.includes(String(fm.type ?? "").trim().toLowerCase())) return null;
+    const cache = this.app.metadataCache.getFileCache(file);
+    const fm = cache?.frontmatter;
+    if (!fm || !this.isTaskType(fm.type)) return null;
+    // A task is a service note: anything written under the frontmatter is a plan, and a plan is what
+    // makes it a project. The row says so quietly; turning it into one stays the user's call.
+    const described = (cache?.sections || []).some((x) => x.type !== "yaml");
     const link = (v) => {
       const one = Array.isArray(v) ? v[0] : v;  // `projects` is a list; we keep a task in one project
       return typeof one === "string" ? (one.match(/\[\[([^\]|#]+)/)?.[1] || one).trim() : null;
@@ -1623,7 +1633,7 @@ module.exports = class FocusTasks extends Plugin {
     return { file, uid: fm.uid ? String(fm.uid) : file.path, text: String(fm.title ?? "").trim() || file.basename,
       status: String(fm.status ?? STATUS_OPEN).trim().toLowerCase(), date: day(fm.scheduled), due: day(fm.due),
       doneDate: day(fm.completedDate), priority: fm.priority || null,
-      area: fm.area ? String(fm.area) : null, project, source: link(fm.source) };
+      area: fm.area ? String(fm.area) : null, project, source: link(fm.source), described };
   }
 
   tasks() { return this.read().tasks; }
@@ -1653,8 +1663,10 @@ module.exports = class FocusTasks extends Plugin {
       const file = task.project ? this.projectFile(task, noteList) : null;
       const bucket = file ? projects.get(file.path) : null;
       if (file) task.project = file.basename;  // the row shows the note it really points at
-      // A task written by another plugin has no `area`: its project tells us which one it belongs to.
-      if (!task.area && bucket) task.area = bucket.area.name;
+      // The project decides where a task is shown: its own `area` may be missing (another plugin
+      // wrote it) or stale (the project moved), and a row that belongs to two places at once would
+      // be counted in one and drawn in the other — that is how a due task goes missing.
+      if (bucket) task.area = bucket.area.name;
       if (!task.area) continue;
       const area = areaOf(task.area);
       if (task.status === STATUS_DONE) {
@@ -1728,7 +1740,7 @@ module.exports = class FocusTasks extends Plugin {
         // The row was read a moment ago; another note may have taken this path since (Sync, a script,
         // the user). Writing into it would change the wrong task — or turn an ordinary note into one.
         if (!this.isTaskType(fm.type)) { wrong = true; return; }
-        if (fm.uid && task.uid && String(fm.uid) !== task.uid && /^ft-/.test(task.uid)) { wrong = true; return; }
+        if (fm.uid && task.uid && String(fm.uid) !== task.uid) { wrong = true; return; }
         if (!fm.uid) fm.uid = uid = newUid();  // a note written by another plugin gets its identity here
         change(fm);
       });
@@ -1798,7 +1810,8 @@ module.exports = class FocusTasks extends Plugin {
     const name = fileName(text).slice(0, 60).trim();
     let file = name && name !== task.file.basename ? await this.freeName(name) : task.file.basename;
     // the file name may be cut or taken: then the whole text lives in `title`
-    await this.setFields(task, { title: !name || file !== text ? text : null });
+    const ok = await this.setFields(task, { title: !name || file !== text ? text : null });
+    if (!ok) return;  // the note is not the one this row was read from: leave its name alone too
     if (file !== task.file.basename) {
       await this.app.fileManager.renameFile(task.file, normalizePath(`${this.tasksFolder}/${file}.md`));
     }
@@ -1974,6 +1987,12 @@ module.exports = class FocusTasks extends Plugin {
   // the focus; a task that was only a container for a checklist is replaced by those steps and
   // leaves its `uid` on the project, so anything that pointed at it still finds it.
   async toProject(task) {
+    // Everything below moves notes around; do it from what is on disk now, not from the row that was
+    // drawn a minute ago.
+    const live = this.app.vault.getAbstractFileByPath(task.file.path);
+    const fresh = live && this.taskOf(live);
+    if (!fresh || (task.uid && /^ft-/.test(task.uid) && fresh.uid !== task.uid)) { new Notice(t("changed")); return null; }
+    task = fresh;
     const area = task.area || this.tasks().find((x) => x.uid === task.uid)?.area;
     if (!area) { new Notice(t("changed")); return null; }
     const name = fileName(task.text).slice(0, 60).trim();
@@ -2165,6 +2184,14 @@ module.exports = class FocusTasks extends Plugin {
       for (const prefix of ["project:", "later:", "done:"]) {
         if (map[prefix + old]) { delete map[prefix + old]; map[prefix + path] = true; touched = true; }
       }
+    }
+    // the steps of a project are ordered under its name: the name has just changed
+    const was = "project:" + old.split("/").pop().replace(/\.md$/, "");
+    const now = "project:" + path.split("/").pop().replace(/\.md$/, "");
+    if (was !== now && this.data.order.tasks[was]) {
+      this.data.order.tasks[now] = [...new Set([...(this.data.order.tasks[now] || []), ...this.data.order.tasks[was]])];
+      delete this.data.order.tasks[was];
+      touched = true;
     }
     this.forgetScan();
     if (touched) await this.saveAll();

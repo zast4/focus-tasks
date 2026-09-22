@@ -75,7 +75,13 @@ const selected = async () => {
   if (!(await page.eval(`return !!__ft.view()`))) await toPane();  // a key may bring a note tab to the front
   return page.eval(`return __ft.all('li.ft-task.is-selected', __ft.view()).map((e) => e.querySelector('.ft-text').textContent.trim())`);
 };
-const selectedAre = (names) => until(async () => J(await selected()) === J(names), "selected: " + J(names));
+const selectedAre = async (names) => {
+  try {
+    await until(async () => J(await selected()) === J(names), "selected: " + J(names));
+  } catch (e) {
+    throw new Error(`${e.message}; on screen: ${J(await selected())}`);
+  }
+};
 const menu = async (title) => {
   await until(() => page.eval(`return !!__ft.text('.menu .menu-item-title', ${J(title)})`), `menu item «${title}»`);
   await click(`__ft.at(__ft.text('.menu .menu-item-title', ${J(title)}))`, `menu item «${title}»`);

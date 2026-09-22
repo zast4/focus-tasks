@@ -110,7 +110,7 @@ touch events on a 390×844 screen.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
 
-It must pass (39/39) before a release, together with the model suite (78) and the phone suite (13). On failure the vault stays open and screenshots go to
+It must pass (39/39) before a release, together with the model suite (89) and the phone suite (14). On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

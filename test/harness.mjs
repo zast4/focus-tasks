@@ -124,6 +124,19 @@ export class FakeVault {
     this.handles.delete(from);
     file.path = to;
     this.handles.set(to, file);
+    // Obsidian updates the links to a renamed note (the vaults here have «always update links» on):
+    // without this the fake vault would break links the real one keeps, and tests would lie.
+    const name = (p) => p.split("/").pop().replace(/\.md$/, "");
+    const before = [from.replace(/\.md$/, ""), name(from)];
+    for (const [path, body] of [...this.files.entries()]) {
+      if (path === to) continue;
+      let next = body;
+      for (const old of before) {
+        next = next.split(`[[${old}]]`).join(`[[${name(to)}]]`);
+        next = next.split(`[[${old}|`).join(`[[${name(to)}|`);
+      }
+      if (next !== body) this.files.set(path, next);
+    }
     this.fire("rename", file, from);
     return file;
   }
@@ -137,8 +150,11 @@ class FakeMetadataCache {
   getFileCache(file) {
     const text = this.vault.files.get(file?.path);
     if (text === undefined) return null;
-    const [front] = splitFront(text);
-    return front === null ? {} : { frontmatter: parseYaml(front) };
+    const [front, body] = splitFront(text);
+    const sections = [];
+    if (front !== null) sections.push({ type: "yaml" });
+    if (body.trim()) sections.push({ type: "paragraph" });
+    return front === null ? { sections } : { frontmatter: parseYaml(front), sections };
   }
   getFirstLinkpathDest(link, from) {
     const want = link.replace(/\.md$/, "");

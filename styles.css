@@ -266,3 +266,9 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 
 /* The date column has room for «22.09.26 · 3 дн» without pushing the text around. */
 .focus-tasks-view li.ft-task > .ft-date { min-width: 5.2em; }
+
+/* A task that carries a description: the rule says a plan belongs in a project, and the row says it
+   quietly — the choice stays with the user. */
+.focus-tasks-view li.ft-task > .ft-described { flex: none; display: inline-flex; align-items: center; margin-left: 0.5em;
+  height: calc(var(--ft-line) * 1em); color: var(--text-faint); }
+.focus-tasks-view li.ft-task > .ft-described svg { width: 0.85rem; height: 0.85rem; }
