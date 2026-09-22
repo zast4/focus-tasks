@@ -344,7 +344,8 @@ step((TASKS ? "the checkbox completes through Tasks" : "the checkbox completes w
   const done = `(() => { const r = __ft.task('Lace them'); return !!r && !!r.closest('.ft-done-block') && r.querySelector('input').checked; })()`;
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await fileHas("Tasks/Marathon.md", `- [x] Lace them ⏳ ${TODAY} ✅ ${TODAY}`);
-  await until(() => page.eval(`return ${done} && __ft.area('Sport').parentElement.lastElementChild.matches('.ft-done-block')`), "Lace them under Completed, last in Sport");
+  await until(() => page.eval(`return ${done} && !!__ft.task('Lace them').closest('.ft-project-body')`), "Lace them under the project's Completed");
+  if (await page.eval(`return !!document.querySelector('.ft-done-project')`)) throw new Error("the project label is still there");
   if (!(await page.eval(`return !!__ft.text('.ft-done-title', 'Completed · 1')`))) throw new Error("no «Completed · 1»");
   // folds and unfolds
   await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
@@ -417,6 +418,17 @@ step("the note saved over the change by another device: a notice says so", async
     (d) => d.replace(/- \\[x\\] Buy shoes fast[^\\n]*/, '- [ ] Buy shoes fast ⏳ ${TODAY}')); return true;`);
   await until(() => page.eval(`return [...document.querySelectorAll('.notice')].some((n) => /did not stick/.test(n.textContent))`), "the «did not stick» notice", 8000);
   await until(() => page.eval(`const r = __ft.task('Buy shoes fast'); return !!r && !r.closest('.ft-done-block')`), "Buy shoes fast back in the focus");
+});
+
+step("the box of a row is centred on the first line of its text", async () => {
+  const off = async (sel) => page.eval(`const li = ${sel}; if (!li) return null;
+    const b = li.querySelector('input').getBoundingClientRect(), t = li.querySelector('.ft-text').getBoundingClientRect();
+    const line = parseFloat(getComputedStyle(li.querySelector('.ft-text')).lineHeight);
+    return Math.round((b.top + b.height / 2) - (t.top + line / 2));`);
+  for (const [what, sel] of [["a focus row", "__ft.task('Buy shoes fast')"], ["a done row", "__ft.task('Lace them')"]]) {
+    const d = await off(sel);
+    if (d === null || Math.abs(d) > 2) throw new Error(`the box of ${what} is off by ${d}px`);
+  }
 });
 
 step("drag a task onto an area header moves it into the area's inbox", async () => {

@@ -712,29 +712,27 @@ class FocusRenderer extends MarkdownRenderChild {
         for (const project of area.future.projects) await this.project(block, area, project, true);
       }
     }
-    if (area.done.length) await this.completed(box, area);
+    if (area.done.length) await this.completed(box, area.done, "done:" + area.name);
   }
 
-  // «Completed · N» at the bottom of an area: its tasks and steps checked off today, open unless folded;
-  // a box unchecks its task. Not selectable, not draggable.
-  async completed(box, area) {
+  // «Completed · N» at the bottom of an area (its loose tasks) or of a project (its steps): what was
+  // checked off today, open unless folded; a box unchecks its task. Not selectable, not draggable.
+  async completed(box, done, key) {
     const p = this.plugin;
-    const key = "done:" + area.name;
     const open = p.isShown(key, false);
     const block = box.createDiv({ cls: "ft-done-block" });  // not a direct list of the area: «+» adds after the loose tasks
     const head = block.createDiv({ cls: "ft-future ft-done-title" });
     setIcon(head.createSpan({ cls: "ft-future-icon" }), open ? "chevron-down" : "chevron-right");
-    head.createSpan({ text: `${t("completed")} · ${area.done.length}` });
+    head.createSpan({ text: `${t("completed")} · ${done.length}` });
     head.onclick = async () => { await p.toggleShown(key, false); p.refresh(); };
     if (!open) return;
     const ul = block.createEl("ul", { cls: "contains-task-list ft-list" });
-    for (const task of area.done) {
+    for (const task of done) {
       const li = ul.createEl("li", { cls: "task-list-item ft-task ft-done" });  // no data-task: themes strike the whole row
-      const check = li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
+      const check = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       check.checked = true;
       this.check(li, check, task);
       await this.text(li, task);
-      if (task.project) li.createSpan({ cls: "ft-done-project", text: "📁 " + task.file.basename });
       li.oncontextmenu = (e) => {
         e.preventDefault();
         const menu = new Menu();
@@ -802,7 +800,10 @@ class FocusRenderer extends MarkdownRenderChild {
     });
     this.more(head, (menu) => this.projectMenu(menu, area, project, head));
     this.grip(head, { type: "project", area, project });
-    if (open) await this.list(box.createDiv({ cls: "ft-project-body" }), project.tasks, all);
+    if (!open) return;
+    const body = box.createDiv({ cls: "ft-project-body" });
+    await this.list(body, project.tasks, all);
+    if (!later && project.done?.length) await this.completed(body, project.done, "done:" + path);
   }
 
   // Drag by the grip (mouse or finger — pointer events). Areas reorder among areas, projects within
@@ -1011,7 +1012,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const li = createEl("li", { cls: "task-list-item ft-task ft-draft-row" });
     const level = prev.style.getPropertyValue("--ft-level");
     if (level) li.style.setProperty("--ft-level", level);
-    li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox", attr: { disabled: "" } });
+    li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox", attr: { disabled: "" } });
     const text = li.createSpan({ cls: "ft-text", attr: { "data-placeholder": t("newTask") } });
     prev.after(li);
     this.editor(text, 0, async (value) => {
@@ -1025,7 +1026,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (this.editing) return;
     const ul = createEl("ul", { cls: "contains-task-list ft-list ft-draft" });
     const li = ul.createEl("li", { cls: "task-list-item ft-task" });
-    li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox", attr: { disabled: "" } });
+    li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox", attr: { disabled: "" } });
     const text = li.createSpan({ cls: "ft-text", attr: { "data-placeholder": target.project ? t("newStep") : t("newTask") } });
     anchor.after(ul);
     this.editor(text, 0, async (value) => {
@@ -1226,7 +1227,7 @@ class FocusRenderer extends MarkdownRenderChild {
       const li = ul.createEl("li", { cls: "task-list-item ft-task", attr: { "data-task": task.status } });
       if (!all && !inFocus(task)) li.addClass("is-later");
       if (all && task.indent) li.style.setProperty("--ft-level", task.indent);
-      const box = li.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
+      const box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       this.check(li, box, task);
       const text = await this.text(li, task);
       const date = li.createSpan();
@@ -1487,16 +1488,17 @@ module.exports = class FocusTasks extends Plugin {
       const area = areaOf(n.area);
       if (!n.project && !area.note) area.note = n.file;
       const { open, done } = await this.fileTasks(n.file);
-      area.done.push(...done.map((x) => ({ ...x, project: n.project })));
       const focus = open.filter(inFocus), later = open.filter((x) => !inFocus(x));
       area.focus += focus.length;
       area.later += later.length;
       const tasks = all ? open : focus;
       if (n.project) {
-        if (all || tasks.length) area.projects.push({ file: n.file, tasks, first: first(tasks) });
-        if (!all && (later.length || !focus.length)) area.future.projects.push({ file: n.file, tasks: later, first: first(later) });
+        // a project whose steps are all done today stays on screen with its «Completed»
+        if (all || tasks.length || done.length) area.projects.push({ file: n.file, tasks, done, first: first(tasks) });
+        if (!all && (later.length || !focus.length)) area.future.projects.push({ file: n.file, tasks: later, done: [], first: first(later) });
       } else {
         area.loose.push(...tasks);
+        area.done.push(...done);  // the area's own «Completed»: its loose tasks only
         if (!all) area.future.loose.push(...later);
       }
     }
@@ -1511,8 +1513,7 @@ module.exports = class FocusTasks extends Plugin {
     for (const a of areas) {
       a.projects.sort(byOrder(a));
       a.future.projects.sort(byOrder(a));
-      a.done.sort((x, y) => x.project - y.project || rank(order.projects[a.name], x.file.path) - rank(order.projects[a.name], y.file.path)
-        || cmp(x.file.basename, y.file.basename) || x.lineNo - y.lineNo);
+      a.done.sort((x, y) => x.lineNo - y.lineNo);
     }
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));
   }

@@ -27,8 +27,11 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
   - `check`: a box marks its row at once and ignores further clicks until the list is re-read (a
     second click would undo the first); a failed write puts the row back. `toggle` holds one toggle
     per line in the plugin, so the same task clicked in two views does not toggle twice.
-  - `completed`: «Completed · N» at the bottom of an area (tasks with ✅ today from `fileTasks`), folded
-    by the `done:<area>` key; its rows are not tracked, so selection and drag skip them.
+  - `completed(box, done, key)`: «Completed · N» — under a project for its steps, under an area for its
+    loose tasks (✅ today from `fileTasks`), folded by the `done:<area|path>` key; its rows are not
+    tracked, so selection and drag skip them.
+  - Rows are a grid: the box lives in `.ft-box`, a cell one line tall (`--ft-line`), and is centred in
+    it — themes size checkboxes in the checkbox's own em, so a computed margin misses by a few pixels.
   - Inline editing: `editor()` (contenteditable, Enter / Esc / blur, Mod+digit hotkeys via a `Scope`),
     `editInline`, `rowAfter`, `draft`, `renameProject`, `projectRow`.
   - `open(file)` never replaces the pane itself with the note.

@@ -9,7 +9,7 @@
      task:                  [☐] Text      ← loose tasks and project steps share this column
    Cell contents are centred, so carets, icons and checkboxes line up vertically. Sizes in rem:
    the area title has a bigger font and must not stretch its cells. */
-.focus-tasks-view { --ft-col: 1.75rem; --ft-cb: var(--checkbox-size, 1rem); }
+.focus-tasks-view { --ft-col: 1.75rem; --ft-cb: var(--checkbox-size, 1rem); --ft-line: 1.5; }  /* line-height of a task row: the box is centred on the first line */
 body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spares width for the text */
 
 
@@ -49,9 +49,12 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view ul.ft-list { margin: 0.1em 0; padding-inline-start: 0; }
 .focus-tasks-view li.ft-task { cursor: default; list-style: none; display: flex; align-items: flex-start; padding: 0.15em 0; text-indent: 0;
   margin: 0 0 0 calc(var(--ft-col) * (2 + var(--ft-level, 0))) !important; }
-.focus-tasks-view li.ft-task > .task-list-item-checkbox { flex: none; position: static;
-  margin: 0.3em calc((var(--ft-col) - var(--ft-cb)) / 2) 0 calc((var(--ft-col) - var(--ft-cb)) / 2) !important; }
-.focus-tasks-view li.ft-task > .ft-text { flex: 1 1 auto; min-width: 0; margin-left: 0.2rem; }
+/* The box sits in a cell one line tall and is centred in it: themes size checkboxes in their own
+   em (a checkbox has its own font), so any margin computed here would miss by a few pixels. */
+.focus-tasks-view li.ft-task > .ft-box { flex: none; display: flex; align-items: center; justify-content: center;
+  width: var(--ft-col); height: calc(var(--ft-line) * 1em); }
+.focus-tasks-view li.ft-task > .ft-box > .task-list-item-checkbox { position: static; top: auto; margin: 0 !important; }
+.focus-tasks-view li.ft-task > .ft-text { flex: 1 1 auto; min-width: 0; margin-left: 0.2rem; line-height: var(--ft-line); }
 
 /* A project's steps: a line under the project's caret, left of the checkbox column. */
 .focus-tasks-view .ft-project-body { position: relative; }
@@ -92,8 +95,9 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 .focus-tasks-view .ft-text[data-placeholder]:empty::before { content: attr(data-placeholder); color: var(--text-faint); }
 
 /* The date on the right: one column, one format; a click opens the picker. */
-.focus-tasks-view li.ft-task > .ft-date { flex: none; margin: 0.2em 0 0 0.8em; min-width: 4.8em; text-align: right; font-size: 0.8em;
-  font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; display: inline-flex; justify-content: flex-end; }
+.focus-tasks-view li.ft-task > .ft-date { flex: none; margin: 0 0 0 0.8em; min-width: 4.8em; text-align: right; font-size: 0.8em;
+  height: calc(var(--ft-line) * 1em / 0.8); font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
+  display: inline-flex; justify-content: flex-end; align-items: center; }
 .focus-tasks-view .ft-date.is-today { color: var(--color-green); }
 .focus-tasks-view .ft-date.is-past { color: var(--text-error); }
 .focus-tasks-view .ft-date.is-future { color: var(--interactive-accent); }
@@ -144,7 +148,6 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 /* «Completed» at the bottom of an area: today's checked-off tasks, faint and struck through. */
 .focus-tasks-view .ft-done-title { display: flex; width: fit-content; }
 .focus-tasks-view li.ft-done > .ft-text { color: var(--text-faint); text-decoration: line-through; cursor: default; }
-.focus-tasks-view li.ft-done > .ft-done-project { flex: none; margin: 0.2em 0 0 0.8em; font-size: 0.8em; color: var(--text-faint); white-space: nowrap; }
 
 /* The bottom of the view: «All» / «Hide», new areas, collapse / expand all, and the title of
    the areas with nothing due. */
