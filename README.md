@@ -70,7 +70,7 @@ the vault); «All» is remembered per device.
 ## Install with BRAT (from inside Obsidian)
 
 1. *Settings → Community plugins → Browse* → install and enable **BRAT** (Obsidian42 - BRAT).
-2. Command palette → **BRAT: Add a beta plugin for testing** → paste `zast4/obsidian-focus-tasks` →
+2. Command palette → **BRAT: Add a beta plugin for testing** → paste `zast4/focus-tasks` →
    pick the latest version → *Add plugin*.
 3. *Settings → Community plugins* → enable **Focus Tasks**. BRAT keeps it updated.
 
@@ -141,7 +141,7 @@ passes (`--keep` leaves it).
 «Свернуть всё» / «Развернуть всё». Язык интерфейса — в настройках (Auto / English / Русский).
 
 Установка прямо из Obsidian — через BRAT: *Настройки → Сторонние плагины → Обзор* → поставить и
-включить **BRAT**; палитра команд → **BRAT: Add a beta plugin for testing** → `zast4/obsidian-focus-tasks`
+включить **BRAT**; палитра команд → **BRAT: Add a beta plugin for testing** → `zast4/focus-tasks`
 → последняя версия → *Add plugin*; включить **Focus Tasks**. Обновления BRAT подтягивает сам.
 
 Установка руками: распаковать `focus-tasks-<версия>.zip` в `<хранилище>/.obsidian/plugins/`
