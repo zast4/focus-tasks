@@ -85,6 +85,9 @@ const STRINGS = {
     pickNote: "Pick a note", cmdToggleAll: "Show all / focus only", cmdFoldAll: "Collapse all",
     cmdUnfoldAll: "Expand all", cmdAddTask: "New task", cmdAddArea: "New area", cmdAreaFromNote: "New area from the current note",
     pickerPlaceholder: "DD.MM.YY or “tomorrow”", clearDate: "Clear date", completed: "Completed",
+    daysShort: "d", overdueBy: "Overdue by {0} days",
+    repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
+    undoKept: "Put back {0} of {1}: the rest changed in the meantime",
     orphans: "Without an area", orphansHelp: "These tasks are in no area, so the focus cannot show them. Pick a place for each.",
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
@@ -135,6 +138,9 @@ const STRINGS = {
     pickNote: "Выбери заметку", cmdToggleAll: "Показать всё / только фокус", cmdFoldAll: "Свернуть всё",
     cmdUnfoldAll: "Развернуть всё", cmdAddTask: "Новая задача", cmdAddArea: "Новая область", cmdAreaFromNote: "Новая область из текущей заметки",
     pickerPlaceholder: "ДД.ММ.ГГ или «завтра»", clearDate: "Убрать дату", completed: "Выполненные",
+    daysShort: " дн", overdueBy: "Просрочено на {0} дн.",
+    repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
+    undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
     orphans: "Без области", orphansHelp: "Эти задачи ни в одной области, поэтому фокус их не показывает. Разложи их по местам.",
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
@@ -199,6 +205,16 @@ function parseDay(text) {
   const year = m[3] ? (m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3])) : moment().year();
   const d = moment({ year, month: Number(m[2]) - 1, day: Number(m[1]) });
   return d.isValid() ? d.format("YYYY-MM-DD") : null;
+}
+
+// Opens a menu where the finger or the pointer is: `showAtMouseEvent` only takes a mouse event, and
+// a tap gives a pointer or a touch one — on a phone the menu would never appear.
+function showMenu(menu, e) {
+  if (e instanceof MouseEvent && e.type !== "pointerup" && e.type !== "pointerdown") return menu.showAtMouseEvent(e);
+  const point = e?.touches?.[0] || e?.changedTouches?.[0] || e;
+  const x = point?.clientX ?? point?.x ?? 0;
+  const y = point?.clientY ?? point?.y ?? 0;
+  return menu.showAtPosition({ x, y });
 }
 
 // A note split into its frontmatter block (with the fences) and what follows.
@@ -706,16 +722,19 @@ class FocusRenderer extends MarkdownRenderChild {
         e.preventDefault();
         const menu = new Menu();
         menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file)));
-        menu.showAtMouseEvent(e);
+        showMenu(menu, e);
       };
     }
   }
 
-  // The box of a row: it marks the row at once (the note is written and the list re-read a moment
-  // later) and ignores further clicks on it until then — a second click would undo the first.
+  // The box of a row. The whole cell around the box answers, not the 16 px box itself: a finger that
+  // misses would otherwise land on the text and open the editor. It marks the row at once (the note
+  // is written and the list re-read a moment later) and ignores further clicks until then — a second
+  // click would undo the first.
   check(li, box, task) {
-    box.onclick = async (e) => {
+    const tick = async (e) => {
       e.preventDefault();
+      e.stopPropagation();
       if (li.hasClass("is-toggling")) return;
       li.addClass("is-toggling");
       box.checked = !box.checked;
@@ -723,6 +742,9 @@ class FocusRenderer extends MarkdownRenderChild {
       li.removeClass("is-toggling");  // the note changed under it: the row goes back as it was
       box.checked = !box.checked;
     };
+    box.onclick = tick;
+    const cell = box.parentElement;
+    if (cell) cell.onclick = (e) => { if (e.target !== box) tick(e); };
   }
 
   // Tasks with no area and no project: another tool wrote them and the focus cannot place them. They
@@ -756,6 +778,12 @@ class FocusRenderer extends MarkdownRenderChild {
     await MarkdownRenderer.render(this.plugin.app, task.text, text, task.file.path, this.inner);
     const para = text.querySelector("p");
     if (para) para.replaceWith(...para.childNodes);
+    const box = li.querySelector("input.task-list-item-checkbox");
+    if (box) {  // the checkbox is named by the text next to it, so a screen reader reads the task
+      const id = "ft-" + Math.random().toString(36).slice(2, 9);
+      text.id = id;
+      box.setAttr("aria-labelledby", id);
+    }
     return text;
   }
 
@@ -856,14 +884,22 @@ class FocusRenderer extends MarkdownRenderChild {
       const step = lastY < b.top + 60 ? -12 : lastY > b.bottom - 60 ? 12 : 0;
       if (step) { scroller.scrollTop += step; drop = this.target(item, lastX, lastY); show(); }
     }, 30);
+    const touch = e.pointerType === "touch";
+    const slop = touch ? 10 : 5;  // a finger wobbles: a wider threshold before this counts as a drag
     const move = (ev) => {
       lastX = ev.clientX;
       lastY = ev.clientY;
-      if (!dragging && Math.hypot(lastX - x0, lastY - y0) < 5) return;
+      if (!dragging && Math.hypot(lastX - x0, lastY - y0) < slop) return;
       if (!dragging) { dragging = true; moving.forEach((r) => r.addClass("ft-dragging")); document.body.addClass("ft-drag-active"); }
       drop = this.target(item, lastX, lastY);
       show();
     };
+    // Obsidian's own swipe opens the sidebar from anywhere on a phone, so a finger dragging a row
+    // sideways would open it and drop the row onto the file list. While a drag is on, the touch
+    // never reaches that gesture.
+    // Only the app's own listeners are cut off: preventDefault here would cancel the touch and with it
+    // the pointer events this drag is built on.
+    const swallow = (ev) => { if (dragging) ev.stopPropagation(); };
     // Listened on the window: a row that goes away mid-drag must not leave the drag hanging.
     const up = (ev) => end(true, ev), cancel = () => end(false);
     let ended = false;
@@ -874,12 +910,19 @@ class FocusRenderer extends MarkdownRenderChild {
       window.removeEventListener("pointermove", move, true);
       window.removeEventListener("pointerup", up, true);
       window.removeEventListener("pointercancel", cancel, true);
+      window.removeEventListener("touchmove", swallow, true);
       this.held = false;
       marked?.removeClass("ft-drop-into");
       line.remove();
       moving.forEach((r) => r.removeClass("ft-dragging"));
       document.body.removeClass("ft-drag-active");
-      if (commit && !dragging) this.openMenu(item, ev, row);
+      if (commit && !dragging) {
+        // A tap ends with a click that Obsidian's menu treats as «somewhere else» and closes itself,
+        // so on a finger the menu opens just after that click, not on the pointer-up before it.
+        const where = { clientX: ev?.clientX ?? 0, clientY: ev?.clientY ?? 0 };
+        if (touch) setTimeout(() => this.openMenu(item, where, row), 80);
+        else this.openMenu(item, ev, row);
+      }
       else if (commit && drop) {
         if (group) this.clearSelection();
         await this.plugin.drop(item, drop, this.shown);
@@ -888,6 +931,7 @@ class FocusRenderer extends MarkdownRenderChild {
     };
     this.held = true;  // no re-render under the finger
     grip.setPointerCapture(e.pointerId);
+    window.addEventListener("touchmove", swallow, { capture: true });
     window.addEventListener("pointermove", move, true);
     window.addEventListener("pointerup", up, true);
     window.addEventListener("pointercancel", cancel, true);
@@ -898,7 +942,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const menu = new Menu();
     if (item.type === "area") this.areaMenu(menu, item.area);
     else this.projectMenu(menu, item.area, item.project, row);
-    menu.showAtMouseEvent(e);
+    showMenu(menu, e);
   }
 
   caret(parent, open, toggle) {
@@ -951,6 +995,13 @@ class FocusRenderer extends MarkdownRenderChild {
     const now = today(), yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
     el.setText(task.date === now ? t("today") : task.date === yesterday ? t("yesterday") : moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY"));
     el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
+    // Late is said in words as well as in red: colour alone is not something everyone can read, and
+    // the number of days is the ZFG signal that a task is stuck.
+    const late = task.date < now ? moment(now).diff(moment(task.date), "days") : 0;
+    if (late >= 2) {
+      el.createSpan({ cls: "ft-late", text: ` · ${late}${t("daysShort")}` });
+      el.setAttr("aria-label", t("overdueBy", late));
+    }
   }
 
   // The picker for the date of the row, or of every selected row when this is one of them.
@@ -1135,7 +1186,7 @@ class FocusRenderer extends MarkdownRenderChild {
       e.stopPropagation();
       const menu = new Menu();
       build(menu);
-      menu.showAtMouseEvent(e);
+      showMenu(menu, e);
     };
     const btn = parent.createSpan({ cls: "ft-more", attr: { "aria-label": t("actions") } });
     setIcon(btn, "more-horizontal");
@@ -1201,7 +1252,7 @@ class FocusRenderer extends MarkdownRenderChild {
       i.setTitle(t("delete")).setIcon("trash-2").onClick(() => p.remove(task));
       if (i.setWarning) i.setWarning(true);
     });
-    menu.showAtMouseEvent(e);
+    showMenu(menu, e);
   }
 
   // The menu of a selected row when there are several: one date for all of them.
@@ -1216,7 +1267,7 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => this.dateSelection(null)));
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
-    menu.showAtMouseEvent(e);
+    showMenu(menu, e);
   }
 
   // The name of an area or a project opens its linked note, or the task file when there is none.
@@ -1252,7 +1303,7 @@ class FocusRenderer extends MarkdownRenderChild {
         this.editInline(task, text, e);
       };
       li.onclick = (e) => {
-        if (e.target.closest("a, input, .ft-grip, .ft-date") || picking(e)) return;
+        if (e.target.closest("a, input, .ft-box, .ft-grip, .ft-date, .ft-place") || picking(e)) return;
         this.editInline(task, text, null);
       };
       // on mousedown, so that Shift doesn't select text and an open editor isn't left mid-way
@@ -1340,6 +1391,9 @@ module.exports = class FocusTasks extends Plugin {
     this.applyLanguage();
     this.views = new Set();
     this.toggling = new Set();  // lines with a toggle in flight
+    for (const event of ["create", "delete", "modify"]) this.registerEvent(this.app.vault.on(event, () => this.forgetScan()));
+    this.registerEvent(this.app.vault.on("rename", (file, old) => this.renamed(file.path, old)));
+    this.registerEvent(this.app.metadataCache.on("changed", () => this.forgetScan()));
     this.registerView(VIEW_TYPE, (leaf) => new FocusView(leaf, this));
     this.registerMarkdownCodeBlockProcessor("focus-tasks", (_src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath)));
     this.addRibbonIcon("list-checks", t("open"), () => this.openView());
@@ -1366,6 +1420,7 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   async saveAll() {
+    this.forgetScan();  // a changed folder or type means the vault has to be read again
     await this.saveData({ settings: this.settings, folded: this.data.folded, opened: this.data.opened, order: this.data.order });
   }
 
@@ -1449,20 +1504,32 @@ module.exports = class FocusTasks extends Plugin {
   // Tasks nobody can see: no area of their own and no project to take one from. The view lists them
   // so that a note written by another tool never disappears without a trace.
   orphans() {
-    const known = new Set(this.notes().filter((n) => n.project).map((n) => n.file.basename));
+    const projects = this.notes().filter((n) => n.project);
+    const placed = (task) => projects.some((n) => this.samePlace(task.project, n.file));
     return this.tasks()
-      .filter((x) => !x.area && !(x.project && known.has(x.project)) && x.status !== STATUS_DONE)
+      .filter((x) => !x.area && !placed(x) && x.status !== STATUS_DONE)
       .sort((a, b) => collator()(a.text, b.text));
   }
 
-  notes() {
-    const out = [];
+  // Areas, projects and tasks are read in one pass over the vault and kept until something changes:
+  // a render asks for them several times (the focus, «All», the lost ones), and on a big vault every
+  // pass is thousands of cache lookups.
+  read() {
+    if (this.scan) return this.scan;
+    const notes = [], tasks = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
-      const n = this.classify(file);
-      if (n) out.push(n);
+      const task = this.taskOf(file);
+      if (task) { tasks.push(task); continue; }
+      const note = this.classify(file);
+      if (note) notes.push(note);
     }
-    return out;
+    this.scan = { notes, tasks };
+    return this.scan;
   }
+
+  forgetScan() { this.scan = null; }
+
+  notes() { return this.read().notes; }
 
   get tasksFolder() { return normalizePath(this.settings.tasksFolder || DEFAULTS.tasksFolder); }
 
@@ -1485,14 +1552,7 @@ module.exports = class FocusTasks extends Plugin {
       area: fm.area ? String(fm.area) : null, project, source: link(fm.source) };
   }
 
-  tasks() {
-    const out = [];
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      const task = this.taskOf(file);
-      if (task) out.push(task);
-    }
-    return out;
-  }
+  tasks() { return this.read().tasks; }
 
   // → [{name, note, loose, projects, focus, later, future, done}]. The focus keeps only tasks due today
   // or earlier (their areas, and areas with something checked off today); `all` keeps every task of
@@ -1572,18 +1632,28 @@ module.exports = class FocusTasks extends Plugin {
   // Writes fields into the task's note; a null value removes the key. The note is found by its path:
   // renames are followed by Obsidian itself, so nothing here depends on the text of the task.
   async setFields(task, fields) {
+    return this.update(task, (fm) => {
+      for (const [key, value] of Object.entries(fields)) {
+        if (value === null || value === undefined) delete fm[key];
+        else fm[key] = value;
+      }
+    });
+  }
+
+  // The one place a task note is written. `change(fm)` gets the frontmatter as it is on disk right
+  // now — a decision made from what the screen showed a second ago (another device may have finished
+  // the task since) must be taken inside it, not before.
+  async update(task, change) {
     const file = this.app.vault.getAbstractFileByPath(task.file.path) || task.file;
     if (!file || file.deleted) { new Notice(t("changed")); return false; }
     let uid = null;
     try {
       await this.app.fileManager.processFrontMatter(file, (fm) => {
         if (!fm.uid) fm.uid = uid = newUid();  // a note written by another plugin gets its identity here
-        for (const [key, value] of Object.entries(fields)) {
-          if (value === null || value === undefined) delete fm[key];
-          else fm[key] = value;
-        }
+        change(fm);
       });
       if (uid) task.uid = uid;
+      this.forgetScan();
     } catch (e) {
       new Notice(t("changed"));
       console.warn("focus-tasks: the task note could not be written", task.file.path, e);
@@ -1592,27 +1662,29 @@ module.exports = class FocusTasks extends Plugin {
     return true;
   }
 
-  // A repeating task (TaskNotes wrote `recurrence` into the note) is not finished by a tick: the one
-  // occurrence is, and the note moves on to the next date. TaskNotes owns that rule, so we ask it.
-  recurring(task) {
-    const fm = this.app.metadataCache.getFileCache(task.file)?.frontmatter;
-    const api = this.app.plugins.plugins["tasknotes"]?.api?.recurring;
-    return fm?.recurrence && api?.toggleCompleteInstance ? api : null;
-  }
-
   // Done ⇄ open, with the day it was done. One write per task at a time (the same task can be on
   // screen twice); a second click on the same row is held by the row itself until it is rebuilt.
   async toggle(task) {
     if (this.toggling.has(task.uid)) return false;
     this.toggling.add(task.uid);
     try {
-      const api = this.recurring(task);
-      if (api) {
+      const repeats = this.app.metadataCache.getFileCache(task.file)?.frontmatter?.recurrence;
+      if (repeats) {
+        const api = this.app.plugins.plugins["tasknotes"]?.api?.recurring;
+        // One occurrence is done, not the task. Only TaskNotes knows that rule; without it, writing
+        // `status: done` here would quietly end the whole series.
+        if (!api?.toggleCompleteInstance) { new Notice(t("repeating")); return false; }
         await api.toggleCompleteInstance(task.file.path, task.date || today());
+        this.forgetScan();
         return true;
       }
-      const done = task.status !== STATUS_DONE;
-      const ok = await this.setFields(task, { status: done ? STATUS_DONE : STATUS_OPEN, completedDate: done ? today() : null });
+      let done = null;
+      const ok = await this.update(task, (fm) => {
+        done = String(fm.status ?? STATUS_OPEN).trim().toLowerCase() !== STATUS_DONE;
+        fm.status = done ? STATUS_DONE : STATUS_OPEN;
+        if (done) fm.completedDate = today();
+        else delete fm.completedDate;
+      });
       if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate: done ? today() : null });
       return ok;
     } finally {
@@ -1710,10 +1782,16 @@ module.exports = class FocusTasks extends Plugin {
     return out;
   }
 
-  // Runs `action` and keeps what it destroyed; the notice puts it back within its ten seconds.
+  // Runs `action` and keeps what it destroyed; the notice puts it back within its ten seconds. What
+  // the action left behind is kept too, so undo can tell «still as I left it» from «someone has
+  // written here since» and never overwrite the second.
   async undoable(message, files, action) {
     const snap = await this.snapshot(files);
     await action();
+    for (const item of snap) {
+      const live = this.app.vault.getAbstractFileByPath(item.path);
+      item.after = live ? await this.app.vault.read(live) : null;
+    }
     this.undoStack = snap;
     let undo;
     const notice = new Notice(createFragment((f) => {
@@ -1727,17 +1805,23 @@ module.exports = class FocusTasks extends Plugin {
     };
   }
 
-  // Puts the last deleted notes back exactly as they were, uid and all.
+  // Puts the last deleted notes back exactly as they were, uid and all — unless something has been
+  // written at that path since (Sync, a script, the user): that is left alone and reported.
   async undoLast() {
     const snap = this.undoStack || [];
     this.undoStack = null;
-    for (const { path, text } of snap) {
+    let back = 0;
+    for (const { path, text, after } of snap) {
       const file = this.app.vault.getAbstractFileByPath(path);
-      if (file) await this.app.vault.modify(file, text);
-      else await this.app.vault.create(path, text);
+      if (!file) { await this.app.vault.create(path, text); back++; continue; }
+      let same = false;
+      await this.app.vault.process(file, (now) => { same = now === after; return same ? text : now; });
+      if (same) back++;
     }
+    this.forgetScan();
+    if (back < snap.length) new Notice(t("undoKept", back, snap.length));
     this.refresh();
-    return snap.length;
+    return back;
   }
 
   // The note goes to the trash; the notice puts it back with the same uid.
@@ -1956,22 +2040,31 @@ module.exports = class FocusTasks extends Plugin {
     return file;
   }
 
+  // A note moved or renamed anywhere — by this plugin, by the file explorer, by another device —
+  // takes its place in the saved order and its fold state with it.
+  async renamed(path, old) {
+    if (!old || old === path) return;
+    let touched = false;
+    for (const list of Object.values(this.data.order.projects)) {
+      const i = list.indexOf(old);
+      if (i >= 0) { list[i] = path; touched = true; }
+    }
+    for (const map of [this.data.opened, this.data.folded]) {
+      for (const prefix of ["project:", "later:", "done:"]) {
+        if (map[prefix + old]) { delete map[prefix + old]; map[prefix + path] = true; touched = true; }
+      }
+    }
+    this.forgetScan();
+    if (touched) await this.saveAll();
+  }
+
   // Renames a project note; Obsidian updates the links to it. The saved order and fold state follow.
   async renameProject(file, name) {
     const path = normalizePath(`${file.parent?.path && file.parent.path !== "/" ? file.parent.path + "/" : ""}${fileName(name)}.md`);
     if (this.app.vault.getAbstractFileByPath(path)) { new Notice(t("noteExists", path)); return; }
     const old = file.path;
     await this.app.fileManager.renameFile(file, path);
-    for (const list of Object.values(this.data.order.projects)) {
-      const i = list.indexOf(old);
-      if (i >= 0) list[i] = path;
-    }
-    for (const map of [this.data.opened, this.data.folded]) {
-      for (const prefix of ["project:", "later:"]) {
-        if (map[prefix + old]) { delete map[prefix + old]; map[prefix + path] = true; }
-      }
-    }
-    await this.saveAll();
+    await this.renamed(path, old);
   }
 
   trash(file) {

@@ -666,6 +666,83 @@ test("moving a task to another area puts it in that area's order", async () => {
   has(plugin.data.order.tasks["area:Home"] || [], task.uid, "the order of the new area");
 });
 
+// --- what the research round found --------------------------------------------------------------
+
+test("a task linked to its project by path is not called lost", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    projectNote(a, "Sport", "Marathon");
+    writeNote(a, "Tasks/Step.md", { uid: "ft-p", type: "задача", status: "open", projects: ["[[Areas/Marathon]]"], scheduled: TODAY });
+  });
+  eq(names(plugin.orphans()), [], "it has a home: the project names its area");
+});
+
+test("the checkbox decides from the note on disk, not from what the screen remembers", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
+  });
+  const stale = plugin.tasks()[0];            // read while the task was open
+  await plugin.setFields(stale, { status: "done", completedDate: TODAY });  // another device finished it
+  await plugin.toggle(stale);                  // the user taps the box they saw as empty
+  eq(frontmatter(app, "Tasks/Run.md").status, "open", "the tap takes the note as it is now: done → open");
+});
+
+test("a repeating task is not finished as a whole when nothing can complete the occurrence", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    writeNote(a, "Tasks/Weekly.md", { uid: "ft-r", type: "задача", status: "open", area: "Sport", scheduled: TODAY, recurrence: "FREQ=WEEKLY" });
+  });
+  const okDone = await plugin.toggle(plugin.tasks()[0]);
+  eq(okDone, false, "the tick is refused");
+  eq(frontmatter(app, "Tasks/Weekly.md").status, "open", "the series is untouched");
+  ok(app.notices.some((n) => n.length), "the user is told why");
+});
+
+test("undo does not wipe what was written in the meantime", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
+  });
+  const task = plugin.tasks()[0];
+  await plugin.remove(task);
+  await app.vault.create("Tasks/Run.md", "---\nuid: ft-other\ntype: задача\nstatus: open\narea: Sport\n---\n\nсовсем другая заметка\n");
+  await plugin.undoLast();
+  ok(bodyOf(app, "Tasks/Run.md").includes("совсем другая"), "the note that exists now is kept, undo does not overwrite it");
+});
+
+test("renaming a project note from outside keeps its place and its fold", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    projectNote(a, "Sport", "Marathon");
+    projectNote(a, "Sport", "Gym");
+    taskNote(a, "Step", { area: "Sport", project: "Marathon", scheduled: TODAY });
+  });
+  plugin.data.order.projects.Sport = ["Areas/Marathon.md", "Areas/Gym.md"];
+  plugin.data.folded["project:Areas/Marathon.md"] = true;
+  await app.vault.rename(app.vault.getAbstractFileByPath("Areas/Marathon.md"), "Areas/Marathon 2027.md");
+  await plugin.renamed("Areas/Marathon 2027.md", "Areas/Marathon.md");
+  eq(plugin.data.order.projects.Sport, ["Areas/Marathon 2027.md", "Areas/Gym.md"], "the order followed the file");
+  eq(plugin.data.folded["project:Areas/Marathon 2027.md"], true, "the fold followed the file");
+});
+
+test("reading the list twice does not read the vault twice as many times", async () => {
+  const { app, plugin } = await stand((a) => {
+    for (let i = 0; i < 10; i++) areaNote(a, "Area " + i);
+    for (let i = 0; i < 300; i++) taskNote(a, "Task " + i, { area: "Area " + (i % 10), scheduled: TODAY });
+  });
+  let reads = 0;
+  const real = app.metadataCache.getFileCache.bind(app.metadataCache);
+  app.metadataCache.getFileCache = (f) => { reads++; return real(f); };
+  await plugin.collect(false);
+  const perCollect = reads;
+  reads = 0;
+  await plugin.collect(false);
+  await plugin.collect(true);
+  plugin.orphans();
+  ok(reads <= perCollect * 1.2, `three reads of the same vault cost ${reads} lookups against ${perCollect} for one`);
+});
+
 // --- fuzzing: nothing may vanish ----------------------------------------------------------------
 
 // A pseudo-random vault of areas, projects and tasks with every kind of junk seen in the wild.

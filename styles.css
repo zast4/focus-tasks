@@ -75,7 +75,11 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view .ft-grip:hover { color: var(--text-normal); }
 .focus-tasks-view .ft-area-title:hover > .ft-grip, .focus-tasks-view .ft-project:hover > .ft-grip,
 .focus-tasks-view li.ft-task:hover > .ft-grip { opacity: 1; }
-body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.45; }
+/* On a phone the grip is always there, and big enough to hit: the icon stays the same size, the
+   target around it grows. */
+body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.5; left: -1.7rem; top: 0; padding: 0.45rem 0.35rem;
+  min-width: 1.7rem; min-height: 1.7rem; align-items: center; justify-content: center; }
+body.is-mobile .focus-tasks-view .ft-area-title > .ft-grip { top: 50%; }
 
 /* Hover: a light grey band under the row, as in task trackers. */
 .focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title { border-radius: 6px; transition: background-color 0.08s; }
@@ -190,3 +194,24 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view li.ft-orphan > .ft-place { flex: none; margin-left: 0.6em; font-size: 0.8em; color: var(--text-accent); cursor: pointer;
   height: calc(var(--ft-line) * 1em / 0.8); display: inline-flex; align-items: center; white-space: nowrap; }
 .focus-tasks-view li.ft-orphan > .ft-place:hover { text-decoration: underline; }
+
+/* The box's cell is the target, not the 16 px box inside it: a finger that misses the box must not
+   land on the text and open the editor. */
+.focus-tasks-view li.ft-task > .ft-box { cursor: pointer; }
+/* Wider only to the right, into the gap before the text: to the left sits the grip, and stealing its
+   taps would turn «open the menu» into «complete the task». */
+body.is-mobile .focus-tasks-view li.ft-task > .ft-box { width: calc(var(--ft-col) + 0.4rem); }
+body.is-mobile .focus-tasks-view li.ft-task > .ft-text { margin-left: 0; }
+.focus-tasks-view li.ft-task > .ft-box > .task-list-item-checkbox:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+
+/* How late a task is, in words next to the red: colour alone is not readable by everyone. */
+.focus-tasks-view .ft-date > .ft-late { opacity: 0.85; font-variant-numeric: tabular-nums; }
+
+/* Text that carries meaning uses the muted colour, not the faint one: faint fails contrast in the
+   default themes. Faint stays for decoration (carets, grips, empty-date icon). */
+.focus-tasks-view .ft-count,
+.focus-tasks-view .ft-rest-title,
+.focus-tasks-view li.ft-done > .ft-text,
+.focus-tasks-view li.ft-done > .ft-done-project,
+.focus-tasks-view .ft-future,
+.ft-picker-weekday { color: var(--text-muted); }
