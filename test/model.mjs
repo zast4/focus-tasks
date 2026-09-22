@@ -455,6 +455,176 @@ test("areas differing only by emoji are different areas", async () => {
   eq(areaNames(await plugin.collect(false)).sort(), ["Sport", "💪Sport"]);
 });
 
+// --- the ZFG day ------------------------------------------------------------------------------
+
+test("morning: only the areas with something due today are in the focus", async () => {
+  const { plugin } = await stand((a) => {
+    for (const name of ["Work", "Home", "Sport", "Money", "Health"]) areaNote(a, name);
+    taskNote(a, "Ship it", { area: "Work", scheduled: TODAY });
+    taskNote(a, "Run", { area: "Sport", scheduled: DAY(-2) });
+    taskNote(a, "Dishes", { area: "Home" });
+    taskNote(a, "Bills", { area: "Money", scheduled: DAY(7) });
+    taskNote(a, "Doctor", { area: "Health", scheduled: DAY(1) });
+  });
+  eq(areaNames(await plugin.collect(false)).sort(), ["Sport", "Work"], "four or five areas is the norm; today it is two");
+});
+
+test("moving a task to tomorrow takes it out of today", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Ship it", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.setDate(plugin.tasks()[0], DAY(1));
+  eq(areaNames(await plugin.collect(false)), [], "nothing is due today any more");
+  const area = areaOf(await plugin.collect(true), "Work");
+  eq(names(area.future.loose.concat(area.loose)), ["Ship it"], "it is in the upcoming work");
+});
+
+test("sending a task to someday clears its date and keeps it in the area", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Later thing", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.setDate(plugin.tasks()[0], null);
+  eq(frontmatter(app, "Tasks/Later thing.md").scheduled, undefined, "no date");
+  eq(names(areaOf(await plugin.collect(true), "Work").loose), ["Later thing"], "«All» shows it in the area");
+});
+
+test("a task stuck for two weeks is still in the focus, dated in the past", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Stuck", { area: "Work", scheduled: DAY(-14) });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.loose), ["Stuck"]);
+  ok(area.loose[0].date < TODAY, "the view paints it red by this");
+});
+
+test("evening: everything checked off today is counted in its area, and gone tomorrow", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "One", { area: "Work", status: "done", completedDate: TODAY });
+    taskNote(a, "Two", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
+    taskNote(a, "Three", { area: "Work", status: "done", completedDate: DAY(-1) });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.done), ["One", "Two"], "today's two, the project's step included");
+  eq(area.done.map((x) => x.project || ""), ["", "Launch"], "each row knows where it came from");
+});
+
+test("a project whose steps are all done today leaves the focus but its area stays", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
+  });
+  const areas = await plugin.collect(false);
+  eq(areaNames(areas), ["Work"]);
+  eq(areas[0].projects.length, 0, "no empty project row in the focus");
+  eq(names(areas[0].done), ["Last step"]);
+});
+
+// --- dates and statuses as people (and other plugins) write them -------------------------------
+
+test("a date written with a time still counts as that day", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Timed", { area: "Work", scheduled: TODAY + "T10:00:00" });
+    taskNote(a, "Timed done", { area: "Work", status: "done", completedDate: TODAY + "T18:30:00+03:00" });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.loose), ["Timed"], "in the focus, not in some far future");
+  eq(names(area.done), ["Timed done"], "counted as done today");
+});
+
+test("a status in capitals is still a status", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Shouted", { area: "Work", scheduled: TODAY, status: "DONE", completedDate: TODAY });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.done), ["Shouted"]);
+  eq(area.loose.length, 0, "not open at the same time");
+});
+
+test("a nonsense date does not throw the task out of sight", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Broken date", { area: "Work", scheduled: "не дата" });
+  });
+  const area = areaOf(await plugin.collect(true), "Work");
+  eq(names(area.loose.concat(area.future.loose)), ["Broken date"]);
+});
+
+test("a number or a date object in a field does not break the row", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "42");
+    taskNote(a, "Numbered", { area: 42, scheduled: TODAY, title: 7 });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(area.name, "42");
+  eq(names(area.loose), ["7"]);
+});
+
+// --- the note changes under the plugin ----------------------------------------------------------
+
+test("a write to a task that has just been deleted fails quietly", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Doomed", { area: "Work", scheduled: TODAY });
+  });
+  const task = plugin.tasks()[0];
+  app.vault.files.delete(task.file.path);
+  const ok1 = await plugin.setDate(task, DAY(1));
+  eq(ok1, false, "the write is refused");
+  ok(app.notices.length > 0, "the user is told");
+});
+
+test("a task renamed by another device is still written to", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Old name", { area: "Work", scheduled: TODAY });
+  });
+  const task = plugin.tasks()[0];
+  await app.vault.rename(app.vault.getAbstractFileByPath("Tasks/Old name.md"), "Tasks/New name.md");
+  eq(await plugin.setDate(task, DAY(1)), true, "the write went through");
+  eq(frontmatter(app, "Tasks/New name.md").scheduled, DAY(1));
+});
+
+test("two boxes ticked at once do not overwrite each other", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "A", { area: "Work", scheduled: TODAY });
+    taskNote(a, "B", { area: "Work", scheduled: TODAY });
+  });
+  const [a1, b1] = plugin.tasks();
+  await Promise.all([plugin.toggle(a1), plugin.toggle(b1)]);
+  eq(frontmatter(app, "Tasks/A.md").status, "done");
+  eq(frontmatter(app, "Tasks/B.md").status, "done");
+});
+
+test("the same task ticked twice at once is done once", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "A", { area: "Work", scheduled: TODAY });
+  });
+  const task = plugin.tasks()[0];
+  const [first, second] = await Promise.all([plugin.toggle(task), plugin.toggle(task)]);
+  eq([first, second], [true, false], "the second click is refused while the first is in flight");
+  eq(frontmatter(app, "Tasks/A.md").status, "done");
+});
+
+test("a task moved out of the tasks folder stops being a task", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Wanderer", { area: "Work", scheduled: TODAY });
+  });
+  await app.vault.rename(app.vault.getAbstractFileByPath("Tasks/Wanderer.md"), "Notes/Wanderer.md");
+  eq(plugin.tasks().length, 0, "not a task any more");
+  eq(plugin.orphans().length, 0, "and not reported as lost either");
+});
+
 // --- order ----------------------------------------------------------------------------------------
 
 test("a dragged order is kept by uid and survives a rename", async () => {
@@ -494,6 +664,98 @@ test("moving a task to another area puts it in that area's order", async () => {
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Home"]);
   has(plugin.data.order.tasks["area:Home"] || [], task.uid, "the order of the new area");
+});
+
+// --- fuzzing: nothing may vanish ----------------------------------------------------------------
+
+// A pseudo-random vault of areas, projects and tasks with every kind of junk seen in the wild.
+function junkVault(app, seed) {
+  let x = seed;
+  const rnd = () => (x = (x * 1103515245 + 12345) % 2147483648) / 2147483648;
+  const pick = (list) => list[Math.floor(rnd() * list.length)];
+  const areas = ["Work", "🏗AI Hub", "Дом", "42", "Sport"];
+  for (const a of areas) if (rnd() > 0.2) areaNote(app, a);
+  const projects = [];
+  for (let i = 0; i < 6; i++) {
+    const name = "Project " + i;
+    const area = pick(areas);
+    if (rnd() > 0.15) { projectNote(app, area, name); projects.push({ name, area }); }
+  }
+  const dates = [TODAY, DAY(-3), DAY(-40), DAY(2), TODAY + "T09:00:00", "не дата", "", null];
+  const statuses = ["open", "OPEN", "in-progress", "done", "DONE", "cancelled", "someday", "", "none"];
+  const made = [];
+  for (let i = 0; i < 60; i++) {
+    const fields = { status: pick(statuses) };
+    if (rnd() > 0.15) fields.area = pick(areas);
+    if (rnd() > 0.5) {
+      const pr = pick(projects.length ? projects : [{ name: "Ghost" }]);
+      fields.projects = [pick([`[[${pr.name}]]`, `[[Areas/${pr.name}]]`, `[[${pr.name}|алиас]]`, pr.name])];
+    }
+    const d = pick(dates);
+    if (d) fields.scheduled = d;
+    if (fields.status.toLowerCase() === "done" && rnd() > 0.3) fields.completedDate = pick([TODAY, DAY(-1), TODAY + "T20:00"]);
+    if (rnd() > 0.7) fields.priority = pick(["low", "normal", "high", "нет", 3]);
+    if (rnd() > 0.8) fields.due = pick(dates.filter(Boolean));
+    if (rnd() > 0.9) fields.title = pick(["", "Полное название задачи", 7]);
+    const name = "T" + i + pick(["", " с пробелом", " ⚡", " (2)", "."]);
+    writeNote(app, `Tasks/${name}.md`, { uid: rnd() > 0.05 ? "ft-f" + i : "", type: pick(["задача", "task", "ЗАДАЧА"]), ...fields },
+      rnd() > 0.8 ? "описание\n- [ ] подшаг" : "");
+    made.push(name);
+  }
+  return made;
+}
+
+test("fuzz: whatever is in the vault, every open task is somewhere on screen", async () => {
+  for (let seed = 1; seed <= 40; seed++) {
+    const { plugin } = await stand((app) => junkVault(app, seed));
+    const all = await plugin.collect(true);
+    const shown = new Set();
+    for (const area of all) {
+      for (const t of [...area.loose, ...area.future.loose, ...area.done]) shown.add(t.file.path);
+      for (const pr of [...area.projects, ...area.future.projects]) for (const t of [...pr.tasks, ...(pr.later || [])]) shown.add(t.file.path);
+    }
+    for (const t of plugin.orphans()) shown.add(t.file.path);
+    const open = plugin.tasks().filter((t) => !["done", "cancelled", "someday"].includes(t.status));
+    const lost = open.filter((t) => !shown.has(t.file.path)).map((t) => `${t.file.path} (area=${t.area}, project=${t.project})`);
+    eq(lost, [], `seed ${seed}: tasks nobody can see`);
+  }
+});
+
+test("fuzz: the focus never shows a task that is not due yet", async () => {
+  for (let seed = 100; seed <= 130; seed++) {
+    const { plugin } = await stand((app) => junkVault(app, seed));
+    const focus = await plugin.collect(false);
+    for (const area of focus) {
+      const rows = [...area.loose, ...area.projects.flatMap((p) => p.tasks)];
+      const wrong = rows.filter((t) => !(t.date && t.date <= TODAY)).map((t) => `${t.text}: ${t.date}`);
+      eq(wrong, [], `seed ${seed}: not due yet but in the focus`);
+    }
+  }
+});
+
+test("fuzz: reading the same vault twice gives the same answer", async () => {
+  for (let seed = 200; seed <= 210; seed++) {
+    const { plugin } = await stand((app) => junkVault(app, seed));
+    const once = JSON.stringify((await plugin.collect(false)).map((a) => [a.name, names(a.loose), a.projects.map((p) => names(p.tasks))]));
+    const twice = JSON.stringify((await plugin.collect(false)).map((a) => [a.name, names(a.loose), a.projects.map((p) => names(p.tasks))]));
+    eq(once, twice, `seed ${seed}: the list is not stable`);
+  }
+});
+
+test("fuzz: every write leaves a note the plugin can still read", async () => {
+  for (let seed = 300; seed <= 315; seed++) {
+    const { app, plugin } = await stand((a) => junkVault(a, seed));
+    const before = plugin.tasks().length;
+    for (const task of plugin.tasks().slice(0, 8)) {
+      await plugin.setDate(task, DAY(1));
+      await plugin.toggle(task);
+      await plugin.rename(task, task.text + " ×");
+    }
+    eq(plugin.tasks().length, before, `seed ${seed}: a task was lost by writing to it`);
+    for (const task of plugin.tasks()) {
+      ok(task.uid && task.text, `seed ${seed}: a task came back broken: ${JSON.stringify(task.file.path)}`);
+    }
+  }
 });
 
 // --- scale -------------------------------------------------------------------------------------

@@ -171,6 +171,12 @@ const today = () => moment().format("YYYY-MM-DD");
 const fileName = (name) => name.replace(/[\\/#^\[\]|?*<>":]/g, "-").replace(/\s+/g, " ").trim();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const inFocus = (task) => task.date && task.date <= today();
+// A date as the plugin reads it: «2026-09-22», «2026-09-22T18:30+03:00» and a Date all mean that day.
+const day = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const text = value instanceof Date ? moment(value).format("YYYY-MM-DD") : String(value).trim();
+  return text.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || text;
+};
 const isHead = (l) => /^#{1,6}\s/.test(l);
 const headText = (l) => l.replace(/^#+\s*/, "").trim();
 const indentOf = (l) => l.match(/^\s*/)[0].replace(/\t/g, "    ").length;
@@ -1473,9 +1479,9 @@ module.exports = class FocusTasks extends Plugin {
     };
     // «Marathon», «Areas/Marathon» or «Marathon|alias» all name the same project note
     const project = link(fm.projects);
-    return { file, uid: fm.uid ? String(fm.uid) : file.path, text: String(fm.title ?? file.basename),
-      status: String(fm.status ?? STATUS_OPEN), date: fm.scheduled || null, due: fm.due || null,
-      doneDate: fm.completedDate || null, priority: fm.priority || null,
+    return { file, uid: fm.uid ? String(fm.uid) : file.path, text: String(fm.title ?? "").trim() || file.basename,
+      status: String(fm.status ?? STATUS_OPEN).trim().toLowerCase(), date: day(fm.scheduled), due: day(fm.due),
+      doneDate: day(fm.completedDate), priority: fm.priority || null,
       area: fm.area ? String(fm.area) : null, project, source: link(fm.source) };
   }
 
