@@ -27,6 +27,7 @@ const J = JSON.stringify;
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const TODAY = ymd(new Date());
 const TOMORROW = ymd(new Date(Date.now() + 864e5));
+const YESTERDAY = ymd(new Date(Date.now() - 864e5));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // --- CDP ---------------------------------------------------------------------------------------
@@ -388,6 +389,34 @@ step("a box on a row the note changed under: a notice, and the row goes back as 
     await app.vault.process(app.vault.getAbstractFileByPath('Tasks/Marathon.md'), (d) => d.replace('- [ ] Buy shoes fast now', '- [ ] Buy shoes fast'));
     v.render(); return true;`);
   await until(() => page.eval(`return !!__ft.task('Buy shoes fast')`), "Buy shoes fast back on screen");
+});
+
+step("the note changed on another device: the box completes the line as it is there now", async () => {
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')`), "Buy shoes fast on screen");
+  // the list is held still while another device moves the task's date
+  await page.eval(`const v = [...app.plugins.plugins['focus-tasks'].views][0]; v.editing = true;
+    await app.vault.process(app.vault.getAbstractFileByPath('Tasks/Marathon.md'),
+      (d) => d.replace('- [ ] Buy shoes fast ⏳ ${TODAY}', '- [ ] Buy shoes fast ⏳ ${YESTERDAY}'));
+    return true;`);
+  await click(`__ft.at(__ft.task('Buy shoes fast').querySelector('input'))`);
+  await fileHas("Tasks/Marathon.md", `- [x] Buy shoes fast ⏳ ${YESTERDAY} ✅ ${TODAY}`);
+  await page.eval(`const v = [...app.plugins.plugins['focus-tasks'].views][0]; v.editing = false;
+    await app.vault.process(app.vault.getAbstractFileByPath('Tasks/Marathon.md'),
+      (d) => d.replace(/- \\[x\\] Buy shoes fast[^\\n]*/, '- [ ] Buy shoes fast ⏳ ${TODAY}'));
+    v.render(); return true;`);
+  await fileHas("Tasks/Marathon.md", `- [ ] Buy shoes fast ⏳ ${TODAY}\n`);
+  await until(() => page.eval(`const r = __ft.task('Buy shoes fast'); return !!r && !r.closest('.ft-done-block')`), "Buy shoes fast back in the focus");
+});
+
+step("the note saved over the change by another device: a notice says so", async () => {
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')`), "Buy shoes fast on screen");
+  await click(`__ft.at(__ft.task('Buy shoes fast').querySelector('input'))`);
+  await fileHas("Tasks/Marathon.md", `- [x] Buy shoes fast ⏳ ${TODAY} ✅ ${TODAY}`);
+  // the other device wins the race and saves the note as it was
+  await page.eval(`await app.vault.process(app.vault.getAbstractFileByPath('Tasks/Marathon.md'),
+    (d) => d.replace(/- \\[x\\] Buy shoes fast[^\\n]*/, '- [ ] Buy shoes fast ⏳ ${TODAY}')); return true;`);
+  await until(() => page.eval(`return [...document.querySelectorAll('.notice')].some((n) => /did not stick/.test(n.textContent))`), "the «did not stick» notice", 8000);
+  await until(() => page.eval(`const r = __ft.task('Buy shoes fast'); return !!r && !r.closest('.ft-done-block')`), "Buy shoes fast back in the focus");
 });
 
 step("drag a task onto an area header moves it into the area's inbox", async () => {

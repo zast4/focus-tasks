@@ -34,7 +34,9 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
   - `open(file)` never replaces the pane itself with the note.
 - **FocusSettingTab**.
 - **Plugin** — settings + `data` (`folded`, `opened`, `order`) in `data.json`; «All» per device in
-  local storage; `classify` / `notes` / `fileTasks` / `collect` (the model); task edits (`replace`, `setDate`,
+  local storage; `classify` / `notes` / `fileTasks` / `collect` (the model); task edits (`change` — rewrites the task's line
+  wherever it is now, from the line as the note has it, and `watch` warns when the note is saved over
+  the change a moment later; `replace`, `setDate`,
   `setDates`, `moveTasks`, `remove` with undo, `rename`, `insertAfter`, `addLine`, `toggle`); areas and projects
   (`createArea`, `createProject`, `renameProject`, `deleteProject` / `deleteArea`, linked notes:
   `linked`, `setLinked`, `pickNote`, `areaFromNote`, `projectFromNote`).
@@ -45,6 +47,8 @@ Other tools read the same files, so keep these stable:
 
 - a task file = a note in the folder with `area:` in its frontmatter; `type:` = the project word
   (`project` / `проект`) makes it a project, anything else an area;
+- other tools write the same notes (a phone over Sync, scripts): a task is found by its line, and
+  when that has changed, by the nearest line with the same text (`lineOf`);
 - a task = `- [ ] text` with Tasks emoji dates: ⏳ scheduled (the focus date), 📅 due, 🛫 start,
   ✅ done; the earliest of ⏳📅🛫 is the date the view shows and edits (its emoji is kept); `[x]` with
   ✅ today shows under «Completed» of its area (an area with only those stays in the focus);
@@ -65,7 +69,7 @@ node test/e2e.mjs                                      # own ✅ toggle, no Task
 node test/e2e.mjs --with-tasks "<vault>/.obsidian/plugins/obsidian-tasks-plugin"
 ```
 
-Both must pass (35/35) before a release. On failure the vault stays open and screenshots go to
+Both must pass (37/37) before a release. On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

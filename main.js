@@ -68,6 +68,7 @@ const STRINGS = {
     unlinkNote: "Unlink the note", linkedNote: "Linked note: {0}",
     deleteProject: "Delete project", noDate: "No date (someday)", tasksDialog: "Tasks dialog (date, priority)",
     openInNote: "Open in note", delete: "Delete", changed: "The task changed in the note — try again",
+    overwritten: "The change did not stick: another device or plugin saved “{0}” over it",
     deleted: "Deleted: {0}", undo: "Undo", noteExists: "Note “{0}” already exists",
     areaExists: "Area “{0}” already exists", areaCreated: "Area “{0}” created",
     projectCreated: "Project “{0}” created", projectDeleted: "Project “{0}” deleted",
@@ -112,6 +113,7 @@ const STRINGS = {
     unlinkNote: "Отвязать заметку", linkedNote: "Привязанная заметка: {0}",
     deleteProject: "Удалить проект", noDate: "Без даты (в отложку)", tasksDialog: "Окно Tasks (дата, приоритет)",
     openInNote: "Открыть в заметке", delete: "Удалить", changed: "Задача изменилась в заметке, попробуй ещё раз",
+    overwritten: "Правка не сохранилась: заметку «{0}» перезаписало другое устройство или плагин",
     deleted: "Удалено: {0}", undo: "Вернуть", noteExists: "Заметка «{0}» уже есть",
     areaExists: "Область «{0}» уже есть", areaCreated: "Область «{0}» создана",
     projectCreated: "Проект «{0}» создан", projectDeleted: "Проект «{0}» удалён",
@@ -199,9 +201,20 @@ function blockAt(lines, i) {
   return end;
 }
 
-// The line of `task` in `lines`: where it was read, else the same text elsewhere (lines above it
-// changed); -1 when it is gone.
-const lineOf = (lines, task) => (lines[task.lineNo] === task.line ? task.lineNo : lines.indexOf(task.line));
+// The line of `task` in `lines`: where it was read, the same line elsewhere (lines above it changed),
+// or the nearest line with the same task text (another device or a script has edited its dates in the
+// meantime); -1 when the task is gone.
+function lineOf(lines, task) {
+  if (lines[task.lineNo] === task.line) return task.lineNo;
+  const exact = lines.indexOf(task.line);
+  if (exact >= 0) return exact;
+  let near = -1;
+  for (let i = 0; i < lines.length; i++) {
+    const parsed = parseLine(lines[i]);
+    if (parsed?.text === task.text && (near < 0 || Math.abs(i - task.lineNo) < Math.abs(near - task.lineNo))) near = i;
+  }
+  return near;
+}
 
 // Where the blocks of `tasks` are in `lines`, top down: [{task, i, end}]; a task nested in another
 // one's block goes along with it and has no span of its own. null when one is gone (`loose`: skipped).
@@ -1172,7 +1185,7 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => p.setDate(task, day(1))));
     menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => p.setDate(task, null)));
     menu.addSeparator();
-    if (p.tasksApi()) menu.addItem((i) => i.setTitle(t("tasksDialog")).setIcon("calendar-days").onClick(() => p.edit(task)));
+    if (p.tasksApi()) menu.addItem((i) => i.setTitle(t("tasksDialog")).setIcon("calendar-days").onClick(() => p.tasksDialog(task)));
     menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file, null, { line: task.lineNo })));
     menu.addItem((i) => {
       i.setTitle(t("delete")).setIcon("trash-2").onClick(() => p.remove(task));
@@ -1506,27 +1519,50 @@ module.exports = class FocusTasks extends Plugin {
 
   // --- tasks --------------------------------------------------------------------------------
 
-  // Swap a task's line for new text (Tasks may return two lines: a recurring task's next copy).
-  async replace(task, text) {
-    let ok = false;
+  // Rewrites the task's line — wherever it is now — with `fn(the line as it is in the note)`, so an
+  // edit made meanwhile on another device is not overwritten. `fn` may return several lines (Tasks
+  // makes the next copy of a recurring task) or null to leave the note alone.
+  async change(task, fn) {
+    let ok = false, before = null;
     await this.app.vault.process(task.file, (data) => {
       const lines = data.split("\n");
       const i = lineOf(lines, task);
       if (i < 0) return data;
+      const text = fn(lines[i]);
+      if (text == null) return data;
       ok = true;
+      before = lines[i];
       lines.splice(i, 1, ...text.replace(/\n$/, "").split("\n"));
       task.lineNo = i;
+      task.line = text.replace(/\n$/, "").split("\n")[0];
       return lines.join("\n");
     });
-    if (ok) task.line = text.replace(/\n$/, "").split("\n")[0];
-    else new Notice(t("changed"));
+    if (ok) this.watch(task.file, before, task.line);
+    if (!ok) {
+      new Notice(t("changed"));
+      console.warn("focus-tasks: the task is gone from", task.file.path, { lineNo: task.lineNo, line: task.line });
+    }
     return ok;
+  }
+
+  // Swap a task's line for new text.
+  replace(task, text) { return this.change(task, () => text); }
+
+  // Sync from another device (or another plugin) can save its own copy of a note a moment after a
+  // change; then the line is back as it was and nothing on screen says so.
+  watch(file, before, after) {
+    setTimeout(async () => {
+      const lines = (await this.app.vault.read(file)).split("\n");
+      if (lines.includes(after) || !lines.includes(before)) return;
+      new Notice(t("overwritten", file.basename), 10000);
+      console.warn("focus-tasks: the note was saved over the change", file.path, { before, after });
+    }, 2000);
   }
 
   // Changes the date the row shows (its emoji kept: ⏳ stays ⏳, 📅 stays 📅); a task without one gets
   // ⏳; null drops it.
   async setDate(task, day) {
-    await this.replace(task, withDate(task.line, task.mark, day));
+    await this.change(task, (line) => withDate(line, parseLine(line)?.mark, day));
   }
 
   // One date for several tasks, one write per note.
@@ -1538,7 +1574,7 @@ module.exports = class FocusTasks extends Plugin {
         for (const task of tasks.filter((x) => x.file === file)) {
           const i = lineOf(lines, task);
           if (i < 0) { missed = true; continue; }
-          lines[i] = task.line = withDate(lines[i], task.mark, day);
+          lines[i] = task.line = withDate(lines[i], parseLine(lines[i])?.mark, day);
           task.lineNo = i;
         }
         return lines.join("\n");
@@ -1653,12 +1689,14 @@ module.exports = class FocusTasks extends Plugin {
     };
   }
 
-  // New text for a task, its dates kept.
+  // New text for a task, the dates of its line kept.
   async rename(task, text) {
-    const m = task.line.match(/^(\s*[-*] \[.\] )(.*)$/);
-    if (!m) return;
-    const dates = [...m[2].matchAll(DATE_RE)].map((d) => d[0].trim());
-    await this.replace(task, m[1] + text + (dates.length ? " " + dates.join(" ") : ""));
+    await this.change(task, (line) => {
+      const m = line.match(/^(\s*[-*] \[.\] )(.*)$/);
+      if (!m) return null;
+      const dates = [...m[2].matchAll(DATE_RE)].map((d) => d[0].trim());
+      return m[1] + text + (dates.length ? " " + dates.join(" ") : "");
+    });
     task.text = text;
   }
 
@@ -1694,13 +1732,13 @@ module.exports = class FocusTasks extends Plugin {
     this.toggling.add(key);
     try {
       const api = this.tasksApi();
-      return await this.replace(task, api ? api.executeToggleTaskDoneCommand(task.line, task.file.path) : toggleLine(task.line));
+      return await this.change(task, (line) => (api ? api.executeToggleTaskDoneCommand(line, task.file.path) : toggleLine(line)));
     } finally {
       setTimeout(() => this.toggling.delete(key), 600);  // until the list has been re-read
     }
   }
 
-  async edit(task) {
+  async tasksDialog(task) {
     const api = this.tasksApi();
     if (!api) return;
     const line = await api.editTaskLineModal(task.line);
