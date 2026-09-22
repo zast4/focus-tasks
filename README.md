@@ -69,8 +69,9 @@ the vault); «All» is remembered per device.
 
 ## Install (manual, for testing)
 
-1. Download `focus-tasks.zip` (or copy `main.js`, `manifest.json`, `styles.css`).
-2. Put the three files into `<your vault>/.obsidian/plugins/focus-tasks/`.
+1. Unzip `focus-tasks-<version>.zip` into `<your vault>/.obsidian/plugins/` — you get
+   `.obsidian/plugins/focus-tasks/` (or copy `main.js`, `manifest.json`, `styles.css` there yourself).
+2. Restart Obsidian or reload the plugin list.
 3. *Settings → Community plugins* → turn off Restricted mode if needed → enable **Focus Tasks**.
 4. Click the ✓≡ ribbon icon, then «+ Area».
 
@@ -132,8 +133,9 @@ passes (`--keep` leaves it).
 или правый клик — меню. Внизу — «Все» / «Скрыть», «+ Область», «+ Область из заметки»,
 «Свернуть всё» / «Развернуть всё». Язык интерфейса — в настройках (Auto / English / Русский).
 
-Установка для теста: положить `main.js`, `manifest.json`, `styles.css` в
-`<хранилище>/.obsidian/plugins/focus-tasks/` и включить плагин в *Настройки → Сторонние плагины*.
+Установка для теста: распаковать `focus-tasks-<версия>.zip` в `<хранилище>/.obsidian/plugins/`
+(получится папка `focus-tasks`), перезапустить Obsidian и включить плагин в
+*Настройки → Сторонние плагины*.
 
 ## License
 
