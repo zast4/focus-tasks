@@ -1,0 +1,8 @@
+node_modules/
+dist/
+test/focus-tasks-e2e*/
+test/shots/
+.DS_Store
+test/dbg.mjs
+test/dbgclick.mjs
+test/dbgdrag.mjs

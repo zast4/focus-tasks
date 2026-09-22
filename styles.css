@@ -1,0 +1,155 @@
+/* Focus Tasks: the view (a pane or a ```focus-tasks``` block) and a note that holds one
+   (`cssclasses: [focus-tasks-note]` hides its properties and backlinks). */
+.focus-tasks-note .metadata-container { display: none !important; }
+.focus-tasks-note .embedded-backlinks { display: none !important; }
+
+/* One grid for everything: columns of --ft-col, each level one column further right.
+     area:    [caret][emoji] Name
+     project:        [caret][📁] Name
+     task:                  [☐] Text      ← loose tasks and project steps share this column
+   Cell contents are centred, so carets, icons and checkboxes line up vertically. Sizes in rem:
+   the area title has a bigger font and must not stretch its cells. */
+.focus-tasks-view { --ft-col: 1.75rem; --ft-cb: var(--checkbox-size, 1rem); }
+body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spares width for the text */
+
+
+.focus-tasks-view .ft-area { padding: 0.7em 0 0.4em; }
+.focus-tasks-view .ft-area + .ft-area { border-top: 1px solid var(--background-modifier-border); }
+
+.focus-tasks-view .ft-caret,
+.focus-tasks-view .ft-emoji,
+.focus-tasks-view .ft-icon { flex: none; width: var(--ft-col); display: inline-flex; justify-content: center; }
+.focus-tasks-view .ft-caret { cursor: pointer; color: var(--text-faint); }
+.focus-tasks-view .ft-caret svg { width: 1rem; height: 1rem; }
+.focus-tasks-view .ft-emoji { font-size: 1.15rem; }
+
+.focus-tasks-view .ft-area-title { display: flex; align-items: center; font-size: 1.3em; font-weight: 700; color: var(--text-normal); margin-bottom: 0.25em; }
+.focus-tasks-view .ft-area-title > .ft-emoji + span { margin-left: 0.2rem; }
+
+.focus-tasks-view .ft-project { display: flex; align-items: flex-start; margin: 0.55em 0 0.1em var(--ft-col); font-weight: 600; color: var(--text-muted); line-height: 1.5; }
+.focus-tasks-view .ft-project > .ft-caret { height: 1.5em; align-items: center; }
+.focus-tasks-view .ft-project > .ft-link { flex: 0 1 auto; min-width: 0; margin-left: 0.2rem; }
+.focus-tasks-view .ft-project > .ft-count { flex: none; }
+
+.focus-tasks-view .ft-link { cursor: pointer; }
+.focus-tasks-view .ft-link:hover { color: var(--text-accent); }
+.focus-tasks-view .ft-count { margin-left: 0.5em; font-size: 0.8rem; font-weight: 400; color: var(--text-faint); align-self: center; }
+.focus-tasks-view .ft-plus { flex: none; display: inline-flex; margin-left: auto; padding: 0.15rem 0.3rem; cursor: pointer; color: var(--text-faint); align-self: center; }
+.focus-tasks-view .ft-plus svg { width: 1rem; height: 1rem; }
+.focus-tasks-view .ft-plus:hover { color: var(--text-accent); }
+.focus-tasks-view .ft-more { flex: none; display: inline-flex; padding: 0.15rem 0.3rem; cursor: pointer; color: var(--text-faint); align-self: center; }
+.focus-tasks-view .ft-more svg { width: 1rem; height: 1rem; }
+.focus-tasks-view .ft-caret:hover, .focus-tasks-view .ft-more:hover { color: var(--text-normal); }
+/* ⋯ shows on hover on the desktop, always on the phone */
+.focus-tasks-view .ft-more { opacity: 0; transition: opacity 0.1s; }
+.focus-tasks-view .ft-area-title:hover .ft-more, .focus-tasks-view .ft-project:hover .ft-more, body.is-mobile .focus-tasks-view .ft-more { opacity: 1; }
+
+/* Tasks: two columns in; nested steps («All») one more column per level. The theme pulls the checkbox
+   into the list indent with a negative margin — reset it and centre the box in its column. */
+.focus-tasks-view ul.ft-list { margin: 0.1em 0; padding-inline-start: 0; }
+.focus-tasks-view li.ft-task { cursor: default; list-style: none; display: flex; align-items: flex-start; padding: 0.15em 0; text-indent: 0;
+  margin: 0 0 0 calc(var(--ft-col) * (2 + var(--ft-level, 0))) !important; }
+.focus-tasks-view li.ft-task > .task-list-item-checkbox { flex: none; position: static;
+  margin: 0.3em calc((var(--ft-col) - var(--ft-cb)) / 2) 0 calc((var(--ft-col) - var(--ft-cb)) / 2) !important; }
+.focus-tasks-view li.ft-task > .ft-text { flex: 1 1 auto; min-width: 0; margin-left: 0.2rem; }
+
+/* A project's steps: a line under the project's caret, left of the checkbox column. */
+.focus-tasks-view .ft-project-body { position: relative; }
+.focus-tasks-view .ft-project-body::before { content: ""; position: absolute; top: 0.1em; bottom: 0.3em;
+  left: calc(var(--ft-col) * 1.5); border-left: 1px solid var(--background-modifier-border); }
+
+.focus-tasks-view .ft-area > .ft-empty { margin-left: calc(var(--ft-col) * 2); }
+.focus-tasks-view .ft-empty { color: var(--text-muted); }
+.ft-input { width: 100%; margin-bottom: 0.8em; }
+
+/* Drag and drop: a grip just left of every row, as in TickTick — in the free column before the
+   checkbox / caret, out of the flow so it moves nothing (hover on the desktop, always on the phone). */
+.focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title { position: relative; }
+.focus-tasks-view .ft-grip { position: absolute; left: -1.3rem; top: 0.3em; display: inline-flex; padding: 0.1rem; cursor: grab;
+  color: var(--text-faint); touch-action: none; opacity: 0; transition: opacity 0.1s; }
+.focus-tasks-view .ft-area-title > .ft-grip { top: 50%; transform: translateY(-50%); }
+.focus-tasks-view .ft-grip svg { width: 1rem; height: 1rem; }
+.focus-tasks-view .ft-grip:hover { color: var(--text-normal); }
+.focus-tasks-view .ft-area-title:hover > .ft-grip, .focus-tasks-view .ft-project:hover > .ft-grip,
+.focus-tasks-view li.ft-task:hover > .ft-grip { opacity: 1; }
+body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.45; }
+
+/* Hover: a light grey band under the row, as in task trackers. */
+.focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title { border-radius: 6px; transition: background-color 0.08s; }
+.focus-tasks-view li.ft-task:hover, .focus-tasks-view .ft-project:hover, .focus-tasks-view .ft-area-title:hover { background-color: var(--background-modifier-hover); }
+body.is-mobile .focus-tasks-view li.ft-task:hover, body.is-mobile .focus-tasks-view .ft-project:hover,
+body.is-mobile .focus-tasks-view .ft-area-title:hover { background-color: transparent; }
+.focus-tasks-view .ft-dragging { opacity: 0.35; }
+.focus-tasks-view .ft-drop-into { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
+.ft-drop-line { position: fixed; height: 2px; background: var(--interactive-accent); border-radius: 1px; pointer-events: none; z-index: 1000; display: none; }
+body.ft-drag-active, body.ft-drag-active * { user-select: none !important; cursor: grabbing !important; }
+
+/* In-place editing of a task's text, and the empty row of the header "+". */
+.focus-tasks-view .ft-text { cursor: text; }
+.focus-tasks-view .ft-text.is-editing { outline: none; background: var(--background-modifier-hover); border-radius: 4px; box-shadow: 0 0 0 3px var(--background-modifier-hover); white-space: pre-wrap; }
+.focus-tasks-view .ft-text[data-placeholder]:empty::before { content: attr(data-placeholder); color: var(--text-faint); }
+
+/* The date on the right: one column, one format; a click opens the picker. */
+.focus-tasks-view li.ft-task > .ft-date { flex: none; margin: 0.2em 0 0 0.8em; min-width: 4.8em; text-align: right; font-size: 0.8em;
+  font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap; display: inline-flex; justify-content: flex-end; }
+.focus-tasks-view .ft-date.is-today { color: var(--color-green); }
+.focus-tasks-view .ft-date.is-past { color: var(--text-error); }
+.focus-tasks-view .ft-date.is-future { color: var(--interactive-accent); }
+.focus-tasks-view .ft-date.is-empty { color: var(--text-faint); opacity: 0; }
+.focus-tasks-view li.ft-task:hover > .ft-date.is-empty { opacity: 0.8; }
+body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
+.focus-tasks-view .ft-date svg { width: 0.95rem; height: 0.95rem; }
+.focus-tasks-view .ft-date.is-active { outline: 1px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
+
+/* The date picker (Notion-like): a floating card, the month on a 7-column grid. */
+.ft-picker { position: fixed; z-index: 1000; width: 17.5rem; max-width: calc(100vw - 16px); padding: 0.6rem; border-radius: 12px;
+  background: var(--background-primary); border: 1px solid var(--background-modifier-border); box-shadow: var(--shadow-l);
+  font-size: 0.9rem; color: var(--text-normal); }
+.ft-picker-input { width: 100%; height: 2.2rem; padding: 0 0.6rem; border-radius: 8px; font-size: 0.95rem;
+  background: var(--background-modifier-form-field); border: 1px solid var(--background-modifier-border); }
+.ft-picker-input:focus { border-color: var(--interactive-accent); box-shadow: none; }
+.ft-picker-input.is-invalid { border-color: var(--text-error); }
+.ft-picker-head { display: flex; align-items: center; justify-content: space-between; margin: 0.7rem 0.2rem 0.4rem; }
+.ft-picker-title { font-weight: 600; font-size: 1rem; }
+.ft-picker-nav { display: flex; align-items: center; gap: 0.1rem; }
+.ft-picker button { background: transparent; box-shadow: none; border: none; padding: 0.2rem 0.45rem; height: auto;
+  color: var(--text-muted); font-size: 0.85rem; cursor: pointer; border-radius: 6px; }
+.ft-picker button:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.ft-picker-arrow svg { width: 1rem; height: 1rem; }
+.ft-picker-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 0.15rem; }
+.ft-picker-weekday { text-align: center; font-size: 0.75rem; color: var(--text-faint); padding: 0.2rem 0; }
+.ft-picker-day { display: flex; align-items: center; justify-content: center; aspect-ratio: 1; border-radius: 8px; cursor: pointer;
+  font-variant-numeric: tabular-nums; }
+.ft-picker-day:hover { background: var(--background-modifier-hover); }
+.ft-picker-day.is-other { color: var(--text-faint); }
+.ft-picker-day.is-today { color: var(--interactive-accent); font-weight: 700; }
+.ft-picker-day.is-selected { background: var(--interactive-accent); color: var(--text-on-accent); font-weight: 600; }
+.ft-picker-foot { border-top: 1px solid var(--background-modifier-border); margin-top: 0.5rem; padding-top: 0.4rem; }
+.ft-picker-foot button { width: 100%; text-align: left; }
+
+/* «Show upcoming» at the bottom of an area; revealed rows are dimmed. */
+.focus-tasks-view .ft-future { display: inline-flex; align-items: center; gap: 0.4em; margin: 0.35em 0 0.1em calc(var(--ft-col) * 2 + (var(--ft-col) - var(--ft-cb)) / 2);
+  font-size: 0.8em; color: var(--text-faint); cursor: pointer; border-radius: 6px; padding: 0.1em 0.4em 0.1em 0; }
+.focus-tasks-view .ft-future:hover { color: var(--interactive-accent); }
+.focus-tasks-view .ft-future-icon { display: inline-flex; }
+.focus-tasks-view .ft-future-icon svg { width: 0.95rem; height: 0.95rem; }
+.focus-tasks-view .is-later { opacity: 0.7; }
+.focus-tasks-view .is-later:hover { opacity: 1; }
+
+/* The bottom of the view: «All» / «Hide», new areas, collapse / expand all, and the title of
+   the areas with nothing due. */
+.focus-tasks-view .ft-foot { display: flex; gap: 0.4rem; margin: 0.9em 0 0.4em; padding-top: 0.6em; border-top: 1px solid var(--background-modifier-border); }
+.focus-tasks-view .ft-foot-button { display: inline-flex; align-items: center; gap: 0.35rem; background: transparent; box-shadow: none; border: none;
+  padding: 0.25rem 0.6rem; height: auto; font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-radius: 6px; }
+.focus-tasks-view .ft-foot-button:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.focus-tasks-view .ft-foot-button svg { width: 1rem; height: 1rem; }
+.focus-tasks-view .ft-rest-title { margin: 1.4em 0 0.2em; font-size: 0.8em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-faint); }
+.focus-tasks-view .ft-empty-add { cursor: text; border-radius: 6px; }
+.focus-tasks-view .ft-empty-add:hover { background-color: var(--background-modifier-hover); color: var(--text-normal); }
+.focus-tasks-view .ft-foot { flex-wrap: wrap; }
+.focus-tasks-view .ft-foot-gap { flex: 1; }
+
+/* As a pane: room on the left for the grips, a readable width. */
+.focus-tasks-pane { padding: 0.5rem 1.2rem 2rem 2.2rem !important; }
+.focus-tasks-pane > .focus-tasks-view { max-width: 46rem; margin: 0 auto; }
+.focus-tasks-view .ft-onboarding { padding: 1.2em 0 0.4em; font-size: 1.05em; }
