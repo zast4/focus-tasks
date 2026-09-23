@@ -881,6 +881,12 @@ step("two builds side by side: the settings say which one runs, and swap them", 
     throw new Error(`the row does not say what runs: ${J(seen.desc)}`);
   if (!/3/.test(seen.desc)) throw new Error(`the row does not say how far ahead the test build is: ${J(seen.desc)}`);
   if (seen.buttons.length !== 2) throw new Error(`expected both modes as buttons, got ${J(seen.buttons)}`);
+  // reading the note again (which is what opening the settings does) must not make the plugin look
+  // like somebody else's install for a moment: that is how the «work in progress» line slipped in
+  await plugin(`const answer = p.readBuild(); p.refresh(); await answer; return true;`);
+  await settle();
+  if (await page.eval(`return !!__ft.view()?.querySelector('.ft-wip')`))
+    throw new Error("the «work in progress» line appeared on a delivered build");
   // back to the stable one, from the settings, without anyone's help
   await plugin(`return p.switchBuild('stable');`);
   await until(async () => JSON.parse(fs.readFileSync(path.join(dir, "build.json"), "utf8")).mode === "stable",

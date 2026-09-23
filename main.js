@@ -2544,14 +2544,17 @@ module.exports = class FocusTasks extends Plugin {
   // (BRAT, the store), none of this exists and the plugin never mentions it.
   buildPath(...parts) { return [this.manifest.dir, ...parts].join("/"); }
 
+  // The answer is only replaced once it is known. Emptying the field first left a gap of one await
+  // in which the plugin looked like somebody else's install — and a redraw in that gap put the
+  // «still being built» line in front of the one person it is never meant for.
   async readBuild() {
-    this.build = null;
+    let build = null;
     try {
-      const raw = await this.app.vault.adapter.read(this.buildPath(BUILD_NOTE));
-      const build = JSON.parse(raw);
-      if (build && typeof build === "object") this.build = build;
+      const parsed = JSON.parse(await this.app.vault.adapter.read(this.buildPath(BUILD_NOTE)));
+      if (parsed && typeof parsed === "object") build = parsed;
     } catch { /* an ordinary install: no note, no modes, nothing to show */ }
-    return this.build;
+    this.build = build;
+    return build;
   }
 
   // Which of the two are on disk. A mode with a missing file is not offered — half a build is worse
