@@ -23,7 +23,8 @@
  * A click on a task's text edits it in place (Enter saves and opens the next row, Esc cancels;
  * ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date). The date on the right opens a date picker.
  * The checkbox completes a task (`status: done` + `completedDate`); for the rest of the day it stays
- * at the bottom of its area under «Completed», where its box brings it back. A project whose every
+ * at the bottom of its area, under a hairline, where its box brings it back; the green ✓N in the
+ * area's own title counts them and folds them away. A project whose every
  * step was checked off today keeps its row too, marked «done N», so the next step has a place.
  * The grip on the left drags areas, projects and tasks; a plain click on it opens the row's menu.
  * Shift-click selects every task from the last clicked one, Cmd/Ctrl-click adds or drops one; the
@@ -105,6 +106,7 @@ const STRINGS = {
     sFolder: "Folder", sFolderDesc: "Where the notes of areas and projects live. Notes linked to them can be anywhere.",
     sTasksFolder: "Tasks folder", sTasksFolderDesc: "Where task notes are kept, one note per task.",
     sLanguage: "Language", sLanguageDesc: "Interface language (Auto follows Obsidian).",
+    doneToday: "Done today: {0}", doneHide: "Hide what is done", doneShow: "Show what is done",
     oldFormat: "{0} tasks here are still checkbox lines from version 0.1.0 — a task is a note of its own now, so they are not shown. ",
     oldFormatHow: "How to move them",
     sCompanion: "TaskNotes",
@@ -171,6 +173,7 @@ const STRINGS = {
     sFolder: "Папка", sFolderDesc: "Где лежат заметки областей и проектов. Привязанные к ним заметки могут быть где угодно.",
     sTasksFolder: "Папка задач", sTasksFolderDesc: "Где лежат заметки задач, по одной заметке на задачу.",
     sLanguage: "Язык", sLanguageDesc: "Язык интерфейса (Auto — как в Obsidian).",
+    doneToday: "Сделано сегодня: {0}", doneHide: "Скрыть выполненные", doneShow: "Показать выполненные",
     oldFormat: "Здесь ещё {0} задач строками-чекбоксами из версии 0.1.0 — теперь задача это отдельная заметка, поэтому их не видно. ",
     oldFormatHow: "Как перенести",
     sCompanion: "TaskNotes",
@@ -838,6 +841,17 @@ class FocusRenderer extends MarkdownRenderChild {
       const count = title.createSpan({ cls: "ft-count", text: tasks.length ? String(tasks.length) : area.done.length ? t("allDone", area.done.length) : "" });
       if (!tasks.length && area.done.length) count.addClass("is-done");
     }
+    // What was finished here today lives in the area's own header: a second grey row under
+    // «Show upcoming» read as its twin and made the bottom of every area look like a footer.
+    if (!all && open && area.done.length) {
+      const key = "done:" + area.name;
+      const shown = p.isShown(key, false);
+      const chip = title.createSpan({ cls: "ft-done-chip", attr: { "aria-label": t(shown ? "doneHide" : "doneShow") } });
+      chip.toggleClass("is-off", !shown);
+      setIcon(chip.createSpan({ cls: "ft-done-tick" }), "check");
+      chip.createSpan({ text: String(area.done.length) });
+      chip.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, false); p.refresh(); };
+    }
     this.plus(title, t("addToArea"), async () => ({ area: area.name, project: null, noDate: all }),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
     this.more(title, (menu) => this.areaMenu(menu, area));
@@ -871,18 +885,16 @@ class FocusRenderer extends MarkdownRenderChild {
     if (area.done.length) await this.completed(box, area.done, "done:" + area.name);
   }
 
-  // «Completed · N» at the bottom of an area: everything checked off there today, steps of its
+  // The day's closed work at the bottom of an area: everything checked off there today, steps of its
   // projects included — each row carries the project it belongs to. Open unless folded; a box
   // unchecks its task. Not selectable, not draggable.
   async completed(box, done, key) {
     const p = this.plugin;
     const open = p.isShown(key, false);
-    const block = box.createDiv({ cls: "ft-done-block" });  // not a direct list of the area: «+» adds after the loose tasks
-    const head = block.createDiv({ cls: "ft-future ft-done-title" });
-    setIcon(head.createSpan({ cls: "ft-future-icon" }), open ? "chevron-down" : "chevron-right");
-    head.createSpan({ text: `${t("completed")} · ${done.length}` });
-    head.onclick = async () => { await p.toggleShown(key, false); p.refresh(); };
     if (!open) return;
+    // No heading of its own — the ✓ in the area's title counts them and folds them. A hairline is
+    // enough to say «this part of the day is over».
+    const block = box.createDiv({ cls: "ft-done-block" });  // not a direct list of the area: «+» adds after the loose tasks
     const ul = block.createEl("ul", { cls: "contains-task-list ft-list" });
     for (const task of done) {
       const li = ul.createEl("li", { cls: "task-list-item ft-task ft-done" });  // no data-task: themes strike the whole row

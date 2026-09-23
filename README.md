@@ -40,7 +40,7 @@ What you can do in the view:
 
 | | |
 |---|---|
-| Complete a task | click its checkbox; for the rest of the day it stays at the bottom of its area under «Completed» (its box brings it back) |
+| Complete a task | click its checkbox; for the rest of the day it stays at the bottom of its area under a hairline, and the green ✓N in the area's title folds it away (its box brings it back) |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** cancels |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date |
@@ -142,7 +142,7 @@ Try these in a new vault (or a copy of yours):
 3. Grip on the area → «New project» → the project note, and `- 📁 [[…]]` in the area note.
 4. **+** on the project → steps; click a step → ⌘1 → «Today» on the right, the area moves to the top.
 5. ⌘2 / ⌘4 / ⌘3 on a task; the date on the right → picker: «Today», a day, «Clear date».
-6. Check a task: `[x] … ✅ <today>` in the note; it moves to «Completed» at the bottom of its area;
+6. Check a task: it moves to the bottom of its area, and the area's title grows a green ✓1;
    its box there brings it back.
 7. Drag a task onto an area header; drag a task between two others; drag an area above another.
 8. Click a task, Shift-click another two rows down: three rows selected; the grip menu → «Tomorrow»
@@ -193,8 +193,9 @@ passes (`--keep` leaves it).
   дневным фокусом сверху. Свои здесь только `uid` и `area`; чужие ключи обе стороны сохраняют.
   Ставится в один клик: **Настройки → Focus Tasks → TaskNotes**.
 
-Отмеченная задача до конца дня остаётся внизу своей области в блоке «Выполненные» (галочка там
-возвращает её в работу): видно, что сделано за день.
+Отмеченная задача до конца дня остаётся внизу своей области под тонкой линией (галочка там
+возвращает её в работу), а в заголовке области появляется зелёная ✓N: видно, что сделано за день,
+и одним кликом это сворачивается.
 
 Проект, в котором сегодня закрыли последнюю задачу, тоже не исчезает: до конца дня он стоит
 на своём месте, вместо счётчика — зелёное «сделано N», а «+» рядом заводит следующий шаг.

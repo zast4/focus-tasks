@@ -271,9 +271,14 @@ step("the box completes the task: status, the day, and the area's «Completed» 
   if (await page.eval(`return !!__ft.task('Lace them').closest('.ft-project-body')`)) throw new Error("a project keeps a Completed block of its own");
   const tag = await page.eval(`return __ft.task('Lace them').querySelector('.ft-done-project')?.textContent.trim() || null`);
   if (tag !== "📁Marathon") throw new Error("the done row does not name its project: " + J(tag));
-  await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
+  // the ✓N in the area's title is what counts them and folds them — there is no second grey row
+  if (await page.eval(`return !!__ft.view().querySelector('.ft-done-title')`)) throw new Error("the Completed block grew a heading again");
+  const chip = `__ft.at(__ft.area('Sport').querySelector('.ft-done-chip'))`;
+  const chipReads = await page.eval(`return __ft.area('Sport').querySelector('.ft-done-chip')?.textContent.trim() || null`);
+  if (chipReads !== "1") throw new Error("the area's ✓ does not count the done task: " + J(chipReads));
+  await click(chip, "the area's ✓");
   await until(() => page.eval(`return !__ft.task('Lace them')`), "Completed folded");
-  await click(`__ft.at(__ft.text('.ft-done-title', 'Completed · 1'))`);
+  await click(chip, "the area's ✓");
   await until(() => page.eval(`return ${done}`), "Completed open again");
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await taskIs("Lace them", { status: "open", completedDate: null });
