@@ -261,6 +261,13 @@ test("the build line says which build is running, in words", async () => {
   eq(line({ mode: "stable", commit: "aaaa111" }).includes("aaaa111"), true, "no subject: the commit will do");
 });
 
+test("the queue line counts commits in the language's own forms", async () => {
+  const say = globalThis.__ftPlural;
+  const forms = ["коммит", "коммита", "коммитов"];
+  eq([1, 2, 5, 11, 21, 104].map((n) => say(n, forms)),
+     ["коммит", "коммита", "коммитов", "коммитов", "коммит", "коммита"]);
+});
+
 test("a status nobody knows still counts as open", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");

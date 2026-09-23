@@ -110,7 +110,8 @@ const STRINGS = {
     wip: "Focus Tasks is still being built. A stable version is on the way — write to me on Telegram to hear when it lands:",
     wipWho: "@zastashkov", sWip: "Work in progress",
     sBuild: "Build", buildStable: "Stable", buildTest: "Test", buildLine: "{0} · {1} · {2}",
-    buildQueue: "test: {0} commits over the stable one", buildOnly: "no test build here",
+    buildQueue: "test: {0} {1} over the stable one", buildCommit: ["commit", "commits", "commits"],
+    buildOnly: "no test build here",
     buildUnknown: "installed as usual, not delivered from the workshop", buildSwitched: "Switched to {0}",
     buildBadge: "test", buildBadgeHelp: "A test build is running. Its stable one is one click away, in the settings.",
     returnWhen: "Look at it again", returnHint: "tomorrow or later",
@@ -189,7 +190,8 @@ const STRINGS = {
     wip: "Focus Tasks ещё в работе. Стабильная версия готовится - напишите мне в Telegram, и я скажу, когда она выйдет:",
     wipWho: "@zastashkov", sWip: "Плагин в работе",
     sBuild: "Сборка", buildStable: "Стабильная", buildTest: "Тестовая", buildLine: "{0} · {1} · {2}",
-    buildQueue: "тест: {0} коммитов сверх стабильной", buildOnly: "тестовой сборки нет",
+    buildQueue: "тест: {0} {1} сверх стабильной", buildCommit: ["коммит", "коммита", "коммитов"],
+    buildOnly: "тестовой сборки нет",
     buildUnknown: "поставлена обычным способом, не из мастерской", buildSwitched: "Переключил на: {0}",
     buildBadge: "тест", buildBadgeHelp: "Работает тестовая сборка. Стабильная - в один клик, в настройках.",
     returnWhen: "Вернуться к задаче", returnHint: "завтра или позже",
@@ -271,6 +273,13 @@ const buildText = (build) => {
   const name = t(build.mode === "test" ? "buildTest" : "buildStable");
   const when = build.at ? moment(build.at).format("DD.MM HH:mm") : "";
   return t("buildLine", name, when, build.subject || build.commit || "").replace(/ · $/, "").replace(/ ·  · /, " · ");
+};
+// Which of the three forms a count takes (English keeps two of them the same).
+const plural = (n, forms) => {
+  const ten = Math.abs(n) % 10, hundred = Math.abs(n) % 100;
+  if (ten === 1 && hundred !== 11) return forms[0];
+  if (ten >= 2 && ten <= 4 && (hundred < 10 || hundred >= 20)) return forms[1];
+  return forms[2];
 };
 const isHead = (l) => /^#{1,6}\s/.test(l);
 const headText = (l) => l.replace(/^#+\s*/, "").trim();
@@ -1855,7 +1864,7 @@ class FocusSettingTab extends PluginSettingTab {
     const row = new Setting(box).setName(t("sBuild")).setDesc(line);
     const modes = await p.buildModes();
     if (!modes.includes("test")) { row.setDesc(`${line}\n${t("buildOnly")}`); return; }
-    if (build.queue) row.setDesc(`${line}\n${t("buildQueue", build.queue)}`);
+    if (build.queue) row.setDesc(`${line}\n${t("buildQueue", build.queue, plural(build.queue, t("buildCommit")))}`);
     for (const mode of ["stable", "test"]) {
       row.addButton((b) => {
         b.setButtonText(t(mode === "test" ? "buildTest" : "buildStable"));
@@ -1908,7 +1917,7 @@ class FocusSettingTab extends PluginSettingTab {
 // --- the plugin ------------------------------------------------------------------------------
 
 // The tests reach the small pure helpers through this.
-if (typeof globalThis !== "undefined") { globalThis.__ftParseDay = parseDay; globalThis.__ftBuildText = buildText; }
+if (typeof globalThis !== "undefined") { globalThis.__ftParseDay = parseDay; globalThis.__ftBuildText = buildText; globalThis.__ftPlural = plural; }
 
 // The three files that are the plugin, plus the note saying where they came from.
 const BUILD_FILES = ["main.js", "manifest.json", "styles.css"];
