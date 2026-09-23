@@ -505,6 +505,15 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
     const r = __ft.task('Ask the lawyer');
     return !!r && !!r.closest('.ft-future-block') && !!r.querySelector('.ft-running');`),
     "and it is listed with the upcoming work, marked as running");
+  // started work stands above what is only planned, with a line between the two
+  const grouped = JSON.parse(await page.eval(`
+    const block = __ft.task('Ask the lawyer').closest('.ft-future-block');
+    const rows = [...block.querySelectorAll('li.ft-task')];
+    const split = block.querySelector('.ft-ahead-split');
+    return JSON.stringify({ first: !!rows[0]?.querySelector('.ft-running'),
+      split: !!split, before: split ? [...block.children].indexOf(rows[0].closest('ul')) < [...block.children].indexOf(split) : null });`));
+  if (!grouped.first) throw new Error("a started task is not at the top of what is not today");
+  if (grouped.split && !grouped.before) throw new Error("the line does not separate the started ones from the planned");
   // the hour passes: it comes back into the focus by itself
   await plugin(`
     const task = p.tasks().find((x) => x.text === 'Ask the lawyer');

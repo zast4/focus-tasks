@@ -226,10 +226,11 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 /* Running: sent off, delegated, waiting on someone. The row keeps its place in the area or the
    project — hiding it behind a counter meant losing sight of it — but until the moment it is due
    back it is drawn quiet: faded text, a faded date, no weight in the list. ▷ hands it back. */
-.focus-tasks-view li.ft-task.is-waiting > .ft-text,
-.focus-tasks-view li.ft-task.is-waiting > .ft-date { color: var(--text-faint); }
+/* A row waiting to come back is no fainter than the rest of «not today» — it was two different greys
+   in one list before. What sets it apart is the ▷ and the line above the group it sits in. */
 .focus-tasks-view li.ft-task.is-waiting > .ft-date { font-weight: 400; }
-.focus-tasks-view li.ft-task.is-waiting > .ft-box { opacity: 0.45; }
+.focus-tasks-view .ft-ahead-split { height: 0; margin: 0.4em var(--ft-pad) 0.35em 0;
+  border-top: 1px dashed var(--background-modifier-border); }
 .focus-tasks-view li.ft-task > .ft-running { flex: none; display: inline-flex; align-items: center; cursor: pointer;
   margin: calc(var(--ft-line) * 0.5em - 0.5rem) 0 0 0.4em; color: var(--text-faint); }
 .focus-tasks-view li.ft-task > .ft-running svg { width: 0.8rem; height: 0.8rem; }

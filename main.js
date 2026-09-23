@@ -1036,7 +1036,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // Steps that belong to a project on screen live under that project, not here.
     if (futureShown && (area.future.loose.length || area.future.projects.length)) {
       const block = box.createDiv({ cls: "ft-future-block" });
-      if (area.future.loose.length) await this.list(block, area.future.loose);
+      if (area.future.loose.length) await this.ahead(block, area.future.loose);
       for (const project of area.future.projects) await this.project(block, area, project, true);
     }
     if (area.doneLoose.length) await this.completed(box, area.doneLoose, "done:" + area.name);
@@ -1182,8 +1182,19 @@ class FocusRenderer extends MarkdownRenderChild {
     const body = box.createDiv({ cls: "ft-project-body" });
     if (project.tasks.length) await this.list(body, project.tasks, all);
     // The project's own «not today» rows read as a group of their own, the same way an area's do.
-    if (laterOpen) await this.list(body.createDiv({ cls: "ft-later-block" }), project.later);
+    if (laterOpen) await this.ahead(body.createDiv({ cls: "ft-later-block" }), project.later);
     if (doneOpen) await this.completed(body, project.done, doneKey, true);
+  }
+
+  // What is not today, in two groups: what is already running, then what is only planned. One list
+  // would put a promise made to somebody else among the «maybe next week» rows.
+  async ahead(box, tasks) {
+    const running = tasks.filter((x) => x.status === STATUS_PROGRESS);
+    const planned = tasks.filter((x) => x.status !== STATUS_PROGRESS);
+    if (running.length) await this.list(box, running);
+    if (!planned.length) return;
+    if (running.length) box.createDiv({ cls: "ft-ahead-split" });
+    await this.list(box, planned);
   }
 
   // A counter on a header that folds a part of it: «⏳3» upcoming, «✓2» closed today.
@@ -2256,12 +2267,15 @@ module.exports = class FocusTasks extends Plugin {
     // A task that came due sits under the work that was already mine today: it asks to be looked at,
     // not to be done.
     const cmpRow = (x, y) => ((x.status === STATUS_PROGRESS ? 1 : 0) - (y.status === STATUS_PROGRESS ? 1 : 0)) || cmpTask(x, y);
+    // …and among what is not today, the started ones come first: they are promises already made,
+    // the rest is only a plan. The view draws a line between the two groups.
+    const cmpAhead = (x, y) => ((x.status === STATUS_PROGRESS ? 0 : 1) - (y.status === STATUS_PROGRESS ? 0 : 1)) || cmpTask(x, y);
     for (const area of byArea.values()) {
       area.loose.sort(cmpRow);
-      area.future.loose.sort(cmpTask);
+      area.future.loose.sort(cmpAhead);
       for (const b of area.buckets || []) {
         b.tasks.sort(cmpRow);
-        b.later.sort(cmpTask);
+        b.later.sort(cmpAhead);
       }
       for (const b of area.buckets || []) {
         b.first = first(b.tasks);

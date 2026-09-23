@@ -244,6 +244,20 @@ test("a running task with its day taken away comes home instead of being strande
   eq(names(area.future.loose), ["Sent off"], "an ordinary task with no date: the отложка of its area");
 });
 
+test("among what is not today, the started ones come first", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Planned for Friday", { area: "Work", scheduled: DAY(4) });
+    taskNote(a, "Someday, no date", { area: "Work" });
+    taskNote(a, "Sent to the lawyer", { area: "Work", scheduled: DAY(6), status: "in-progress" });
+    taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
+  });
+  const area = (await plugin.collect(false))[0];
+  // a promise already made stands above a plan, even when its day is further out
+  eq(names(area.future.loose)[0], "Sent to the lawyer");
+  eq(names(area.future.loose).slice(1), ["Planned for Friday", "Someday, no date"]);
+});
+
 test("a running step stays inside its project, not in the area", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
