@@ -50,8 +50,15 @@ for (const file of FILES) {
   fs.copyFileSync(path.join(HERE, file), path.join(into, file));
   fs.copyFileSync(path.join(HERE, file), path.join(plugin, file));   // and it becomes the one running
 }
-fs.writeFileSync(path.join(into, "build.json"), note);
-fs.writeFileSync(path.join(plugin, "build.json"), note);
+// Written whole or not at all: the plugin reads this file at moments we do not choose, and half of
+// it parses as nothing — which is indistinguishable from an ordinary install.
+const atomic = (file, text) => {
+  const tmp = file + ".tmp";
+  fs.writeFileSync(tmp, text);
+  fs.renameSync(tmp, file);
+};
+atomic(path.join(into, "build.json"), note);
+atomic(path.join(plugin, "build.json"), note);
 
 // Merged means the two are the same build: both modes stay in the settings, but the test one is no
 // longer anywhere else to go, so its button is dead and the list wears no mark.
@@ -59,7 +66,7 @@ if (mode === "stable") {
   const twin = path.join(plugin, "builds", "test");
   fs.mkdirSync(twin, { recursive: true });
   for (const file of FILES) fs.copyFileSync(path.join(HERE, file), path.join(twin, file));
-  fs.writeFileSync(path.join(twin, "build.json"), JSON.stringify({ ...JSON.parse(note), mode: "test" }, null, 2) + "\n");
+  atomic(path.join(twin, "build.json"), JSON.stringify({ ...JSON.parse(note), mode: "test" }, null, 2) + "\n");
 }
 
 console.log(`${mode}: ${commit} ${subject}${mode === "test" && queue ? ` (+${queue} over ${stableRef})` : ""}`);

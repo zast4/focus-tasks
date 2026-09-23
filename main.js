@@ -2549,6 +2549,13 @@ module.exports = class FocusTasks extends Plugin {
       const parsed = JSON.parse(await this.app.vault.adapter.read(this.buildPath(BUILD_NOTE)));
       if (parsed && typeof parsed === "object") build = parsed;
     } catch { /* an ordinary install: no note, no modes, nothing to show */ }
+    // A delivery lands file by file, and the note is rewritten in place: read in that instant it is
+    // half a file or none. The `builds` folder beside it is what says this is a delivered install,
+    // whatever the note looks like right now — without it the settings would flash the line meant
+    // for strangers at the one person it is never meant for.
+    try {
+      if (!build && await this.app.vault.adapter.exists(this.buildPath("builds"))) build = this.build || { mode: "stable" };
+    } catch { /* no adapter to ask (the test harness): then there is nothing delivered here either */ }
     this.build = build;
     return build;
   }

@@ -904,6 +904,17 @@ step("two builds side by side: the settings say which one runs, and swap them", 
     return JSON.stringify(out);`));
   if (alone.length !== 2 || !alone.some((b) => b.endsWith("(off)")))
     throw new Error(`both modes belong in the row, the running one greyed out: ${J(alone)}`);
+  // caught the hard way: the note is rewritten in place during a delivery, and a settings tab drawn
+  // in that instant read it as «no build at all» and offered the line written for strangers
+  fs.writeFileSync(path.join(dir, "build.json"), "{ \"mode\": \"sta");
+  const half = JSON.parse(await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    const build = await p.readBuild();
+    p.refresh();
+    await new Promise((r) => setTimeout(r, 300));
+    return JSON.stringify({ build: !!build, wip: !!document.querySelector('.ft-wip') });`));
+  if (!half.build || half.wip) throw new Error(`a half-written note turned the plugin into a stranger's install: ${J(half)}`);
+  fs.writeFileSync(path.join(dir, "build.json"), note("stable"));
   // a test build that is the stable one under another name is not a choice
   for (const mode of ["stable", "test"]) {
     fs.mkdirSync(path.join(dir, "builds", mode), { recursive: true });
