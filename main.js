@@ -1533,6 +1533,20 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // An empty task row right under `prev`, written after `anchor`'s line (same indent) on Enter; then
   // the next one, until an empty Enter or Esc.
+  // A task being typed has no note yet, so its date lives on the row until it is saved. The keys are
+  // the ones a row that already exists answers to — a new task is where a date is set most often,
+  // and until now those keys did nothing at all there.
+  draftDate(li, start) {
+    const state = { day: start };
+    const label = li.createSpan();
+    const paint = () => this.dateLabel(label, { date: state.day });
+    const set = (day) => { state.day = day; paint(); };
+    const ahead = (n) => moment().add(n, "days").format("YYYY-MM-DD");
+    paint();
+    state.keys = { 1: () => set(ahead(0)), 2: () => set(ahead(1)), 4: () => set(null) };
+    return state;
+  }
+
   rowAfter(prev, anchor, day) {
     const li = createEl("li", { cls: "task-list-item ft-task ft-draft-row" });
     const level = prev.style.getPropertyValue("--ft-level");
@@ -1540,10 +1554,11 @@ class FocusRenderer extends MarkdownRenderChild {
     li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox", attr: { disabled: "" } });
     const text = li.createSpan({ cls: "ft-text", attr: { "data-placeholder": t("newTask") } });
     prev.after(li);
+    const date = this.draftDate(li, day);
     this.editor(text, 0, async (value) => {
       if (!value) { li.remove(); return null; }
-      return this.plugin.insertAfter(anchor, value, day);
-    }, {}, (next) => this.rowAfter(li, next, day));
+      return this.plugin.insertAfter(anchor, value, date.day);
+    }, date.keys, (next) => this.rowAfter(li, next, date.day));
   }
 
   // An empty row under `anchor` for a new task in `target`; Enter saves it and opens the next one.
@@ -1554,11 +1569,12 @@ class FocusRenderer extends MarkdownRenderChild {
     li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox", attr: { disabled: "" } });
     const text = li.createSpan({ cls: "ft-text", attr: { "data-placeholder": target.project ? t("newStep") : t("newTask") } });
     anchor.after(ul);
+    const date = this.draftDate(li, "day" in target ? target.day : target.noDate ? null : today());
     this.editor(text, 0, async (value) => {
       if (!value) { ul.remove(); return null; }
-      await this.plugin.addLine(target, value, target.noDate ? null : today());
+      await this.plugin.addLine(target, value, date.day);
       return ul;
-    }, {}, (prev) => this.draft(prev, target));
+    }, date.keys, (prev) => this.draft(prev, { ...target, day: date.day }));   // the next one starts where this one ended
   }
 
   // The project's name becomes editable; Enter renames the note (links follow) and opens a row for

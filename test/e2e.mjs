@@ -184,16 +184,27 @@ step("the grip opens the area menu; New project makes a project note linked from
   await until(() => page.eval(`return !!__ft.project('Marathon')`), "Marathon on screen");
 });
 
-step("+ on a project makes steps that point at it", async () => {
+step("+ on a project makes steps that point at it, and ⌘1–4 date them while they are typed", async () => {
   await click(`__ft.at(__ft.project('Marathon').querySelector('.ft-plus'))`);
   await editing();
   await page.type("Buy shoes");
   await page.key("Enter");
   await taskIs("Buy shoes", { area: "💪Sport", projects: "[[Marathon]]", scheduled: null });
+  // a date set with the keys while typing: the row has no note yet, so it used to ignore them
   await editing();
   await page.type("Plan route");
+  await page.key("Meta+2");
+  await until(() => page.eval(`
+    const row = document.querySelector('.focus-tasks-view .is-editing')?.closest('li');
+    return row?.querySelector('.ft-date')?.textContent.trim();`).then((d) => d === ddmmyy(TOMORROW)),
+    "the draft shows the day it will get");
   await page.key("Enter");
-  await taskIs("Plan route", { projects: "[[Marathon]]" });
+  await taskIs("Plan route", { projects: "[[Marathon]]", scheduled: TOMORROW }, "the key set the date of a task that did not exist yet");
+  // and the next row starts from the same day
+  await editing();
+  await page.type("Book the hall");
+  await page.key("Enter");
+  await taskIs("Book the hall", { scheduled: TOMORROW }, "the next draft keeps the day");
   await editing();
   await page.key("Escape");
   await idle();
