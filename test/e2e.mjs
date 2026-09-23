@@ -513,6 +513,12 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
     return JSON.stringify({ first: !!rows[0]?.querySelector('.ft-running'),
       split: !!split, before: split ? [...block.children].indexOf(rows[0].closest('ul')) < [...block.children].indexOf(split) : null });`));
   if (!grouped.first) throw new Error("a started task is not at the top of what is not today");
+  // the group must be told apart from today's work: without a line of its own it read as the focus
+  const edge = await page.eval(`
+    const b = __ft.task('Ask the lawyer').closest('.ft-future-block');
+    const cs = getComputedStyle(b);
+    return cs.borderTopWidth + " " + cs.borderTopStyle;`);
+  if (!/^[1-9]/.test(edge) || /none/.test(edge)) throw new Error(`the upcoming block has no edge: ${J(edge)}`);
   if (grouped.split && !grouped.before) throw new Error("the line does not separate the started ones from the planned");
   // the hour passes: it comes back into the focus by itself
   await plugin(`
