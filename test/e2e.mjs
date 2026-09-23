@@ -853,6 +853,27 @@ step("delete an area: its projects and tasks go with it", async () => {
   await until(() => page.eval(`return !__ft.area('Sport')`), "Sport off screen");
 });
 
+step("a fresh install is told the plugin is still being built", async () => {
+  // said once per version: clear the mark, restart the plugin, and it should say it again
+  const seen = await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    p.wipSeen = null; await p.saveAll();
+    await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks');
+    await new Promise((r) => setTimeout(r, 400));
+    const el = [...document.querySelectorAll('.notice')].find((n) => n.textContent.includes('@zastashkov'));
+    const out = { text: el?.textContent || '', href: el?.querySelector('a')?.getAttribute('href') || '' };
+    for (const n of document.querySelectorAll('.notice')) n.remove();
+    return out;`);
+  if (!seen.text.includes("@zastashkov") || seen.href !== "https://t.me/zastashkov")
+    throw new Error(`no «work in progress» notice on start: ${J(seen)}`);
+  const again = await page.eval(`
+    await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks');
+    await new Promise((r) => setTimeout(r, 400));
+    return [...document.querySelectorAll('.notice')].some((n) => n.textContent.includes('@zastashkov'));`);
+  if (again) throw new Error("the notice comes back on every start, not once per version");
+  await toPane();
+});
+
 step("commands are registered", async () => {
   const ids = await page.eval(`return Object.keys(app.commands.commands).filter((k) => k.startsWith('focus-tasks:')).sort()`);
   const want = ["add-area", "add-task", "area-from-note", "fold-all", "open", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);

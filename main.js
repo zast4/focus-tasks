@@ -94,6 +94,8 @@ const STRINGS = {
     repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
     undoKept: "Put back {0} of {1}: the rest changed in the meantime",
     allDone: "done {0}", undone: "Undone: {0}", nothingToUndo: "Nothing to undo", cmdUndo: "Undo the last change",
+    wip: "Focus Tasks is still being built. A stable version is on the way — write to me on Telegram to hear when it lands:",
+    wipWho: "@zastashkov", sWip: "Work in progress",
     aDate: "the date", aMove: "the move", aRename: "the new text", aDone: "completing the task", aNew: "the new task", aProject: "making it a project", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
     orphans: "Without an area", orphansHelp: "These tasks are in no area, so the focus cannot show them. Pick a place for each.",
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
@@ -160,6 +162,8 @@ const STRINGS = {
     repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
     undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
     allDone: "сделано {0}", undone: "Отменено: {0}", nothingToUndo: "Нечего отменять", cmdUndo: "Отменить последнее действие",
+    wip: "Focus Tasks ещё в работе. Стабильная версия готовится - напишите мне в Telegram, и я скажу, когда она выйдет:",
+    wipWho: "@zastashkov", sWip: "Плагин в работе",
     aDate: "дата", aMove: "перенос", aRename: "текст задачи", aDone: "выполнение задачи", aNew: "новая задача", aProject: "превращение в проект", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
     orphans: "Без области", orphansHelp: "Эти задачи ни в одной области, поэтому фокус их не показывает. Разложи их по местам.",
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
@@ -1560,6 +1564,9 @@ class FocusSettingTab extends PluginSettingTab {
     const p = this.plugin;
     const s = p.settings;
     containerEl.empty();
+    const wip = new Setting(containerEl).setName(t("sWip"));
+    wip.descEl.createSpan({ text: t("wip") + " " });
+    wip.descEl.createEl("a", { text: t("wipWho"), href: "https://t.me/zastashkov" });
     const text = (name, desc, key, placeholder) => new Setting(containerEl).setName(t(name)).setDesc(t(desc))
       .addText((c) => c.setPlaceholder(placeholder || DEFAULTS[key]).setValue(s[key]).onChange(async (v) => {
         s[key] = v.trim() || DEFAULTS[key];
@@ -1646,10 +1653,20 @@ module.exports = class FocusTasks extends Plugin {
   async onload() {
     const saved = (await this.loadData()) || {};
     this.settings = Object.assign({}, DEFAULTS, saved.settings);
+    this.wipSeen = saved.wipSeen || null;
     this.data = { folded: saved.folded || {}, opened: saved.opened || {}, order: Object.assign({ areas: [], projects: {}, tasks: {} }, saved.order) };
     this.applyLanguage();
     this.views = new Set();
     this.toggling = new Set();  // lines with a toggle in flight
+    if (this.wipSeen !== this.manifest.version) {
+      const note = createFragment((f) => {
+        f.createSpan({ text: t("wip") + " " });
+        f.createEl("a", { text: t("wipWho"), href: "https://t.me/zastashkov" });
+      });
+      new Notice(note, 20000);
+      this.wipSeen = this.manifest.version;
+      this.saveAll();
+    }
     for (const event of ["create", "delete", "modify"]) this.registerEvent(this.app.vault.on(event, () => this.forgetScan()));
     this.registerEvent(this.app.vault.on("rename", (file, old) => this.renamed(file.path, old)));
     this.registerEvent(this.app.metadataCache.on("changed", () => this.forgetScan()));
@@ -1689,7 +1706,8 @@ module.exports = class FocusTasks extends Plugin {
 
   async saveAll() {
     this.forgetScan();  // a changed folder or type means the vault has to be read again
-    await this.saveData({ settings: this.settings, folded: this.data.folded, opened: this.data.opened, order: this.data.order });
+    await this.saveData({ settings: this.settings, folded: this.data.folded, opened: this.data.opened, order: this.data.order,
+      wipSeen: this.wipSeen });   // the «still being built» line is said once per version, not every start
   }
 
   async openView() {

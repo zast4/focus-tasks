@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1
+
+The plugin says, in the list and in its settings, that it is still being built: a stable version is
+on the way, and Telegram ([@zastashkov](https://t.me/zastashkov)) is where to ask when it lands.
+Nothing else changed — the work going on meanwhile is not published yet, on purpose.
+
 ## 0.2.0
 
 **Breaking: a task is a note now.** In 0.1.0 a task was a checkbox line inside an area's note. Every

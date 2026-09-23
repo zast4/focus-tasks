@@ -1,5 +1,11 @@
 # Focus Tasks
 
+> **Плагин ещё в работе.** Стабильная версия готовится; пока он меняется часто и не всё в нём
+> устоялось. Хотите узнать, когда выйдет стабильная, - напишите в Telegram: [@zastashkov](https://t.me/zastashkov).
+>
+> **Work in progress.** A stable version is on the way; until then this one changes often. To hear
+> when it lands, write to me on Telegram: [@zastashkov](https://t.me/zastashkov).
+
 A focus list for Obsidian in the spirit of TickTick / Things: **areas → projects → tasks**, built on
 plain Markdown notes — one note per task. What is due today (or overdue) is on top; the rest waits one
 click away.
