@@ -242,14 +242,15 @@ step("⌘3 opens the date picker; a typed date saves", async () => {
   await idle();
 });
 
-step("the date on the right: Today button, a day of the month, Clear date", async () => {
+step("the date on the right: a typed date, a day of the month, Clear date", async () => {
   const pick = async () => {
     await until(() => page.eval(`return !!__ft.task('Stretch')`), "Stretch on screen");
     await click(`__ft.at(__ft.task('Stretch').querySelector('.ft-date'))`);
     await until(() => page.eval(`return !!document.querySelector('.ft-picker')`), "picker");
   };
   await pick();
-  await click(`__ft.at(document.querySelector('.ft-picker-today'))`);
+  await page.type("today");     // the field understands words as well as dates
+  await page.key("Enter");
   await taskIs("Stretch", { scheduled: TODAY });
   await idle();
   await pick();
@@ -346,14 +347,6 @@ step("«Move up» / «Move down» reorder a task without dragging", async () => 
   await click(`__ft.grip(__ft.task(${J(first)}))`);
   await menu("Move up");
   await until(async () => (await order())[0] === first, `${first} moved back up`);
-});
-
-step("«Tomorrow» in the picker dates a task", async () => {
-  await click(`__ft.at(__ft.task('Run 5k').querySelector('.ft-date'))`);
-  await until(() => page.eval(`return !!document.querySelector('.ft-picker')`), "the picker");
-  await click(`__ft.at(document.querySelector('.ft-picker-tomorrow'))`);
-  await taskIs("Run 5k", { scheduled: TOMORROW });
-  await idle();
 });
 
 step("drag an area above another saves the order", async () => {

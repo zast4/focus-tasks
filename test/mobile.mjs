@@ -164,7 +164,8 @@ step("the date picker fits the screen and sets a date by tap", async () => {
     return { left: Math.round(r.left), right: Math.round(r.right), top: Math.round(r.top), bottom: Math.round(r.bottom), w: window.innerWidth, h: window.innerHeight };`), "the picker");
   if (box.left < 0 || box.right > box.w) throw new Error("the picker hangs off the side: " + J(box));
   if (box.top < 0 || box.bottom > box.h) throw new Error("the picker hangs off the bottom: " + J(box));
-  await tapOn(`__m.text('.ft-picker-today', 'Сегодня') || __m.text('.ft-picker-today', 'Today')`, "«Today» in the picker");
+  await page.type("сегодня");
+  await page.key("Enter");
   await taskIs("Сходить в зал", { scheduled: TODAY });
 });
 

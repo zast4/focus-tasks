@@ -178,7 +178,13 @@ function t(key, ...args) {
 
 const bare = (name) => name.replace(/^[^\p{L}\p{N}]+/u, "");
 const today = () => moment().format("YYYY-MM-DD");
-const fileName = (name) => name.replace(/[\\/#^\[\]|?*<>":]/g, "-").replace(/\s+/g, " ").trim();
+// A file name for a task: a link in the text becomes the words it shows, the rest loses the
+// characters a file name may not carry. «Прочитать [[Books/Дюна|Дюну]]» → «Прочитать Дюну».
+const fileName = (name) => name
+  .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
+  .replace(/\[\[([^\]]+)\]\]/g, (_, path) => path.split("/").pop())
+  .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
+  .replace(/[\\/#^\[\]|?*<>":]/g, "-").replace(/\s+/g, " ").trim();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const inFocus = (task) => task.date && task.date <= today();
 // A date as the plugin reads it: «2026-09-22», «2026-09-22T18:30+03:00» and a Date all mean that day.
@@ -304,9 +310,9 @@ class DatePicker {
     this.head.empty();
     this.grid.empty();
     this.head.createDiv({ cls: "ft-picker-title", text: `${t("months")[this.month.month()]} ${this.month.year()}` });
+    // No «Today» / «Tomorrow» buttons: the field takes «сегодня», «завтра», «+3» and the grid marks
+    // today anyway — two more buttons only crowded the card.
     const nav = this.head.createDiv({ cls: "ft-picker-nav" });
-    nav.createEl("button", { text: t("today"), cls: "ft-picker-today" }).onclick = () => this.pick(today());
-    nav.createEl("button", { text: t("tomorrow"), cls: "ft-picker-tomorrow" }).onclick = () => this.pick(moment().add(1, "day").format("YYYY-MM-DD"));
     for (const [icon, step] of [["chevron-left", -1], ["chevron-right", 1]]) {
       const b = nav.createEl("button", { cls: "ft-picker-arrow" });
       setIcon(b, icon);

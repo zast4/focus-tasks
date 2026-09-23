@@ -227,6 +227,15 @@ test("a text with characters a file name cannot hold still works", async () => {
   ok(!/[\\/:"]/.test(task.file.basename), "the file name is safe: " + task.file.basename);
 });
 
+test("a link in the text becomes the words it shows in the file name", async () => {
+  const { app, plugin } = await stand((a) => areaNote(a, "Sport"));
+  const text = "Прочитать [[Books/Дюна|Дюну]] и [[Zettelkasten/План обучения]]";
+  await plugin.createTask(text, { area: "Sport", project: null }, TODAY);
+  const task = plugin.tasks()[0];
+  eq(task.text, text, "the links are kept in the text");
+  eq(task.file.basename, "Прочитать Дюну и План обучения", "and the file name reads as a sentence");
+});
+
 test("two tasks with the same text get their own notes", async () => {
   const { app, plugin } = await stand((a) => areaNote(a, "Sport"));
   await plugin.createTask("Купить сметану", { area: "Sport", project: null }, TODAY);
