@@ -1,7 +1,7 @@
 {
   "id": "focus-tasks",
   "name": "Focus Tasks",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "minAppVersion": "1.4.0",
   "description": "A focus list of areas, projects and tasks over plain Markdown notes: one note per task, inline editing, dates, drag and drop, upcoming work, links to your notes.",
   "author": "Daniel Zastashkov",
