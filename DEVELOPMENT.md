@@ -31,31 +31,29 @@ Three words drive it:
 ## Two builds in his vault
 
 He cannot read git, and the branch checked out here says nothing about what his Obsidian runs — it
-runs the copies in the plugin folder. So the folder itself carries the answer:
+runs the copies in the plugin folder. Worse, he reads the vault on a second machine over Obsidian
+Sync, and Sync carries a plugin's own three files but **not** the extras left beside them. So the
+answer travels inside the code, and the spares live in the vault:
 
 ```
-.obsidian/plugins/focus-tasks/
-  main.js manifest.json styles.css   ← the copy that runs
-  build.json                         ← which build that copy is: {mode, commit, subject, at, queue}
-  builds/stable/…  builds/test/…     ← the two it can be switched between, each with its own build.json
+.obsidian/plugins/focus-tasks/main.js   ← `const BUILD = {mode, commit, subject, at, queue}` is stamped here
+Internals/FocusTasks/stable/…  test/…   ← the two builds it can be switched between, each with build.json
 ```
 
 ```sh
 node tools/deliver.mjs --mode test     # hand it over for a look; the stable one stays a click away
-node tools/deliver.mjs --mode stable   # merged: becomes the only build, builds/test is dropped
+node tools/deliver.mjs --mode stable   # merged: both modes become this build
 ```
 
-The plugin reads `build.json` on load (`readBuild`, which replaces its answer only once it has one —
-emptying the field first left a gap in which the plugin looked like somebody else's install): the
-first row of its settings says what is running («Сборка: Тестовая · 23.09 19:40 · заголовок») and
-always carries **both** buttons. A mode is only clickable when it is on disk and is somewhere else to
-go: `buildChoices` greys out the running one and, when the two builds are the same commit, the other
-one too. `switchBuild` copies the files, rewrites `build.json` and restarts the plugin. The list
-carries a small «тест» mark in its footer while a test build runs. Merging delivers the same build as
-both modes, so the pair reads «тестовая совпадает со стабильной», nothing is clickable and the mark
-goes out by itself. Installed the ordinary way (BRAT, the store) there is no `build.json` and none of
-this shows; instead the list and the settings carry the «still being built» line with the Telegram
-contact, which is what the public 0.2.1 release exists to say.
+`readBuild` just reads that constant — no file, no race, nothing to lose in a sync. The first row of
+the settings says what is running («Сборка: Тестовая · 23.09 19:40 · заголовок») and always carries
+**both** buttons; a mode is clickable only when its files are in the vault and are somewhere else to
+go (`buildChoices` greys out the running one and, when the two builds are the same commit, the other
+one too). `switchBuild` copies the three files from `Internals/FocusTasks/<mode>` over the plugin's
+own and restarts it. The list carries a small «тест» mark in its footer while a test build runs.
+Installed the ordinary way (BRAT, the store) `BUILD.mode` is `null`: no row, no mark, and instead the
+list and the settings carry the «still being built» line with the Telegram contact — which is what
+the public 0.2.1 release exists to say.
 
 **«ревью» starts with the state**: which build he is running, and how many commits are queued over
 the stable one — then the report of everything in the review log.

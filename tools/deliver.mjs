@@ -1,16 +1,18 @@
 #!/usr/bin/env node
-// Puts a build into the vault and says, on disk, which one it is.
+// Puts a build into the vault and says, inside the code itself, which one it is.
 //
 //   node tools/deliver.mjs --mode test      # hand it over for a look; the stable one stays a click away
-//   node tools/deliver.mjs --mode stable    # merged: this becomes the only build, the test one is dropped
+//   node tools/deliver.mjs --mode stable    # merged: both modes become the same build
 //
-// Inside the plugin's folder:
-//   main.js, manifest.json, styles.css  — the copy that runs
-//   build.json                          — which build that copy is
-//   builds/stable/…, builds/test/…      — the two it can be switched between, with their own build.json
+// Two places are written:
+//   .obsidian/plugins/focus-tasks/         — the copy that runs
+//   Internals/FocusTasks/{stable,test}/    — the two it can be switched between, with a build.json each
 //
-// The plugin reads build.json itself: the settings say what is running and offer the other mode,
-// and the list carries a «test» mark while a test build is the one running.
+// The spare builds live in the vault, not beside the plugin. Obsidian Sync carries a plugin's own
+// three files to the other machine and leaves anything else next to them behind — which is how the
+// laptop ended up running a delivered build that believed it was a stranger's install. For the same
+// reason the identity of a build is baked into its `main.js` (the `const BUILD = …` line) instead of
+// travelling in a file of its own.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -18,6 +20,7 @@ import { execFileSync } from "node:child_process";
 
 const HERE = path.resolve(path.dirname(new URL(import.meta.url).pathname), "..");
 const FILES = ["main.js", "manifest.json", "styles.css"];
+const ROOT = "Internals/FocusTasks";
 
 const arg = (name, fallback = null) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -43,30 +46,44 @@ const [commit, subject] = git("log", "-1", "--format=%h%x00%s").split("\0");
 let queue = 0;
 try { queue = Number(git("rev-list", "--count", `${stableRef}..HEAD`)); } catch { /* no tag yet */ }
 
-const note = JSON.stringify({ mode, commit, subject, at: new Date().toISOString(), queue: mode === "test" ? queue : 0 }, null, 2) + "\n";
-const into = path.join(plugin, "builds", mode);
-fs.mkdirSync(into, { recursive: true });
-for (const file of FILES) {
-  fs.copyFileSync(path.join(HERE, file), path.join(into, file));
-  fs.copyFileSync(path.join(HERE, file), path.join(plugin, file));   // and it becomes the one running
+const stamp = (as) => ({ mode: as, commit, subject, at: new Date().toISOString(), queue: as === "test" ? queue : 0 });
+
+// The one line in main.js that says which build this is; everything else is copied byte for byte.
+const LINE = /^const BUILD = \{[^\n]*\};$/m;
+const source = fs.readFileSync(path.join(HERE, "main.js"), "utf8");
+if (!LINE.test(source)) {
+  console.error("main.js has no `const BUILD = {…};` line to stamp");
+  process.exit(1);
 }
-// Written whole or not at all: the plugin reads this file at moments we do not choose, and half of
-// it parses as nothing — which is indistinguishable from an ordinary install.
+const baked = (as) => source.replace(LINE, `const BUILD = ${JSON.stringify(stamp(as))};`);
+
+// Written whole or not at all: these files are read at moments we do not choose.
 const atomic = (file, text) => {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = file + ".tmp";
   fs.writeFileSync(tmp, text);
   fs.renameSync(tmp, file);
 };
-atomic(path.join(into, "build.json"), note);
-atomic(path.join(plugin, "build.json"), note);
 
-// Merged means the two are the same build: both modes stay in the settings, but the test one is no
-// longer anywhere else to go, so its button is dead and the list wears no mark.
-if (mode === "stable") {
-  const twin = path.join(plugin, "builds", "test");
-  fs.mkdirSync(twin, { recursive: true });
-  for (const file of FILES) fs.copyFileSync(path.join(HERE, file), path.join(twin, file));
-  atomic(path.join(twin, "build.json"), JSON.stringify({ ...JSON.parse(note), mode: "test" }, null, 2) + "\n");
+const put = (dir, as) => {
+  for (const file of FILES) {
+    if (file === "main.js") atomic(path.join(dir, file), baked(as));
+    else atomic(path.join(dir, file), fs.readFileSync(path.join(HERE, file)));
+  }
+  atomic(path.join(dir, "build.json"), JSON.stringify(stamp(as), null, 2) + "\n");
+};
+
+// Merged means both modes are this build, so the settings say «the test build is the stable one»
+// and neither button has anywhere to go.
+const modes = mode === "stable" ? ["stable", "test"] : ["test"];
+for (const as of modes) put(path.join(vault, ROOT, as), as);
+for (const file of FILES) {
+  if (file === "main.js") atomic(path.join(plugin, file), baked(mode));
+  else atomic(path.join(plugin, file), fs.readFileSync(path.join(HERE, file)));
 }
+
+// What the older scheme left beside the plugin: unread now, and Sync keeps trying to carry it.
+fs.rmSync(path.join(plugin, "build.json"), { force: true });
+fs.rmSync(path.join(plugin, "builds"), { recursive: true, force: true });
 
 console.log(`${mode}: ${commit} ${subject}${mode === "test" && queue ? ` (+${queue} over ${stableRef})` : ""}`);

@@ -866,16 +866,22 @@ step("an ordinary install is told the plugin is unfinished, and where to ask", a
 });
 
 step("two builds side by side: the settings say which one runs, and swap them", async () => {
-  // the workshop delivers a build by copying it into the folder and leaving a note beside it
+  // the workshop delivers a build by stamping its identity into main.js and leaving the spare ones
+  // in the vault — not beside the plugin, which is where a sync would drop them
   const dir = path.join(VAULT, ".obsidian/plugins/focus-tasks");
-  const note = (mode, extra = {}) => JSON.stringify({ mode, commit: mode === "test" ? "bbbb222" : "aaaa111",
+  const root = path.join(VAULT, "Internals/FocusTasks");
+  const live = fs.readFileSync(path.join(dir, "main.js"), "utf8");
+  const stamp = (mode, extra = {}) => ({ mode, commit: mode === "test" ? "bbbb222" : "aaaa111",
     subject: mode === "test" ? "Что-то на ревью" : "Влитое", at: new Date().toISOString(), ...extra });
+  const bake = (mode, extra) => live.replace(/^const BUILD = \{[^\n]*\};$/m, `const BUILD = ${JSON.stringify(stamp(mode, extra))};`);
   for (const mode of ["stable", "test"]) {
-    fs.mkdirSync(path.join(dir, "builds", mode), { recursive: true });
-    for (const f of ["main.js", "manifest.json", "styles.css"]) fs.copyFileSync(path.join(dir, f), path.join(dir, "builds", mode, f));
-    fs.writeFileSync(path.join(dir, "builds", mode, "build.json"), note(mode, mode === "test" ? { queue: 3 } : {}));
+    const extra = mode === "test" ? { queue: 3 } : {};
+    fs.mkdirSync(path.join(root, mode), { recursive: true });
+    for (const f of ["manifest.json", "styles.css"]) fs.copyFileSync(path.join(dir, f), path.join(root, mode, f));
+    fs.writeFileSync(path.join(root, mode, "main.js"), bake(mode, extra));
+    fs.writeFileSync(path.join(root, mode, "build.json"), JSON.stringify(stamp(mode, extra)));
   }
-  fs.writeFileSync(path.join(dir, "build.json"), note("test", { queue: 3 }));
+  fs.writeFileSync(path.join(dir, "main.js"), bake("test", { queue: 3 }));
   await page.eval(`await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks'); return true;`);
   await toPane();
   await until(() => page.eval(`return __ft.view()?.querySelector('.ft-foot-badge')?.textContent`), "the «test» mark under the list");
@@ -893,19 +899,12 @@ step("two builds side by side: the settings say which one runs, and swap them", 
   if (!/3/.test(seen.desc)) throw new Error(`the row does not say how far ahead the test build is: ${J(seen.desc)}`);
   if (J(seen.buttons) !== J(["Stable", "Test (off)"]) && J(seen.buttons) !== J(["Стабильная", "Тестовая (off)"]))
     throw new Error(`both modes belong in the row, the running one greyed out: ${J(seen.buttons)}`);
-  // reading the note again (which is what opening the settings does) must not make the plugin look
-  // like somebody else's install for a moment: that is how the «work in progress» line slipped in
-  await plugin(`const answer = p.readBuild(); p.refresh(); await answer; return true;`);
-  await settle();
-  if (await page.eval(`return !!__ft.view()?.querySelector('.ft-wip')`))
-    throw new Error("the «work in progress» line appeared on a delivered build");
   // back to the stable one, from the settings, without anyone's help
   await plugin(`return p.switchBuild('stable');`);
-  await until(async () => JSON.parse(fs.readFileSync(path.join(dir, "build.json"), "utf8")).mode === "stable",
-    "the note beside the plugin says stable");
+  await until(async () => /aaaa111/.test(fs.readFileSync(path.join(dir, "main.js"), "utf8")),
+    "the stable build is the one in the plugin folder now");
   await toPane();
   await until(() => page.eval(`return !__ft.view()?.querySelector('.ft-foot-badge')`), "the mark is gone with the test build");
-  // one build left: the pair of buttons stays, with nothing to switch to
   const alone = JSON.parse(await page.eval(`app.setting.open(); app.setting.openTabById('focus-tasks');
     await new Promise((r) => setTimeout(r, 400));
     const el = app.setting.activeTab?.containerEl;
@@ -915,30 +914,15 @@ step("two builds side by side: the settings say which one runs, and swap them", 
     return JSON.stringify(out);`));
   if (alone.length !== 2 || !alone.some((b) => b.endsWith("(off)")))
     throw new Error(`both modes belong in the row, the running one greyed out: ${J(alone)}`);
-  // caught the hard way: the note is rewritten in place during a delivery, and a settings tab drawn
-  // in that instant read it as «no build at all» and offered the line written for strangers
-  fs.writeFileSync(path.join(dir, "build.json"), "{ \"mode\": \"sta");
-  const half = JSON.parse(await page.eval(`
-    const p = app.plugins.plugins['focus-tasks'];
-    const build = await p.readBuild();
-    p.refresh();
-    await new Promise((r) => setTimeout(r, 300));
-    return JSON.stringify({ build: !!build, wip: !!document.querySelector('.ft-wip') });`));
-  if (!half.build || half.wip) throw new Error(`a half-written note turned the plugin into a stranger's install: ${J(half)}`);
-  fs.writeFileSync(path.join(dir, "build.json"), note("stable"));
   // a test build that is the stable one under another name is not a choice
-  for (const mode of ["stable", "test"]) {
-    fs.mkdirSync(path.join(dir, "builds", mode), { recursive: true });
-    for (const f of ["main.js", "manifest.json", "styles.css"]) fs.copyFileSync(path.join(dir, f), path.join(dir, "builds", mode, f));
-    fs.writeFileSync(path.join(dir, "builds", mode, "build.json"), JSON.stringify({ mode, commit: "cccc333", subject: "Одно и то же", at: new Date().toISOString() }));
-  }
+  fs.writeFileSync(path.join(root, "test", "build.json"), JSON.stringify(stamp("stable")));
   const twins = JSON.parse(await page.eval(`
     const p = app.plugins.plugins['focus-tasks'];
     const c = await p.buildChoices();
     return JSON.stringify([c.same, c.test.offer]);`));
   if (J(twins) !== J([true, false])) throw new Error(`twin builds are still offered as a choice: ${J(twins)}`);
-  fs.rmSync(path.join(dir, "builds"), { recursive: true, force: true });
-  fs.rmSync(path.join(dir, "build.json"), { force: true });
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.writeFileSync(path.join(dir, "main.js"), live);
   await page.eval(`await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks'); return true;`);
   await toPane();
 });

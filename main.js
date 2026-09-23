@@ -2004,9 +2004,16 @@ class FocusSettingTab extends PluginSettingTab {
 // The tests reach the small pure helpers through this.
 if (typeof globalThis !== "undefined") { globalThis.__ftParseDay = parseDay; globalThis.__ftBuildText = buildText; globalThis.__ftPlural = plural; }
 
-// The three files that are the plugin, plus the note saying where they came from.
+// The three files that are the plugin, and where its spare builds wait. They live in the vault
+// itself, not beside the plugin: Sync carries a plugin's own files to the other machine but not the
+// extras left next to them, and a build you cannot see on your laptop is no build at all.
 const BUILD_FILES = ["main.js", "manifest.json", "styles.css"];
 const BUILD_NOTE = "build.json";
+const BUILD_ROOT = "Internals/FocusTasks";
+
+// Which build this file IS. `tools/deliver.mjs` rewrites this line in the copy it delivers, so the
+// answer travels inside the code: it cannot be half-written, lost or left behind by a sync.
+const BUILD = { mode: null, commit: null, subject: null, at: null, queue: 0 };
 
 module.exports = class FocusTasks extends Plugin {
   async onload() {
@@ -2554,26 +2561,14 @@ module.exports = class FocusTasks extends Plugin {
   // merged, `builds/test` — the one handed over for a look. The files next to them are the copy that
   // actually runs, and `build.json` is the only thing that says which. Installed the ordinary way
   // (BRAT, the store), none of this exists and the plugin never mentions it.
-  buildPath(...parts) { return [this.manifest.dir, ...parts].join("/"); }
+  buildPath(...parts) { return [BUILD_ROOT, ...parts].join("/"); }
 
-  // The answer is only replaced once it is known. Emptying the field first left a gap of one await
-  // in which the plugin looked like somebody else's install — and a redraw in that gap put the
-  // «still being built» line in front of the one person it is never meant for.
+  // Nothing to read and nothing to race with: the running build says what it is. A note beside the
+  // plugin could not: Sync carries a plugin's own three files to the other machine and leaves the
+  // extras behind, so on the laptop the plugin read «no build here» and called itself a stranger.
   async readBuild() {
-    let build = null;
-    try {
-      const parsed = JSON.parse(await this.app.vault.adapter.read(this.buildPath(BUILD_NOTE)));
-      if (parsed && typeof parsed === "object") build = parsed;
-    } catch { /* an ordinary install: no note, no modes, nothing to show */ }
-    // A delivery lands file by file, and the note is rewritten in place: read in that instant it is
-    // half a file or none. The `builds` folder beside it is what says this is a delivered install,
-    // whatever the note looks like right now — without it the settings would flash the line meant
-    // for strangers at the one person it is never meant for.
-    try {
-      if (!build && await this.app.vault.adapter.exists(this.buildPath("builds"))) build = this.build || { mode: "stable" };
-    } catch { /* no adapter to ask (the test harness): then there is nothing delivered here either */ }
-    this.build = build;
-    return build;
+    this.build = BUILD.mode ? { ...BUILD } : null;
+    return this.build;
   }
 
   // Which of the two are on disk. A mode with a missing file is not offered — half a build is worse
@@ -2581,8 +2576,10 @@ module.exports = class FocusTasks extends Plugin {
   async buildModes() {
     const modes = [];
     for (const mode of ["stable", "test"]) {
-      const there = await Promise.all(BUILD_FILES.map((f) => this.app.vault.adapter.exists(this.buildPath("builds", mode, f))));
-      if (there.every(Boolean)) modes.push(mode);
+      try {
+        const there = await Promise.all(BUILD_FILES.map((f) => this.app.vault.adapter.exists(this.buildPath(mode, f))));
+        if (there.every(Boolean)) modes.push(mode);
+      } catch { /* no adapter to ask (the test harness) */ }
     }
     return modes;
   }
@@ -2593,7 +2590,7 @@ module.exports = class FocusTasks extends Plugin {
   async buildChoices() {
     const modes = await this.buildModes();
     const note = async (mode) => {
-      try { return JSON.parse(await this.app.vault.adapter.read(this.buildPath("builds", mode, BUILD_NOTE))); } catch { return null; }
+      try { return JSON.parse(await this.app.vault.adapter.read(this.buildPath(mode, BUILD_NOTE))); } catch { return null; }
     };
     const [stable, test] = [await note("stable"), await note("test")];
     const same = !!stable?.commit && stable.commit === test?.commit;
@@ -2609,12 +2606,10 @@ module.exports = class FocusTasks extends Plugin {
   async switchBuild(mode) {
     const adapter = this.app.vault.adapter;
     for (const file of BUILD_FILES) {
-      const from = this.buildPath("builds", mode, file);
+      const from = this.buildPath(mode, file);
       if (!(await adapter.exists(from))) { new Notice(t("changed")); return false; }
-      await adapter.write(this.buildPath(file), await adapter.read(from));
+      await adapter.write([this.manifest.dir, file].join("/"), await adapter.read(from));
     }
-    const note = this.buildPath("builds", mode, BUILD_NOTE);
-    if (await adapter.exists(note)) await adapter.write(this.buildPath(BUILD_NOTE), await adapter.read(note));
     new Notice(t("buildSwitched", t(mode === "test" ? "buildTest" : "buildStable")));
     // the code being replaced is the code running this line: let the click finish first
     const app = this.app, id = this.manifest.id;
