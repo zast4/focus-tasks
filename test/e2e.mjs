@@ -1077,6 +1077,14 @@ step("delete an area: its projects and tasks go with it", async () => {
 step("commands are registered", async () => {
   const ids = await page.eval(`return Object.keys(app.commands.commands).filter((k) => k.startsWith('focus-tasks:')).sort()`);
   const want = ["add-area", "add-task", "area-from-note", "fold-all", "open", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
+  // ⌘Z must not be claimed for the whole app: with it on the command, a note lost its own undo
+  const claimed = await page.eval(`
+    const hk = app.hotkeyManager;
+    const all = { ...(hk.customKeys || {}), ...(hk.defaultKeys || {}) };
+    return JSON.stringify(Object.entries(all)
+      .filter(([id]) => id.startsWith('focus-tasks:'))
+      .map(([id, keys]) => id + ' = ' + (keys || []).map((k) => (k.modifiers || []).join('+') + '+' + k.key).join(', ')));`);
+  if (/\+z\b/i.test(claimed)) throw new Error(`the plugin claims ⌘Z app-wide: ${claimed}`);
   if (J(ids) !== J(want)) throw new Error(J(ids));
 });
 

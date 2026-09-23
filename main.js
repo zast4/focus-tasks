@@ -657,7 +657,7 @@ class FocusRenderer extends MarkdownRenderChild {
       e.preventDefault();
       e.stopPropagation();
     }, true);
-    this.registerEvent(this.plugin.app.workspace.on("active-leaf-change", () => this.keys(this.selected.size > 0)));
+    this.registerEvent(this.plugin.app.workspace.on("active-leaf-change", () => this.keys(true)));
     this.plugin.views.add(this);
     this.render();
   }
@@ -881,7 +881,7 @@ class FocusRenderer extends MarkdownRenderChild {
       if (on) this.selected.add(task);
       el.toggleClass("is-selected", on);
     }
-    this.keys(this.selected.size > 0);
+    this.keys(true);
   }
 
   // While rows are selected and this tab is active: Mod+1 today, Mod+2 tomorrow, Mod+3 the picker,
@@ -900,12 +900,20 @@ class FocusRenderer extends MarkdownRenderChild {
     const run = { 1: () => this.dateSelection(day(0)), 2: () => this.dateSelection(day(1)), 3: () => this.pickDates(), 4: () => this.dateSelection(null) };
     for (const [key, fn] of Object.entries(run)) {
       this.scope.register(["Mod"], key, () => {
-        if (!this.editing) fn();
+        if (this.editing || !this.selected.size) return true;   // nothing of ours: let the app have the key
+        fn();
         return false;
       });
     }
+    // ⌘Z belongs to whatever is in front. Here it undoes the last change to the list; anywhere else
+    // — a note, another pane — this scope is not pushed at all and the key never reaches us.
+    this.scope.register(["Mod"], "z", () => {
+      if (this.editing) return true;
+      this.plugin.undo();
+      return false;
+    });
     this.scope.register([], "Escape", () => {
-      if (this.editing) return;  // the picker's own Esc
+      if (this.editing || !this.selected.size) return true;  // the picker's own Esc, or nothing to clear
       this.clearSelection();
       return false;
     });
@@ -2023,7 +2031,10 @@ module.exports = class FocusTasks extends Plugin {
     this.addCommand({ id: "add-area", name: t("cmdAddArea"), callback: () => this.newArea() });
     // ⌘Z belongs to the editor everywhere else, so the command only fires while the list's own pane
     // is in front and nothing is being typed in it.
-    this.addCommand({ id: "undo", name: t("cmdUndo"), hotkeys: [{ modifiers: ["Mod"], key: "z" }],
+    // No default hotkey here. With ⌘Z on the command, Obsidian handed the key to this plugin
+    // everywhere — a note's own undo stopped working, with the list not even open. The key is bound
+    // inside the list's own scope instead, which exists only while the list is the active tab.
+    this.addCommand({ id: "undo", name: t("cmdUndo"),
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType?.(FocusView) || (this.app.workspace.activeLeaf?.view instanceof FocusView ? this.app.workspace.activeLeaf.view : null);
         if (!view || [...this.views].some((v) => v.editing)) return false;
