@@ -108,6 +108,33 @@ test("an area stays on screen when something running is ripe for a look", async 
   eq(areaNames(await plugin.collect(false)), ["Sport"], "only the one with something to review");
 });
 
+test("a task typed under another stays under it, not at the bottom", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Aaa first", { area: "Work", scheduled: TODAY });
+    taskNote(a, "Bbb second", { area: "Work", scheduled: TODAY });
+    taskNote(a, "Ccc third", { area: "Work", scheduled: TODAY });
+  });
+  const second = plugin.tasks().find((x) => x.text === "Bbb second");
+  // the text sorts last by name and by date it ties with the rest: only the seat can hold it
+  await plugin.insertAfter(second, "Zzz typed here", TODAY);
+  eq(names((await plugin.collect(false))[0].loose),
+    ["Aaa first", "Bbb second", "Zzz typed here", "Ccc third"]);
+});
+
+test("a task typed under a project's step stays inside that project", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Aaa step", { area: "Work", project: "Launch", scheduled: TODAY });
+    taskNote(a, "Ccc step", { area: "Work", project: "Launch", scheduled: TODAY });
+  });
+  const first = plugin.tasks().find((x) => x.text === "Aaa step");
+  await plugin.insertAfter(first, "Zzz new step", TODAY);
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.projects[0].tasks), ["Aaa step", "Zzz new step", "Ccc step"]);
+});
+
 test("sending a task off and taking it back is one flag, and ⌘Z undoes it", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Work");

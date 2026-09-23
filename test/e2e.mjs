@@ -214,6 +214,14 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
   await taskIs("Lace them", { scheduled: TODAY, projects: "[[Marathon]]" });
   await editing();
   await page.key("Escape");
+  // and it stays where it was typed: right under the row that opened it, not at the bottom
+  await settle();
+  const steps = await page.eval(`
+    const head = __ft.project('Marathon');
+    const body = head?.nextElementSibling;
+    return body ? [...body.querySelectorAll('li.ft-task')].map((r) => r.querySelector('.ft-text').textContent.trim()) : null;`);
+  if (J(steps) !== J(["Buy shoes fast", "Lace them"]))
+    throw new Error("the new row did not stay under the one it was typed from: " + J(steps));
   await idle();
   await until(() => page.eval(`return __ft.task('Lace them')?.querySelector('.ft-date')?.textContent === 'Today'`), "«Today» on the right");
 });

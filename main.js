@@ -2003,8 +2003,7 @@ module.exports = class FocusTasks extends Plugin {
     }
     // Notes have no order of their own: a dragged order wins, the rest follows the nearest date and
     // then the name.
-    const seat = (task) => { const list = this.data.order.tasks[listOf(task)] || []; const i = list.indexOf(task.uid); return i < 0 ? 1e9 : i; };
-    const cmpTask = (x, y) => seat(x) - seat(y) || (x.date || "9999").localeCompare(y.date || "9999") || collator()(x.text, y.text);
+    const cmpTask = this.rowOrder();
     for (const area of byArea.values()) {
       area.loose.sort(cmpTask);
       area.future.loose.sort(cmpTask);
@@ -2580,8 +2579,34 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // The view asks for these when a row is typed: a task right after another one, or in a container.
+  // The comparator the list is drawn by: a dragged order first, then the nearest date, then the name.
+  rowOrder() {
+    const seat = (task) => { const list = this.data.order.tasks[listOf(task)] || []; const i = list.indexOf(task.uid); return i < 0 ? 1e9 : i; };
+    const cmp = collator();
+    return (x, y) => seat(x) - seat(y) || (x.date || "9999").localeCompare(y.date || "9999") || cmp(x.text, y.text);
+  }
+
   async insertAfter(anchor, text, day) {
-    return this.createTask(text, { area: anchor.area, project: anchor.project }, day);
+    const task = await this.createTask(text, { area: anchor.area, project: anchor.project }, day);
+    // Enter under a row means «here», not «somewhere below»: without a seat of its own the new task
+    // is sorted by date and name and usually lands at the bottom of the list.
+    if (task) await this.seatAfter(task, anchor);
+    return task;
+  }
+
+  // Writes the whole list's order down as it is on screen, with the new task right after its anchor.
+  async seatAfter(task, anchor) {
+    const key = listOf(task);
+    if (key !== listOf(anchor)) return;
+    const order = this.tasks()
+      .filter((x) => listOf(x) === key && x.status !== STATUS_DONE && x.status !== STATUS_CANCELLED)
+      .sort(this.rowOrder())
+      .map((x) => x.uid)
+      .filter((uid) => uid && uid !== task.uid);
+    const i = order.indexOf(anchor.uid);
+    order.splice(i < 0 ? order.length : i + 1, 0, task.uid);
+    this.data.order.tasks[key] = order;
+    await this.saveAll();
   }
 
   async addLine(target, text, day) {
