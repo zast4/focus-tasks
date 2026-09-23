@@ -219,6 +219,9 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
 });
 
 step("⌘2 tomorrow, ⌘4 no date", async () => {
+  // an undated step lives behind its project's ⏳ now
+  if (!(await page.eval(`return !!__ft.task('Plan route')`)))
+    await click(`__ft.at(__ft.project('Marathon').querySelector('.ft-later-chip'))`, "the project's ⏳");
   await until(() => page.eval(`return !!__ft.task('Plan route')`), "Plan route on screen");
   await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-text'))`);
   await editing();
@@ -263,26 +266,55 @@ step("the date on the right: a typed date, a day of the month, Clear date", asyn
   await idle();
 });
 
-step("the box completes the task: status, the day, and the area's «Completed» brings it back", async () => {
+step("the box completes a step: it stays inside its project, under the project's ✓", async () => {
   const done = `(() => { const r = __ft.task('Lace them'); return !!r && !!r.closest('.ft-done-block') && r.querySelector('input').checked; })()`;
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await taskIs("Lace them", { status: "done", completedDate: TODAY });
-  await until(() => page.eval(`return ${done}`), "Lace them under Completed");
-  if (await page.eval(`return !!__ft.task('Lace them').closest('.ft-project-body')`)) throw new Error("a project keeps a Completed block of its own");
-  const tag = await page.eval(`return __ft.task('Lace them').querySelector('.ft-done-project')?.textContent.trim() || null`);
-  if (tag !== "📁Marathon") throw new Error("the done row does not name its project: " + J(tag));
-  // the ✓N in the area's title is what counts them and folds them — there is no second grey row
+  await until(() => page.eval(`return ${done}`), "Lace them among the done");
+  // it belongs to Marathon, so it stays in Marathon — not in a pile at the bottom of the area
+  if (!(await page.eval(`return !!__ft.task('Lace them').closest('.ft-project-body')`)))
+    throw new Error("a done step left its project for the area's block");
+  if (await page.eval(`return !!__ft.task('Lace them').querySelector('.ft-done-project')`))
+    throw new Error("inside its own project the row still names the project");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-done-title')`)) throw new Error("the Completed block grew a heading again");
-  const chip = `__ft.at(__ft.area('Sport').querySelector('.ft-done-chip'))`;
-  const chipReads = await page.eval(`return __ft.area('Sport').querySelector('.ft-done-chip')?.textContent.trim() || null`);
-  if (chipReads !== "1") throw new Error("the area's ✓ does not count the done task: " + J(chipReads));
-  await click(chip, "the area's ✓");
-  await until(() => page.eval(`return !__ft.task('Lace them')`), "Completed folded");
-  await click(chip, "the area's ✓");
-  await until(() => page.eval(`return ${done}`), "Completed open again");
+  const chip = `__ft.at(__ft.project('Marathon').querySelector('.ft-done-chip'))`;
+  const reads = await page.eval(`return __ft.project('Marathon').querySelector('.ft-done-chip')?.textContent.trim() || null`);
+  if (reads !== "1") throw new Error("the project's ✓ does not count its done step: " + J(reads));
+  await click(chip, "the project's ✓");
+  await until(() => page.eval(`return !__ft.task('Lace them')`), "folded away");
+  await click(chip, "the project's ✓");
+  await until(() => page.eval(`return ${done}`), "open again");
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await taskIs("Lace them", { status: "open", completedDate: null });
   await until(() => page.eval(`const r = __ft.task('Lace them'); return !!r && !r.closest('.ft-done-block')`), "Lace them open again");
+});
+
+step("a project shows its own upcoming steps, not the area's pile", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Book the hotel")),
+    `---\nuid: ft-later-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${ymd(new Date(Date.now() + 30 * 864e5))}\nprojects:\n  - "[[Marathon]]"\n---\n`);
+  await toPane();
+  await until(() => page.eval(`
+    const c = __ft.project('Marathon')?.querySelector('.ft-later-chip');
+    return !!c && Number(c.textContent) >= 1;`), "Marathon counts its upcoming steps on its own row");
+  const key = await plugin(`
+    const m = (await p.collect(false)).flatMap((a) => a.projects).find((x) => x.file.basename === 'Marathon');
+    return 'steps-later:' + m.file.path;`);
+  const set = async (open) => plugin(`
+    const key = ${J(key)};
+    if (!!p.data.opened[key] !== ${open}) await p.toggleShown(key, true);
+    if (!p.isShown('project:' + key.slice('steps-later:'.length), false)) await p.toggleShown('project:' + key.slice('steps-later:'.length), false);
+    p.refresh(); return true;`);
+  await set(false);
+  await until(() => page.eval(`return !__ft.task('Book the hotel')`), "an upcoming step waits behind the ⏳");
+  await set(true);
+  await until(() => page.eval(`
+    const r = __ft.task('Book the hotel');
+    return !!r && !!r.closest('.ft-project-body') && r.hasClass('is-later');`),
+    "and opens inside the project, not in the area's block");
+  if (await page.eval(`return !!__ft.task('Book the hotel').closest('.ft-future-block')`))
+    throw new Error("the upcoming step is still in the area's upcoming block");
+  fs.unlinkSync(path.join(VAULT, taskPath("Book the hotel")));
+  await settle();
 });
 
 step("a second click on the same box before the list catches up does not undo the first", async () => {
@@ -454,10 +486,12 @@ step("the last step of a project checked off: the project stays, marked done, an
   await taskIs("Throw out the old shoes", { status: "done" });
   await until(() => page.eval(`
     const head = __ft.project('Cleanup');
-    return !!head && head.hasClass('is-done') && /1/.test(head.querySelector('.ft-count')?.textContent || '');`),
-    "the project kept its place and says it is done");
-  await until(() => page.eval(`return !!__ft.task('Throw out the old shoes')?.closest('.ft-done-block')`),
-    "its step is in «Completed» of the area");
+    return !!head && head.hasClass('is-done') && head.querySelector('.ft-done-chip')?.textContent.trim() === '1';`),
+    "the project kept its place and its ✓ counts the step");
+  await until(() => page.eval(`
+    const r = __ft.task('Throw out the old shoes');
+    return !!r && !!r.closest('.ft-done-block') && !!r.closest('.ft-project-body');`),
+    "its step stayed inside the project");
   // …and the next step goes straight into it
   await click(`__ft.at(__ft.project('Cleanup').querySelector('.ft-plus'))`);
   await editing();
@@ -578,9 +612,18 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
     p.refresh(); return true;`);
   await settle();
   await pick("Stretch", "Run 5k");
-  const from = await pos(`__ft.grip(__ft.task(${J(names[0])}))`, "grip of the first selected row");
-  const to = await pos(`__ft.at(__ft.project('Marathon 2027'))`, "Marathon 2027 header");
-  await page.drag(from, to);
+  // Both ends are read in one go and WITHOUT scrolling: __ft.at() centres what it is asked about, so
+  // taking the grip and then the header moves the grip out from under the point already measured.
+  await settle();
+  const ends = await page.eval(`
+    const row = __ft.task(${J(names[0])}), head = __ft.project('Marathon 2027');
+    if (!row || !head) return null;
+    const g = row.querySelector(':scope > .ft-grip')?.getBoundingClientRect(), h = head.getBoundingClientRect();
+    if (!g || !g.height || !h.height) return null;
+    return { from: { x: Math.round(g.left + g.width / 2), y: Math.round(g.top + g.height / 2) },
+             to: { x: Math.round(h.left + h.width / 2), y: Math.round(h.top + h.height / 2) } };`);
+  if (!ends) throw new Error("the row and the project header are not both on screen");
+  await page.drag(ends.from, ends.to);
   for (const name of names) await taskIs(name, { projects: "[[Marathon 2027]]" });
   await toPane();             // keys only reach the list while its own tab is in front
   await page.key("Escape");   // Esc is the way out of a selection; a finished drop usually clears it too
@@ -662,7 +705,9 @@ step("ticking a box does not move the page under the reader", async () => {
     const rows = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')]
       .filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
     const name = (r) => r.querySelector('.ft-text').textContent.trim();
-    return { tick: name(rows[1]), mark: name(rows[rows.length - 1]), markY: Math.round(rows[rows.length - 1].getBoundingClientRect().top) };`);
+    // the mark is the FIRST row on screen and the tick is below it: the list holds its place by
+    // pinning the topmost row, so a row that leaves from under the mark must not move the mark
+    return { tick: name(rows[rows.length - 1]), mark: name(rows[0]), markY: Math.round(rows[0].getBoundingClientRect().top) };`);
   // clicking must not be preceded by a scroll of our own: __ft.at() centres the row, which would be
   // the jump this step is looking for
   const point = await page.eval(`

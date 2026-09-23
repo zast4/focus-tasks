@@ -227,6 +227,49 @@ test("a text with characters a file name cannot hold still works", async () => {
   ok(!/[\\/:"]/.test(task.file.basename), "the file name is safe: " + task.file.basename);
 });
 
+test("a project on screen keeps its own upcoming steps, out of the area's pile", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Today's step", { area: "Work", project: "Launch", scheduled: TODAY });
+    taskNote(a, "Next month", { area: "Work", project: "Launch", scheduled: DAY(30) });
+    taskNote(a, "Someday step", { area: "Work", project: "Launch" });
+    taskNote(a, "Loose later", { area: "Work" });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.projects[0].tasks), ["Today's step"], "the focus keeps only what is due");
+  eq(names(area.projects[0].later).sort(), ["Next month", "Someday step"], "the rest hangs off the project");
+  eq(area.future.projects.length, 0, "and the project is not copied into the area's upcoming block");
+  eq(names(area.future.loose), ["Loose later"], "which now holds only the area's own tasks");
+});
+
+test("a project with nothing due and nothing done today still waits under «upcoming»", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Later on");
+    taskNote(a, "Some day", { area: "Work", project: "Later on" });
+    taskNote(a, "Due now", { area: "Work", scheduled: TODAY });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(area.projects.length, 0, "nothing of it is due");
+  eq(area.future.projects.map((x) => x.file.basename), ["Later on"]);
+  eq(names(area.future.projects[0].tasks), ["Some day"]);
+});
+
+test("what a project closed today belongs to the project, not to the area", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Step done", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
+    taskNote(a, "Step left", { area: "Work", project: "Launch", scheduled: TODAY });
+    taskNote(a, "Loose done", { area: "Work", status: "done", completedDate: TODAY });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.projects[0].done), ["Step done"], "the project counts its own");
+  eq(names(area.doneLoose), ["Loose done"], "the area's block holds only what has no project");
+  eq(names(area.done).sort(), ["Loose done", "Step done"], "and the area still knows the whole day");
+});
+
 test("checkbox lines left from 0.1.0 are counted, so the list can say why it is empty", async () => {
   const { app, plugin } = await stand((a) => writeNote(a, "Areas/Sport.md", { area: "Sport", type: "area" },
     "## Inbox\n- [ ] Run 5k ⏳ 2026-09-22\n- [x] Stretch ✅ 2026-09-21\n- not a task"));

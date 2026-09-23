@@ -40,7 +40,8 @@ What you can do in the view:
 
 | | |
 |---|---|
-| Complete a task | click its checkbox; for the rest of the day it stays at the bottom of its area under a hairline, and the green ✓N in the area's title folds it away (its box brings it back) |
+| Complete a task | click its checkbox; for the rest of the day it stays where it lives — a step inside its project, a loose task at the bottom of its area — under a hairline, and the green ✓N on that row folds it away (its box brings it back) |
+| See what is ahead in a project | the ⏳N on the project's row opens its upcoming and undated steps, in the project itself |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** cancels |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date |
@@ -193,9 +194,11 @@ passes (`--keep` leaves it).
   дневным фокусом сверху. Свои здесь только `uid` и `area`; чужие ключи обе стороны сохраняют.
   Ставится в один клик: **Настройки → Focus Tasks → TaskNotes**.
 
-Отмеченная задача до конца дня остаётся внизу своей области под тонкой линией (галочка там
-возвращает её в работу), а в заголовке области появляется зелёная ✓N: видно, что сделано за день,
-и одним кликом это сворачивается.
+Отмеченная задача до конца дня остаётся там, где живёт: шаг - внутри своего проекта, разовая -
+внизу своей области, под тонкой линией (галочка возвращает её в работу). Зелёная ✓N на строке
+проекта или области считает сделанное и сворачивает его одним кликом. Будущие и бессрочные шаги
+проекта лежат за его же ⏳N, а не в общем «Показать будущее» области: видно, что осталось именно
+в этом проекте.
 
 Проект, в котором сегодня закрыли последнюю задачу, тоже не исчезает: до конца дня он стоит
 на своём месте, вместо счётчика — зелёное «сделано N», а «+» рядом заводит следующий шаг.

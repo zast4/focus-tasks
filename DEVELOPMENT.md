@@ -60,9 +60,12 @@ and do not reopen one that turned done while you were working.
     hint when there are no task notes at all.
   - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
     + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
-  - `completed(box, done, key)`: the day's closed work at the bottom of an area — a hairline and the
-    rows, with no heading of its own; the `ft-done-chip` (✓N) in the area's title counts them and
-    folds them by the `done:<area>` key. Its rows are not tracked, so selection and drag skip them.
+  - `chip(head, …)`: a counter that folds a part of a row — «⏳N» upcoming (`steps-later:<path>`,
+    closed by default) and «✓N» closed today (`done:<path>` / `done:<area>`, open by default). On a
+    project it also unfolds the project, or the rows it opens would stay hidden.
+  - `completed(box, done, key, inProject)`: the closed work of the day under a hairline, with no
+    heading of its own — inside its project for a step, at the bottom of the area for a loose task
+    (then the row names no project). Its rows are not tracked, so selection and drag skip them.
   - Rows are a grid: the box lives in `.ft-box`, a cell one line tall (`--ft-line`), and is centred in
     it — themes size checkboxes in the checkbox's own em, so a computed margin misses by a few pixels.
   - Inline editing: `editor()` (contenteditable, Enter / Esc / blur, Mod+digit hotkeys via a `Scope`),

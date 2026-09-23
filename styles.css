@@ -162,13 +162,16 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view li.ft-task.is-toggling > .ft-text { opacity: 0.55; text-decoration: line-through; }
 
 /* «Completed» at the bottom of an area: today's checked-off tasks, faint and struck through. */
-/* What the day closed here: a green ✓N in the area's own title folds the rows below. */
-.focus-tasks-view .ft-done-chip { display: inline-flex; align-items: center; gap: 0.15em; margin-left: 0.5em;
-  font-size: 0.8rem; font-weight: 400; color: var(--color-green); cursor: pointer; align-self: center; }
-.focus-tasks-view .ft-done-chip.is-off { color: var(--text-faint); }
-.focus-tasks-view .ft-done-chip:hover { color: var(--interactive-accent); }
-.focus-tasks-view .ft-done-tick { display: inline-flex; }
-.focus-tasks-view .ft-done-tick svg { width: 0.9rem; height: 0.9rem; }
+/* Counters that fold a part of a row: «✓N» closed today, «⏳N» still ahead. On an area they cover
+   its loose tasks, on a project its own steps. */
+.focus-tasks-view .ft-chip { display: inline-flex; align-items: center; gap: 0.15em; margin-left: 0.5em;
+  font-size: 0.8rem; font-weight: 400; cursor: pointer; align-self: center; }
+.focus-tasks-view .ft-done-chip { color: var(--color-green); }
+.focus-tasks-view .ft-later-chip { color: var(--text-muted); }
+.focus-tasks-view .ft-chip.is-off { color: var(--text-faint); }
+.focus-tasks-view .ft-chip:hover { color: var(--interactive-accent); }
+.focus-tasks-view .ft-chip-icon { display: inline-flex; }
+.focus-tasks-view .ft-chip-icon svg { width: 0.9rem; height: 0.9rem; }
 /* The block itself has no heading any more: a hairline separates it from the live list. */
 .focus-tasks-view .ft-done-block { margin-top: 0.45em; padding-top: 0.2em;
   border-top: 1px solid var(--background-modifier-border); }

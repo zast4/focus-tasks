@@ -37,10 +37,10 @@ all»; mobile: «the date picker fits the screen and sets a date by tap»*
 late or more, the row says how many days, not only in red.
 → *model: «a task stuck for two weeks is still in the focus, dated in the past»*
 
-**Evening: what got done.** Everything checked off today stays at the bottom of its area under a
-hairline, steps of projects included, each row naming the project it came from; the green ✓N in the
-area's title counts them and folds them away — a second grey row under «Show upcoming» read as its
-twin and made every area end in a footer. Tomorrow they are gone from the list —
+**Evening: what got done.** Everything checked off today stays where it lives — a step under its own
+project, a loose task at the bottom of its area — beneath a hairline, and the green ✓N on that row
+counts it and folds it away. One pile at the bottom of the area made you hunt for which project a
+row came from, and a second grey row under «Show upcoming» read as its twin. Tomorrow they are gone from the list —
 the dates they carry are what the weekly throughput counts.
 → *model: «evening: everything checked off today is counted in its area, and gone tomorrow», «a step
 of a project checked off today keeps its area in the focus»; e2e: «the box completes the task: status,

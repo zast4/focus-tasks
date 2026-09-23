@@ -107,6 +107,7 @@ const STRINGS = {
     sTasksFolder: "Tasks folder", sTasksFolderDesc: "Where task notes are kept, one note per task.",
     sLanguage: "Language", sLanguageDesc: "Interface language (Auto follows Obsidian).",
     doneToday: "Done today: {0}", doneHide: "Hide what is done", doneShow: "Show what is done",
+    laterHide: "Hide the upcoming steps", laterShow: "Show the upcoming steps",
     oldFormat: "{0} tasks here are still checkbox lines from version 0.1.0 — a task is a note of its own now, so they are not shown. ",
     oldFormatHow: "How to move them",
     sCompanion: "TaskNotes",
@@ -174,6 +175,7 @@ const STRINGS = {
     sTasksFolder: "Папка задач", sTasksFolderDesc: "Где лежат заметки задач, по одной заметке на задачу.",
     sLanguage: "Язык", sLanguageDesc: "Язык интерфейса (Auto — как в Obsidian).",
     doneToday: "Сделано сегодня: {0}", doneHide: "Скрыть выполненные", doneShow: "Показать выполненные",
+    laterHide: "Скрыть будущие шаги", laterShow: "Показать будущие шаги",
     oldFormat: "Здесь ещё {0} задач строками-чекбоксами из версии 0.1.0 — теперь задача это отдельная заметка, поэтому их не видно. ",
     oldFormatHow: "Как перенести",
     sCompanion: "TaskNotes",
@@ -843,15 +845,10 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     // What was finished here today lives in the area's own header: a second grey row under
     // «Show upcoming» read as its twin and made the bottom of every area look like a footer.
-    if (!all && open && area.done.length) {
-      const key = "done:" + area.name;
-      const shown = p.isShown(key, false);
-      const chip = title.createSpan({ cls: "ft-done-chip", attr: { "aria-label": t(shown ? "doneHide" : "doneShow") } });
-      chip.toggleClass("is-off", !shown);
-      setIcon(chip.createSpan({ cls: "ft-done-tick" }), "check");
-      chip.createSpan({ text: String(area.done.length) });
-      chip.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, false); p.refresh(); };
-    }
+    if (!all && open && area.doneLoose.length)
+      this.chip(title, "ft-done-chip", "check", area.doneLoose.length,
+        p.isShown("done:" + area.name, false), "done:" + area.name,
+        t(p.isShown("done:" + area.name, false) ? "doneHide" : "doneShow"));
     this.plus(title, t("addToArea"), async () => ({ area: area.name, project: null, noDate: all }),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
     this.more(title, (menu) => this.areaMenu(menu, area));
@@ -872,7 +869,9 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     if (area.loose.length) await this.list(box, area.loose);
     for (const project of area.projects) await this.project(box, area, project);
-    if (area.later || area.future.projects.length) {
+    // «Show upcoming» is about what the AREA still holds: steps that belong to a project now live
+    // under that project, and counting them here left the block opening on nothing.
+    if (area.future.loose.length || area.future.projects.length) {
       const futureKey = (wide ? "futureoff:" : "future:") + area.name;
       const shown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
       this.upcoming(box, area, shown, futureKey);
@@ -882,13 +881,13 @@ class FocusRenderer extends MarkdownRenderChild {
         for (const project of area.future.projects) await this.project(block, area, project, true);
       }
     }
-    if (area.done.length) await this.completed(box, area.done, "done:" + area.name);
+    if (area.doneLoose.length) await this.completed(box, area.doneLoose, "done:" + area.name);
   }
 
   // The day's closed work at the bottom of an area: everything checked off there today, steps of its
   // projects included — each row carries the project it belongs to. Open unless folded; a box
   // unchecks its task. Not selectable, not draggable.
-  async completed(box, done, key) {
+  async completed(box, done, key, inProject = false) {
     const p = this.plugin;
     const open = p.isShown(key, false);
     if (!open) return;
@@ -902,7 +901,7 @@ class FocusRenderer extends MarkdownRenderChild {
       check.checked = true;
       this.check(li, check, task);
       await this.text(li, task);
-      if (task.project) {
+      if (task.project && !inProject) {
         const tag = li.createSpan({ cls: "ft-done-project" });
         tag.createSpan({ cls: "ft-icon", text: "📁" });
         tag.createSpan({ text: task.project });
@@ -995,7 +994,9 @@ class FocusRenderer extends MarkdownRenderChild {
     const p = this.plugin;
     const path = project.file.path;
     const key = (later ? "later:" : "project:") + path;
-    const open = p.isShown(key, all);
+    // A finished project has no open steps to fold: its caret is a spacer, and its ✓ is what opens
+    // and closes the only thing left in it.
+    const open = project.finished || p.isShown(key, all);
     const head = box.createDiv({ cls: "ft-project" });
     if (later) head.addClass("is-later");
     if (project.finished) head.addClass("is-done");
@@ -1006,9 +1007,18 @@ class FocusRenderer extends MarkdownRenderChild {
     head.createSpan({ cls: "ft-icon", text: "📁" });
     this.link(head.createSpan({ text: project.file.basename }), project.file);
     const focus = project.tasks.filter(inFocus).length;
-    if (project.finished) head.createSpan({ cls: "ft-count is-done", text: t("allDone", project.done.length) });
-    else if (all) head.createSpan({ cls: "ft-count", text: `${project.tasks.length}` + (focus ? t("inFocus", focus) : "") });
-    else if (!open) head.createSpan({ cls: "ft-count", text: String(project.tasks.length) });
+    if (all) head.createSpan({ cls: "ft-count", text: `${project.tasks.length}` + (focus ? t("inFocus", focus) : "") });
+    else if (!open && !project.finished) head.createSpan({ cls: "ft-count", text: String(project.tasks.length) });
+    // Its own upcoming work and its own closed work, on its own row: in the area's piles a project's
+    // steps were mixed with everyone else's and you could not see what is left in this one.
+    const laterKey = "steps-later:" + path, doneKey = "done:" + path;
+    const laterOpen = !all && !later && p.isShown(laterKey, true);
+    const doneOpen = !all && !later && p.isShown(doneKey, false);
+    const unfold = async () => { if (!p.isShown(key, all)) await p.toggleShown(key, all); };
+    if (!all && !later && project.later?.length)
+      this.chip(head, "ft-later-chip", "clock", project.later.length, laterOpen, laterKey, t(laterOpen ? "laterHide" : "laterShow"), true, unfold);
+    if (!all && !later && project.done?.length)
+      this.chip(head, "ft-done-chip", "check", project.done.length, doneOpen, doneKey, t(doneOpen ? "doneHide" : "doneShow"), false, unfold);
     this.plus(head, t("addStep"), () => ({ area: area.name, project: project.file.basename, noDate: later || all }), () => {
       const body = head.nextElementSibling?.hasClass("ft-project-body") ? head.nextElementSibling : null;
       if (body) return body.lastElementChild || body;
@@ -1018,9 +1028,27 @@ class FocusRenderer extends MarkdownRenderChild {
     });
     this.more(head, (menu) => this.projectMenu(menu, area, project, head));
     this.grip(head, { type: "project", area, project });
-    if (!open || project.finished) return;
+    if (!open) return;
+    if (!project.tasks.length && !laterOpen && !doneOpen) return;
     const body = box.createDiv({ cls: "ft-project-body" });
-    await this.list(body, project.tasks, all);
+    if (project.tasks.length) await this.list(body, project.tasks, all);
+    if (laterOpen) await this.list(body, project.later);
+    if (doneOpen) await this.completed(body, project.done, doneKey, true);
+  }
+
+  // A counter on a header that folds a part of it: «⏳3» upcoming, «✓2» closed today.
+  chip(head, cls, icon, count, open, key, label, closedByDefault = false, unfold = null) {
+    const chip = head.createSpan({ cls: `ft-chip ${cls}`, attr: { "aria-label": label } });
+    chip.toggleClass("is-off", !open);
+    setIcon(chip.createSpan({ cls: "ft-chip-icon" }), icon);
+    chip.createSpan({ text: String(count) });
+    chip.onclick = async (e) => {
+      e.stopPropagation();
+      // «Show me this» means show it: a folded project would swallow the rows the chip just opened.
+      if (!open && unfold) await unfold();
+      await this.plugin.toggleShown(key, closedByDefault);
+      this.plugin.refresh();
+    };
   }
 
   // Drag by the grip (mouse or finger — pointer events). Areas reorder among areas, projects within
@@ -1843,7 +1871,7 @@ module.exports = class FocusTasks extends Plugin {
   async collect(all) {
     const byArea = new Map();
     const areaOf = (name) => {
-      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [] });
+      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [], doneLoose: [] });
       return byArea.get(name);
     };
     const first = (tasks) => tasks.map((x) => x.date).filter(Boolean).sort()[0] || "9999";
@@ -1870,8 +1898,8 @@ module.exports = class FocusTasks extends Plugin {
       const area = areaOf(task.area);
       if (task.status === STATUS_DONE) {
         if (task.doneDate === now) {
-          area.done.push(task);  // one «Completed» per area, the project is on the row
-          if (bucket) bucket.done.push(task);  // …and the project counts its own, to stay visible
+          area.done.push(task);                                  // держит область в фокусе до конца дня
+          (bucket ? bucket.done : area.doneLoose).push(task);     // рисуется там, где задача живёт
         }
         continue;
       }
@@ -1898,8 +1926,12 @@ module.exports = class FocusTasks extends Plugin {
         // out, marked «done N». Otherwise closing the last step would take the project off screen —
         // with no sign it was finished, and nowhere to add the next one.
         b.finished = !all && !!b.done.length && !b.tasks.length && !b.later.length;
-        if (all || b.tasks.length || b.finished) area.projects.push(b);
-        if (!all && !b.finished && (b.later.length || !b.tasks.length)) area.future.projects.push({ file: b.file, tasks: b.later, done: [], first: first(b.later) });
+        // A project that is on screen owns the rest of itself: its upcoming steps and what it closed
+        // today hang off its own row, not in the area's piles. Only a project with nothing due and
+        // nothing done today waits whole under «Show upcoming».
+        const here = !!b.tasks.length || !!b.done.length;
+        if (all || here) area.projects.push(b);
+        if (!all && !here) area.future.projects.push({ file: b.file, tasks: b.later, later: [], done: [], first: first(b.later) });
       }
       delete area.buckets;
     }
@@ -1915,6 +1947,8 @@ module.exports = class FocusTasks extends Plugin {
       a.projects.sort(byOrder(a));
       a.future.projects.sort(byOrder(a));
       a.done.sort((x, y) => cmp(x.project || "", y.project || "") || cmp(x.text, y.text));
+      a.doneLoose.sort((x, y) => cmp(x.text, y.text));
+      for (const b of a.projects) b.done?.sort((x, y) => cmp(x.text, y.text));
     }
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));
   }
@@ -2099,6 +2133,13 @@ module.exports = class FocusTasks extends Plugin {
       const link = file ? this.app.metadataCache.fileToLinktext(file, task.file.path) : null;
       const ok = await this.setFields(task, { area, projects: link ? [`[[${link}]]`] : null });
       if (ok) Object.assign(task, { area, project });
+    }
+    // Dropped into a project, but dated later than today? Its rows hide behind the project's ⏳ —
+    // open it, or the work you just moved vanishes from the screen.
+    if (file && tasks.some((x) => !inFocus(x))) {
+      const key = "steps-later:" + file.path;
+      if (!this.isShown(key, true)) await this.toggleShown(key, true);
+      if (!this.isShown("project:" + file.path, false)) await this.toggleShown("project:" + file.path, false);
     }
     await this.reorder(tasks, drop, shown);
     this.refresh();
