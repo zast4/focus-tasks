@@ -648,11 +648,11 @@ class FocusRenderer extends MarkdownRenderChild {
     // focused before (a note's editor swallows Esc and ⌘1–4) and the list looks deaf.
     this.containerEl.tabIndex = -1;
     const later = () => { clearTimeout(this.timer); this.timer = setTimeout(() => this.render(), 300); };
-    // Rows waiting for an hour of the day have nothing to wake them: no file changes at 16:00. Once a
-    // minute the list checks whether one of them has come due, and only then redraws.
-    this.registerInterval(window.setInterval(() => {
-      if ((this.pending || []).some(backDue)) this.render();
-    }, 60000));
+    // A task waiting for an hour of the day has nothing to wake it: nothing in the vault changes at
+    // 16:00. The list watches the clock itself — a timeout set for the nearest moment, and a slow
+    // sweep behind it in case the machine slept through the timeout.
+    this.registerInterval(window.setInterval(() => this.wake(), 30000));
+    this.register(() => clearTimeout(this.alarm));
     this.registerEvent(this.plugin.app.metadataCache.on("changed", later));
     this.registerEvent(this.plugin.app.vault.on("delete", later));
     this.registerEvent(this.plugin.app.vault.on("rename", later));
@@ -715,7 +715,10 @@ class FocusRenderer extends MarkdownRenderChild {
     const rest = everything ? (await p.collect(true)).filter((a) => !areas.some((x) => x.name === a.name)) : [];
     const shownAreas = [...areas, ...rest];
     this.fresh = new WeakMap();
-    this.pending = [];   // rows drawn quiet because they are not due back yet; the minute timer watches them
+    // Every task still waiting to come back — from the model, not from the rows on screen: the group
+    // they live in is usually folded, and then there was nothing to watch and the moment passed by.
+    this.pending = p.tasks().filter(waitingBack);
+    this.setAlarm();
     // [key, all] of every foldable header on screen (also inside folded areas)
     this.folds = [
       ...areas.flatMap((a) => [["area:" + a.name, false], ...a.projects.map((pr) => ["project:" + pr.file.path, false]),
@@ -1437,6 +1440,23 @@ class FocusRenderer extends MarkdownRenderChild {
     }
   }
 
+  // Redraw as soon as one of the waiting tasks is due, and not a moment later.
+  wake() {
+    if (this.editing || this.held) return;   // a card or a drag is open: it would be pulled away
+    if ((this.pending || []).some(backDue)) this.render();
+  }
+
+  // The nearest moment something is due back, to the second. Nothing within the hour — the sweep
+  // will do; the day it names is far enough away that half a minute makes no difference.
+  setAlarm() {
+    clearTimeout(this.alarm);
+    const soon = this.pending
+      .map((task) => moment(`${task.date}T${task.at || "00:00"}`).valueOf() - Date.now())
+      .filter((ms) => ms > 0 && ms < 3600000)
+      .sort((a, b) => a - b)[0];
+    if (soon !== undefined) this.alarm = window.setTimeout(() => this.wake(), soon + 500);
+  }
+
   // The row of a task as it stands on screen: what a picker opened from a menu hangs on.
   rowLabel(task) {
     const row = this.rows().find(([, x]) => x === task)?.[0];
@@ -1839,7 +1859,7 @@ class FocusRenderer extends MarkdownRenderChild {
       const li = ul.createEl("li", { cls: "task-list-item ft-task" });
       if (!all && !inFocus(task) && task.status !== STATUS_PROGRESS) li.addClass("is-later");
       // Sent off and not due back yet: on screen, in its place, but quiet enough to read past.
-      if (waitingBack(task)) { li.addClass("is-waiting"); (this.pending ||= []).push(task); }
+      if (waitingBack(task)) li.addClass("is-waiting");
       const box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       this.check(li, box, task);
       const text = await this.text(li, task);

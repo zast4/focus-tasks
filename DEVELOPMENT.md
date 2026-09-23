@@ -104,8 +104,10 @@ and do not reopen one that turned done while you were working.
     a.running)`, or the counter and the way back would vanish with it) and to say «из них запущено N»
     on the chip. The ▷ on the row is the whole visible difference. `backDue(task)` decides waiting or
     back: the day, or the exact moment when an hour was named. Nothing in the vault changes at 16:00,
-    so the renderer keeps a `pending` list of the waiting rows and a one-minute interval redraws when
-    one comes due. ▷ is on **every** row (`is-offer`, shown on hover): on an ordinary one it opens the
+    so the list watches the clock itself: `pending` is every waiting task **as the model sees it**
+    (taking it from the rendered rows meant a folded group was not watched at all), `setAlarm()` fires
+    a timeout on the nearest moment to the second, and a 30-second sweep behind it covers a machine
+    that slept through the timeout. `wake()` skips the redraw while a card or a drag is open. ▷ is on **every** row (`is-offer`, shown on hover): on an ordinary one it opens the
     card, on a running one it hands the task back into today's focus, dropping the hour. Clicking the
     date of a running task opens the card again; clearing its day any other way (`setDate(task, null)`)
     hands it back too. `obsidian_tasks.py` keeps such tasks out of the bot's focus reports until the

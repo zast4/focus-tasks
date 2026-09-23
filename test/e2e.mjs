@@ -537,6 +537,17 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
     return cs.borderTopWidth + " " + cs.borderTopStyle;`);
   if (!/^[1-9]/.test(edge) || /none/.test(edge)) throw new Error(`the upcoming block has no edge: ${J(edge)}`);
   if (grouped.split && !grouped.before) throw new Error("the line does not separate the started ones from the planned");
+  // folded away, the waiting task is still being watched — that is where the clock lost it before
+  const watched = JSON.parse(await plugin(`
+    const key = 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;
+    if (p.isShown(key, true)) await p.toggleShown(key, true);   // fold the group
+    p.refresh();
+    await new Promise((r) => setTimeout(r, 500));
+    const view = [...p.views][0];
+    return JSON.stringify({ folded: !p.isShown(key, true),
+      pending: (view.pending || []).map((t) => t.text), alarm: !!view.alarm });`));
+  if (!watched.folded || !watched.pending.includes("Ask the lawyer"))
+    throw new Error(`a folded group is not watched any more: ${J(watched)}`);
   // the hour passes: it comes back into the focus by itself
   await plugin(`
     const task = p.tasks().find((x) => x.text === 'Ask the lawyer');
