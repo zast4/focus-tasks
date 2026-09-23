@@ -42,7 +42,7 @@ What you can do in the view:
 |---|---|
 | Complete a task | click its checkbox; for the rest of the day it stays where it lives — a step inside its project, a loose task at the bottom of its area — under a hairline, and the green ✓N on that row folds it away (its box brings it back) |
 | See what is ahead in a project | the ⏳N on the project's row opens its upcoming and undated steps, in the project itself |
-| Hand a task off | «In progress» in the row's menu: it leaves the focus, keeps its date as the day to look again, and waits behind the ▷N of its project or area — the ▷ turns the accent colour when that day comes, and the ▷ on the row itself takes the task back |
+| Hand a task off | «In progress» in the row's menu: it leaves the focus and waits behind the ▷N of its project or area. Its date now means «look at it again»: on that day the task comes back among the rows that are due, marked ▷, and that ▷ hands it back to you |
 | Priority | the dot on a row opens the levels — high, normal, low, or none at all; the same is in the row's menu, and in the menu of a selection it sets them all |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** cancels |
@@ -204,9 +204,10 @@ passes (`--keep` leaves it).
 
 Задача, которую ты уже запустил - делегировал, отправил, ждёшь ответа, - помечается «В работе»
 (меню строки). Она уходит из фокуса, но не из списка: ждёт за счётчиком ▷N своего проекта или
-области, а её дата перестаёт значить «сделать» и начинает значить «вернуться и посмотреть». Когда
-этот день наступает, ▷ загорается цветом акцента - и область остаётся в фокусе ради одного этого
-сигнала, даже если делать в ней сегодня нечего. ▷ на самой строке возвращает задачу тебе.
+области. Её дата перестаёт значить «сделать» и начинает значить «вернуться и посмотреть»: в этот
+день задача сама возвращается наверх, к тем, что на сегодня, и стоит там со значком ▷ - это не
+«делай», а «проверь». Клик по ▷ возвращает её в работу совсем. У задачи без даты дня возврата нет:
+она будет ждать за счётчиком, пока ты сам её не достанешь.
 
 Точка на строке - приоритет задачи (`priority` в заметке). Клик по ней открывает уровни:
 высокий, обычный, низкий и «без приоритета» - последний убирает метку совсем. То же есть в меню

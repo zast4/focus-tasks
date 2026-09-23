@@ -105,7 +105,7 @@ const STRINGS = {
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
     inProgress: "In progress", backToWork: "Back to the focus", waitingHide: "Hide what is running",
-    waitingShow: "Show what is running", waitingRipe: "Show what is running ({0} to look at)",
+    waitingShow: "Show what is running",
     waitingSince: "Running; look again {0}", waitingNoDate: "Running; no day set to look again",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
@@ -176,7 +176,7 @@ const STRINGS = {
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
     inProgress: "В работе", backToWork: "Вернуть в фокус", waitingHide: "Скрыть запущенное",
-    waitingShow: "Показать запущенное", waitingRipe: "Показать запущенное (пора глянуть: {0})",
+    waitingShow: "Показать запущенное",
     waitingSince: "Запущено; вернуться {0}", waitingNoDate: "Запущено; день возврата не назначен",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
@@ -1053,14 +1053,12 @@ class FocusRenderer extends MarkdownRenderChild {
     if (doneOpen) await this.completed(body, project.done, doneKey, true);
   }
 
-  // «▷N» — what is running here. Plain while it ticks, in the accent colour once a review day has
-  // come: one glance tells whether anything delegated is waiting for me rather than for them.
+  // «▷N» — what is running here and has not come due yet. The moment a review day arrives the task
+  // leaves this counter for the focus itself, so the number here only ever counts what still ticks.
   waitChip(head, waiting, key, unfold = null) {
-    const p = this.plugin;
-    const open = p.isShown(key, true);
-    const ripe = waiting.filter((x) => inFocus(x)).length;
-    this.chip(head, "ft-wait-chip" + (ripe ? " is-ripe" : ""), "play", waiting.length, open, key,
-      open ? t("waitingHide") : ripe ? t("waitingRipe", ripe) : t("waitingShow"), true, unfold);
+    const open = this.plugin.isShown(key, true);
+    this.chip(head, "ft-wait-chip", "play", waiting.length, open, key,
+      open ? t("waitingHide") : t("waitingShow"), true, unfold);
   }
 
   // The rows themselves: the date reads as «look again then», and ▷ on a row hands it back to me.
@@ -1991,9 +1989,10 @@ module.exports = class FocusTasks extends Plugin {
         }
         continue;
       }
-      // Started and out of my hands: it leaves the focus whatever its date, and waits on the row it
-      // belongs to. Its date is no longer «do it» but «look at it again».
-      if (task.status === STATUS_PROGRESS) {
+      // Started and out of my hands. Its date is no longer «do it» but «look at it again»: until that
+      // day it waits behind the ▷ of its project or area, and on that day it comes back into the
+      // focus like anything else due — marked ▷, so it reads as «check this», not «do this».
+      if (task.status === STATUS_PROGRESS && !inFocus(task)) {
         area.waiting.push(task);
         (bucket ? bucket.waiting : area.waitingLoose).push(task);
         continue;
@@ -2030,9 +2029,7 @@ module.exports = class FocusTasks extends Plugin {
       delete area.buckets;
     }
     let areas = [...byArea.values()];
-    // An area stays in the focus for what was closed today and for anything running whose review day
-    // has come — otherwise the one signal that a delegated task is ripe would be off screen.
-    if (!all) areas = areas.filter((a) => a.focus || a.done.length || a.waiting.some((x) => inFocus(x)));
+    if (!all) areas = areas.filter((a) => a.focus || a.done.length);
     // A dragged order wins; the rest follows it: areas by name, projects by their nearest date.
     const rank = (list, key) => { const i = (list || []).indexOf(key); return i < 0 ? 1e9 : i; };
     const order = this.data.order;

@@ -197,10 +197,10 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 
 /* What the frontmatter says and the row would otherwise hide: the priority dot right after the text
    (low = «an agent added this, not looked at yet»), and a deadline that falls on another day. */
-/* Running: sent off, delegated, waiting on someone. The ▷ on a header counts them and turns the
-   accent colour once a review day has come; the ▷ on a row hands the task back. */
+/* Running: sent off, delegated, waiting on someone. The ▷ on a header counts what is still ticking;
+   on the day it is due to be looked at the task returns to the focus, marked with a ▷ of its own,
+   which also hands it back. */
 .focus-tasks-view .ft-wait-chip { color: var(--text-muted); }
-.focus-tasks-view .ft-wait-chip.is-ripe { color: var(--interactive-accent); }
 .focus-tasks-view .ft-wait-block { margin-top: 0.45em; padding-top: 0.2em;
   border-top: 1px dashed var(--background-modifier-border); }
 .focus-tasks-view li.ft-task.is-waiting > .ft-text { color: var(--text-muted); }
@@ -212,9 +212,15 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 /* The dot is a button: its menu sets the level or takes the mark off. */
 .focus-tasks-view li.ft-task > .ft-priority { cursor: pointer; flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
   border-radius: 50%; background: var(--text-faint); }
-.focus-tasks-view .ft-priority.is-low { background: none; box-shadow: inset 0 0 0 1px var(--text-faint); }
-.focus-tasks-view .ft-priority.is-normal { background: var(--color-orange); }
-.focus-tasks-view .ft-priority.is-high { background: var(--text-error); }
+/* The level must be told apart at a glance, and not by colour alone: low is a hollow ring, normal a
+   filled dot, high a bigger filled dot. Written at the same weight as the rule above, or the plain
+   grey background there wins and every level looks the same. */
+.focus-tasks-view li.ft-task > .ft-priority.is-low {
+  background: none; box-shadow: inset 0 0 0 1px var(--text-faint); }
+.focus-tasks-view li.ft-task > .ft-priority.is-normal { background: var(--color-orange); }
+.focus-tasks-view li.ft-task > .ft-priority.is-high {
+  width: 0.6rem; height: 0.6rem; margin-top: calc(var(--ft-line) * 0.5em - 0.3rem);
+  background: var(--text-error); }
 .focus-tasks-view li.ft-task > .ft-due { flex: none; display: inline-flex; align-items: center; gap: 0.15em; margin-left: 0.6em;
   height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; color: var(--text-muted); white-space: nowrap; }
 .focus-tasks-view .ft-due.is-late { color: var(--text-error); }

@@ -90,7 +90,7 @@ test("cancelled and someday tasks stay out of the list", async () => {
 test("what is running leaves the focus and waits on its area", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
-    taskNote(app, "Running", { area: "Sport", scheduled: TODAY, status: "in-progress" });
+    taskNote(app, "Running", { area: "Sport", scheduled: DAY(4), status: "in-progress" });
     taskNote(app, "Mine", { area: "Sport", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
@@ -98,14 +98,26 @@ test("what is running leaves the focus and waits on its area", async () => {
   eq(names(area.waitingLoose), ["Running"], "and the started one waits on the area's row");
 });
 
-test("an area stays on screen when something running is ripe for a look", async () => {
+test("the day it was due to be looked at, a running task comes back to the focus", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
-    taskNote(app, "Ripe", { area: "Sport", scheduled: DAY(-1), status: "in-progress" });
-    areaNote(app, "Work");
-    taskNote(app, "Not yet", { area: "Work", scheduled: DAY(5), status: "in-progress" });
+    taskNote(app, "Ripe today", { area: "Sport", scheduled: TODAY, status: "in-progress" });
+    taskNote(app, "Overdue", { area: "Sport", scheduled: DAY(-1), status: "in-progress" });
+    taskNote(app, "Not yet", { area: "Sport", scheduled: DAY(5), status: "in-progress" });
+    taskNote(app, "No day at all", { area: "Sport", status: "in-progress" });
   });
-  eq(areaNames(await plugin.collect(false)), ["Sport"], "only the one with something to review");
+  const areas = await plugin.collect(false);
+  eq(areaNames(areas), ["Sport"], "the area is on screen because its review day came");
+  eq(names(areas[0].loose).sort(), ["Overdue", "Ripe today"], "today and overdue are back in the focus");
+  eq(names(areas[0].waitingLoose).sort(), ["No day at all", "Not yet"], "the rest still ticks behind ▷");
+});
+
+test("nothing ripe: an area with only running tasks stays off the focus", async () => {
+  const { plugin } = await stand((app) => {
+    areaNote(app, "Work");
+    taskNote(app, "Sent off", { area: "Work", scheduled: DAY(5), status: "in-progress" });
+  });
+  eq(areaNames(await plugin.collect(false)), [], "nothing to do and nothing to check");
 });
 
 test("a task typed under another stays under it, not at the bottom", async () => {
@@ -155,15 +167,17 @@ test("sending a task off and taking it back is one flag, and ⌘Z undoes it", as
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Work");
     taskNote(a, "Ask the accountant", { area: "Work", scheduled: TODAY });
+    taskNote(a, "Something of mine", { area: "Work", scheduled: TODAY });   // держит область на экране
   });
   const task = () => plugin.tasks().find((x) => x.text === "Ask the accountant");
+  await plugin.setDate(task(), DAY(4));
   await plugin.setRunning(task(), true);
   eq(task().status, "in-progress");
-  eq(task().date, TODAY, "the date is untouched — it is the day to look again");
-  eq(names((await plugin.collect(false))[0].loose), [], "and it is out of the focus");
+  eq(task().date, DAY(4), "the date is untouched — it is the day to look again");
+  eq(names((await plugin.collect(false))[0].loose), ["Something of mine"], "и до этого дня её в фокусе нет");
   await plugin.setRunning(task(), false);
   eq(task().status, "open");
-  eq(names((await plugin.collect(false))[0].loose), ["Ask the accountant"], "back in the focus");
+  eq(names((await plugin.collect(false))[0].future.loose), ["Ask the accountant"], "снова среди открытых");
   await plugin.undo();
   eq(task().status, "in-progress", "⌘Z puts it back where it was");
 });
@@ -172,14 +186,15 @@ test("nothing running left: the project has no block to draw", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
-    taskNote(a, "Sent off", { area: "Work", project: "Launch", scheduled: TODAY, status: "in-progress" });
+    taskNote(a, "Sent off", { area: "Work", project: "Launch", scheduled: DAY(4), status: "in-progress" });
+    taskNote(a, "Mine today", { area: "Work", project: "Launch", scheduled: TODAY });
   });
   let area = (await plugin.collect(false))[0];
   eq(names(area.projects[0].waiting), ["Sent off"]);
-  await plugin.setRunning(plugin.tasks()[0], false);
+  await plugin.setRunning(plugin.tasks().find((x) => x.text === "Sent off"), false);
   area = (await plugin.collect(false))[0];
   eq(area.projects[0].waiting, [], "the bucket is empty, so the view has nothing to render");
-  eq(names(area.projects[0].tasks), ["Sent off"], "and the task is back among the steps");
+  eq(names(area.projects[0].later), ["Sent off"], "and the task is back among the open steps");
 });
 
 test("a running step waits inside its project, not in the area", async () => {

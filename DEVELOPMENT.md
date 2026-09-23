@@ -61,9 +61,11 @@ and do not reopen one that turned done while you were working.
   - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
     + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
   - `waitChip` / `waitingList` + `setRunning`: `status: in-progress` — started and out of his hands.
-    Such a task leaves the focus whatever its date and waits behind the «▷N» of its project or area
-    (`wait:<path|area>`, closed by default); the chip takes the accent colour once a review day has
-    come, and that ripeness alone keeps the area on screen. The ▷ on a row hands the task back.
+    Its `scheduled` stops meaning «do it» and starts meaning «look at it again»: until that day the
+    task waits behind the «▷N» of its project or area (`wait:<path|area>`, closed by default), and on
+    that day it comes back among the rows that are due, marked ▷ (which also hands it back). A running
+    task with no date waits for ever — the count on the chip is the only thing that shows it.
+    `obsidian_tasks.py` mirrors the rule in `running_ahead()`.
   - `priorityItems(menu, task|tasks)` + `setPriority`: the levels of TaskNotes' `priority`, and
     `null` to take the mark off; reachable from the dot itself, the row's menu and a selection's.
   - `chip(head, …)`: a counter that folds a part of a row — «⏳N» upcoming (`steps-later:<path>`,
