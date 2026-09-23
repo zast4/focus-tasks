@@ -3,6 +3,28 @@
 No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS against the
 `obsidian` API), `styles.css` next to it. Edit, reload the plugin, test.
 
+## Branches: he keeps working while we change things
+
+He uses this plugin every day, so new work must never land in his vault on its own.
+
+- `notes-model` — the branch his vault runs. Only a merge puts anything here.
+- `next` — where all new work goes. Commit freely, run the suites, do not deploy.
+- tag `shipped` — the last commit that reached his vault. Everything after it is unreported.
+
+Three words drive it:
+
+- he says nothing → keep committing to `next`; his vault stays exactly as it is.
+- **«ревью»** → report everything in `git log shipped..next` as one summary, oldest first,
+  grouped by what changed for him, not by commit. He does not track what he has already read,
+  so the report always starts at `shipped`, however many rounds went into it.
+- **«вливай»** → merge `next` into `notes-model`, copy `main.js`, `manifest.json`,
+  `styles.css` into `~/vaults/Vault/.obsidian/plugins/focus-tasks/`, reload the plugin over
+  CDP, then move the tag: `git tag -f shipped notes-model`. All three suites must be green
+  before the merge.
+
+His notes are not branchable — `Задачи/`, areas and projects are live data. Touch them only
+when he asks, whatever branch is checked out.
+
 ## Layout of main.js
 
 - **Strings** — `STRINGS.en` / `STRINGS.ru`, `t(key, ...args)`; every visible label goes through it.
