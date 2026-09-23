@@ -112,7 +112,7 @@ const STRINGS = {
     wipWho: "@zastashkov", sWip: "Work in progress",
     sBuild: "Build", buildStable: "Stable", buildTest: "Test", buildLine: "{0} · {1} · {2}",
     buildQueue: "test: {0} {1} over the stable one", buildCommit: ["commit", "commits", "commits"],
-    buildOnly: "no test build here",
+    buildOnly: "no test build here", buildSame: "the test build is the stable one",
     buildUnknown: "installed as usual, not delivered from the workshop", buildSwitched: "Switched to {0}",
     buildBadge: "test", buildBadgeHelp: "A test build is running. Its stable one is one click away, in the settings.",
     returnWhen: "Look at it again", returnHint: "tomorrow or later",
@@ -193,7 +193,7 @@ const STRINGS = {
     wipWho: "@zastashkov", sWip: "Плагин в работе",
     sBuild: "Сборка", buildStable: "Стабильная", buildTest: "Тестовая", buildLine: "{0} · {1} · {2}",
     buildQueue: "тест: {0} {1} сверх стабильной", buildCommit: ["коммит", "коммита", "коммитов"],
-    buildOnly: "тестовой сборки нет",
+    buildOnly: "тестовой сборки нет", buildSame: "тестовая совпадает со стабильной",
     buildUnknown: "поставлена обычным способом, не из мастерской", buildSwitched: "Переключил на: {0}",
     buildBadge: "тест", buildBadgeHelp: "Работает тестовая сборка. Стабильная - в один клик, в настройках.",
     returnWhen: "Вернуться к задаче", returnHint: "завтра или позже",
@@ -1935,13 +1935,17 @@ class FocusSettingTab extends PluginSettingTab {
       return;
     }
     const row = new Setting(box).setName(t("sBuild")).setDesc(line);
-    const modes = await p.buildModes();
-    if (!modes.includes("test")) { row.setDesc(`${line}\n${t("buildOnly")}`); return; }
-    if (build.queue) row.setDesc(`${line}\n${t("buildQueue", build.queue, plural(build.queue, t("buildCommit")))}`);
+    const choices = await p.buildChoices();
+    if (choices.same) row.setDesc(`${line}\n${t("buildSame")}`);
+    else if (!choices.test.there) row.setDesc(`${line}\n${t("buildOnly")}`);
+    else if (build.queue) row.setDesc(`${line}\n${t("buildQueue", build.queue, plural(build.queue, t("buildCommit")))}`);
     for (const mode of ["stable", "test"]) {
       row.addButton((b) => {
         b.setButtonText(t(mode === "test" ? "buildTest" : "buildStable"));
-        if (build.mode === mode) b.setCta().setDisabled(true);      // already running: nothing to do
+        const current = build.mode === mode;
+        if (current) b.setCta();
+        // greyed out, not gone: the pair says what the two modes are even when there is one build
+        if (current || !choices[mode].offer) b.setDisabled(true);
         else b.onClick(() => p.switchBuild(mode));
       });
     }
@@ -2566,6 +2570,23 @@ module.exports = class FocusTasks extends Plugin {
       if (there.every(Boolean)) modes.push(mode);
     }
     return modes;
+  }
+
+  // What each button knows about itself. Both are always shown — a row that loses half of itself is
+  // harder to read than one with a button greyed out — but a mode is only offered when it is there
+  // and is actually somewhere else: a test build equal to the stable one is nothing to switch to.
+  async buildChoices() {
+    const modes = await this.buildModes();
+    const note = async (mode) => {
+      try { return JSON.parse(await this.app.vault.adapter.read(this.buildPath("builds", mode, BUILD_NOTE))); } catch { return null; }
+    };
+    const [stable, test] = [await note("stable"), await note("test")];
+    const same = !!stable?.commit && stable.commit === test?.commit;
+    return {
+      stable: { there: modes.includes("stable"), offer: modes.includes("stable") && !same },
+      test: { there: modes.includes("test"), offer: modes.includes("test") && !same },
+      same,
+    };
   }
 
   // Copies a build over the running one and restarts the plugin. Obsidian reads main.js and

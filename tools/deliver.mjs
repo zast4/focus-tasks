@@ -53,7 +53,13 @@ for (const file of FILES) {
 fs.writeFileSync(path.join(into, "build.json"), note);
 fs.writeFileSync(path.join(plugin, "build.json"), note);
 
-// Merged means there is nothing left to compare against: one mode, no switch, no mark on the list.
-if (mode === "stable") fs.rmSync(path.join(plugin, "builds", "test"), { recursive: true, force: true });
+// Merged means the two are the same build: both modes stay in the settings, but the test one is no
+// longer anywhere else to go, so its button is dead and the list wears no mark.
+if (mode === "stable") {
+  const twin = path.join(plugin, "builds", "test");
+  fs.mkdirSync(twin, { recursive: true });
+  for (const file of FILES) fs.copyFileSync(path.join(HERE, file), path.join(twin, file));
+  fs.writeFileSync(path.join(twin, "build.json"), JSON.stringify({ ...JSON.parse(note), mode: "test" }, null, 2) + "\n");
+}
 
 console.log(`${mode}: ${commit} ${subject}${mode === "test" && queue ? ` (+${queue} over ${stableRef})` : ""}`);

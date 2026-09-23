@@ -874,13 +874,14 @@ step("two builds side by side: the settings say which one runs, and swap them", 
     const el = app.setting.activeTab?.containerEl;
     const row = [...el.querySelectorAll('.setting-item')].find((r) => /Build|Сборка/.test(r.querySelector('.setting-item-name')?.textContent || ''));
     const out = { desc: row?.querySelector('.setting-item-description')?.textContent || '',
-      buttons: [...(row?.querySelectorAll('button') || [])].map((b) => b.textContent) };
+      buttons: [...(row?.querySelectorAll('button') || [])].map((b) => b.textContent + (b.disabled ? ' (off)' : '')) };
     app.setting.close();
     return out;`);
   if (!/Test|Тестовая/.test(seen.desc) || !seen.desc.includes("Что-то на ревью"))
     throw new Error(`the row does not say what runs: ${J(seen.desc)}`);
   if (!/3/.test(seen.desc)) throw new Error(`the row does not say how far ahead the test build is: ${J(seen.desc)}`);
-  if (seen.buttons.length !== 2) throw new Error(`expected both modes as buttons, got ${J(seen.buttons)}`);
+  if (J(seen.buttons) !== J(["Stable", "Test (off)"]) && J(seen.buttons) !== J(["Стабильная", "Тестовая (off)"]))
+    throw new Error(`both modes belong in the row, the running one greyed out: ${J(seen.buttons)}`);
   // reading the note again (which is what opening the settings does) must not make the plugin look
   // like somebody else's install for a moment: that is how the «work in progress» line slipped in
   await plugin(`const answer = p.readBuild(); p.refresh(); await answer; return true;`);
@@ -893,6 +894,27 @@ step("two builds side by side: the settings say which one runs, and swap them", 
     "the note beside the plugin says stable");
   await toPane();
   await until(() => page.eval(`return !__ft.view()?.querySelector('.ft-foot-badge')`), "the mark is gone with the test build");
+  // one build left: the pair of buttons stays, with nothing to switch to
+  const alone = JSON.parse(await page.eval(`app.setting.open(); app.setting.openTabById('focus-tasks');
+    await new Promise((r) => setTimeout(r, 400));
+    const el = app.setting.activeTab?.containerEl;
+    const row = [...el.querySelectorAll('.setting-item')].find((r) => /Build|Сборка/.test(r.querySelector('.setting-item-name')?.textContent || ''));
+    const out = [...(row?.querySelectorAll('button') || [])].map((b) => b.textContent + (b.disabled ? ' (off)' : ''));
+    app.setting.close();
+    return JSON.stringify(out);`));
+  if (alone.length !== 2 || !alone.some((b) => b.endsWith("(off)")))
+    throw new Error(`both modes belong in the row, the running one greyed out: ${J(alone)}`);
+  // a test build that is the stable one under another name is not a choice
+  for (const mode of ["stable", "test"]) {
+    fs.mkdirSync(path.join(dir, "builds", mode), { recursive: true });
+    for (const f of ["main.js", "manifest.json", "styles.css"]) fs.copyFileSync(path.join(dir, f), path.join(dir, "builds", mode, f));
+    fs.writeFileSync(path.join(dir, "builds", mode, "build.json"), JSON.stringify({ mode, commit: "cccc333", subject: "Одно и то же", at: new Date().toISOString() }));
+  }
+  const twins = JSON.parse(await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    const c = await p.buildChoices();
+    return JSON.stringify([c.same, c.test.offer]);`));
+  if (J(twins) !== J([true, false])) throw new Error(`twin builds are still offered as a choice: ${J(twins)}`);
   fs.rmSync(path.join(dir, "builds"), { recursive: true, force: true });
   fs.rmSync(path.join(dir, "build.json"), { force: true });
   await page.eval(`await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks'); return true;`);
