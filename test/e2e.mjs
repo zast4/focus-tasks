@@ -978,6 +978,49 @@ step("two builds side by side: the settings say which one runs, and swap them", 
   await toPane();
 });
 
+step("the ⏳ of an area folds its upcoming work — in «All» too, where the flag is inverted", async () => {
+  // this step walks through both view modes, so it puts the list back exactly as it found it
+  const saved = await plugin(`return JSON.stringify({ all: p.everything(),
+    folded: { ...p.data.folded }, opened: { ...p.data.opened } });`);
+  // the chip only exists when the area has both: work due today (so it is in the focus) and work ahead
+  fs.writeFileSync(path.join(VAULT, taskPath("Chip today")),
+    `---\nuid: ft-chip-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  fs.writeFileSync(path.join(VAULT, taskPath("Chip tomorrow")),
+    `---\nuid: ft-chip-2\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TOMORROW}\n---\n`);
+  await until(async () => JSON.parse(await plugin(`
+    const a = (await p.collect(false)).find((x) => x.name.includes('Sport'));
+    return JSON.stringify(!!a && a.loose.some((t) => t.text === 'Chip today') && a.future.loose.some((t) => t.text === 'Chip tomorrow'));`)),
+    "both fixtures are in the model");
+  const shown = () => page.eval(`
+    const a = __ft.area('Sport')?.closest('.ft-area');
+    return !!a?.querySelector('.ft-future-block');`);
+  for (const wide of [false, true]) {
+    await plugin(`
+      if (p.everything() !== ${wide}) p.setEverything(${wide});
+      const a = (await p.collect(${wide})).find((x) => x.name.includes('Sport'));
+      if (!p.isShown('area:' + a.name, ${wide})) await p.toggleShown('area:' + a.name, ${wide});
+      p.refresh(); return true;`);
+    await settle();
+    if (!(await page.eval(`return !!__ft.area('Sport')?.querySelector('.ft-later-chip')`)))
+      throw new Error(`no ⏳ on the area to click (All = ${wide})`);
+    const before = await shown();
+    await click(`__ft.at(__ft.area('Sport').querySelector('.ft-later-chip'))`, "the ⏳ of the area");
+    await settle();
+    if ((await shown()) === before) throw new Error(`the ⏳ does nothing (All = ${wide})`);
+    await click(`__ft.at(__ft.area('Sport').querySelector('.ft-later-chip'))`, "the ⏳ again");
+    await settle();
+    if ((await shown()) !== before) throw new Error(`the ⏳ does not come back (All = ${wide})`);
+  }
+  await plugin(`
+    const was = JSON.parse(${J(saved)});
+    p.data.folded = was.folded; p.data.opened = was.opened;
+    p.saveFolds();
+    if (p.everything() !== was.all) p.setEverything(was.all);
+    p.refresh(); return true;`);
+  for (const name of ["Chip today", "Chip tomorrow"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
+  await settle();
+});
+
 step("Russian interface", async () => {
   await plugin(`p.settings.language = 'ru'; p.applyLanguage(); p.refresh(); return true;`);
   await until(() => page.eval(`return !!__ft.text('.ft-foot-button', '+ Область')`), "Russian labels");

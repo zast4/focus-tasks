@@ -1019,8 +1019,10 @@ class FocusRenderer extends MarkdownRenderChild {
     const futureShown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
     const ahead = area.future.loose.length + area.future.projects.reduce((n, pr) => n + pr.tasks.length, 0);
     if (!all && open && ahead)
+      // `true`, not `!wide`: the flag is read from the «opened» map either way, and writing it to the
+      // other one in «All» mode meant the click landed where nobody was looking.
       this.chip(title, "ft-later-chip", "clock", ahead, futureShown, futureKey,
-        t(futureShown ? "hideUpcoming" : "showUpcoming") + (area.running ? ` · ${t("ofThemRunning", area.running)}` : ""), !wide);
+        t(futureShown ? "hideUpcoming" : "showUpcoming") + (area.running ? ` · ${t("ofThemRunning", area.running)}` : ""), true);
     if (!all && open && area.doneLoose.length)
       this.chip(title, "ft-done-chip", "check", area.doneLoose.length,
         p.isShown("done:" + area.name, false), "done:" + area.name,
