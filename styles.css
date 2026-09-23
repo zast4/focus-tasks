@@ -276,3 +276,8 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 /* The list can hold the keyboard (so Esc and ⌘1–4 reach it) without drawing a box around itself. */
 .focus-tasks-view:focus { outline: none; }
 .focus-tasks-view:focus-visible { outline: none; }
+
+/* A name that holds the whole description can run long: the row shows the first three lines and the
+   rest is one click (or one hover) away — editing always shows the full text. */
+.focus-tasks-view li.ft-task > .ft-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.focus-tasks-view li.ft-task > .ft-text.is-editing { display: block; -webkit-line-clamp: none; overflow: visible; }

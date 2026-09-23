@@ -865,6 +865,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // The task's text as markdown (links work), without the paragraph around it.
   async text(li, task) {
     const text = li.createSpan({ cls: "ft-text" });
+    if (task.text.length > 120) text.setAttr("aria-label", task.text);  // the row clamps long names
     await MarkdownRenderer.render(this.plugin.app, task.text, text, task.file.path, this.inner);
     const para = text.querySelector("p");
     if (para) para.replaceWith(...para.childNodes);
