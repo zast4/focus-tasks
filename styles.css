@@ -10,9 +10,10 @@
    Cell contents are centred, so carets, icons and checkboxes line up vertically. Sizes in rem:
    the area title has a bigger font and must not stretch its cells. */
 .focus-tasks-view { --ft-col: 1.75rem; --ft-cb: var(--checkbox-size, 1rem); --ft-line: 1.5;  /* line-height of a task row: the box is centred on the first line */
-  --ft-pad: 0.45em; }  /* the hover and selection bands reach this far past the text on both sides;
-                          on the left the row is pulled back by the same amount, so the columns stay
-                          put — on the right it keeps the container's edge, or a phone would scroll */
+  --ft-pad: 0.45em; }  /* air around every row: the hover and selection bands reach this far past
+                          the text on the left (the row is pulled back by the same amount, so the
+                          columns stay put) and stop this far short of the pane's edge on the right.
+                          The row is never made WIDER than its container — that scrolls a phone. */
 body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spares width for the text */
 
 
@@ -27,11 +28,11 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view .ft-emoji { font-size: 1.15rem; }
 
 .focus-tasks-view .ft-area-title { display: flex; align-items: center; font-size: 1.3em; font-weight: 700; color: var(--text-normal);
-  padding: 0.1em var(--ft-pad); margin: 0 0 0.25em calc(var(--ft-pad) * -1); }
+  padding: 0.1em var(--ft-pad); margin: 0 var(--ft-pad) 0.25em calc(var(--ft-pad) * -1); }
 .focus-tasks-view .ft-area-title > .ft-emoji + span { margin-left: 0.2rem; }
 
 .focus-tasks-view .ft-project { display: flex; align-items: flex-start; font-weight: 600; color: var(--text-muted); line-height: 1.5;
-  padding: 0.1em var(--ft-pad); margin: 0.55em 0 0.1em calc(var(--ft-col) - var(--ft-pad)); }
+  padding: 0.1em var(--ft-pad); margin: 0.55em var(--ft-pad) 0.1em calc(var(--ft-col) - var(--ft-pad)); }
 .focus-tasks-view .ft-project > .ft-caret { height: 1.5em; align-items: center; }
 .focus-tasks-view .ft-project > .ft-link { flex: 0 1 auto; min-width: 0; margin-left: 0.2rem; }
 .focus-tasks-view .ft-project > .ft-count { flex: none; }
@@ -54,7 +55,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view ul.ft-list { margin: 0.1em 0; padding-inline-start: 0; }
 .focus-tasks-view li.ft-task { cursor: default; list-style: none; display: flex; align-items: flex-start;
   padding: 0.25em var(--ft-pad); text-indent: 0;
-  margin: 0 0 3px calc(var(--ft-col) * (2 + var(--ft-level, 0)) - var(--ft-pad)) !important; }
+  margin: 0 var(--ft-pad) 3px calc(var(--ft-col) * (2 + var(--ft-level, 0)) - var(--ft-pad)) !important; }
 /* The box sits in a cell one line tall and is centred in it: themes size checkboxes in their own
    em (a checkbox has its own font), so any margin computed here would miss by a few pixels. */
 .focus-tasks-view li.ft-task > .ft-box { flex: none; display: flex; align-items: center; justify-content: center;
