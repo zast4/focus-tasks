@@ -93,13 +93,15 @@ and do not reopen one that turned done while you were working.
     a plain calendar, an hour beside the day, `min` = today, no «clear»), and only an answer writes
     anything — `setRunning(list, true, day, at)` puts the status and `scheduled` in one change
     (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`). Cancel the card and the task is untouched.
-    **The row never leaves the list**: hiding it behind a counter was how a task — and its whole
-    area — went missing, so it stays in its area or project, sorted under today's work (`cmpRow`) and
-    drawn quiet (`is-waiting`). `backDue(task)` is what decides quiet or loud: the day, or the exact
+    Until that moment the task waits behind the «▷N» of its project or area (`waitChip` /
+    `waitingList`, `wait:<path|area>`, closed by default) — and the area itself stays in the focus for
+    it (`areas.filter(a => a.focus || a.done.length || a.waiting.length)`), or the only button back to
+    those tasks would vanish with it. `backDue(task)` decides waiting or back: the day, or the exact
     moment when an hour was named. Nothing in the vault changes at 16:00, so the renderer keeps a
-    `pending` list of the quiet rows and a one-minute interval redraws when one comes due. ▷ on the
-    row hands it back into today's focus, dropping the hour (`setRunning(list, false)`); clicking its
-    date opens the card again, to put it off further. Clearing the day of a running task any other
+    `pending` list of the waiting rows and a one-minute interval redraws when one comes due. ▷ is on
+    **every** row (`is-offer`, shown on hover): on an ordinary one it opens the card, on a running one
+    it hands the task back into today's focus, dropping the hour (`setRunning(list, false)`). Clicking
+    the date of a running task opens the card again, to put it off further; clearing its day any other
     way (`setDate(task, null)`) hands it back too. `obsidian_tasks.py` keeps such tasks out of the
     bot's focus reports until the day arrives (`running_ahead()`, day part only).
   - `priorityItems(menu, task|tasks)` + `setPriority`: the levels of TaskNotes' `priority`, and
@@ -204,7 +206,7 @@ touch events on a 390×844 screen.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
 
-It must pass (47/47) before a release, together with the model suite (124) and the phone suite (15). On failure the vault stays open and screenshots go to
+It must pass (48/48) before a release, together with the model suite (125) and the phone suite (15). On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

@@ -106,7 +106,8 @@ const STRINGS = {
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
     inProgress: "In progress…", backToWork: "Back to the focus",
     waitingSince: "Running; look again {0}", waitingNoDate: "Running; no day set to look again",
-    timeHint: "hh:mm",
+    waitingHide: "Hide what is running", waitingShow: "Show what is running", sendOff: "Send it off…",
+    timeHint: "hh:mm", hourHint: "hh", minuteHint: "mm",
     wip: "Focus Tasks is still being built. A stable version is on the way — write to me on Telegram to hear when it lands:",
     wipWho: "@zastashkov", sWip: "Work in progress",
     sBuild: "Build", buildStable: "Stable", buildTest: "Test", buildLine: "{0} · {1} · {2}",
@@ -186,7 +187,8 @@ const STRINGS = {
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
     inProgress: "В работу…", backToWork: "Вернуть в фокус",
     waitingSince: "Запущено; вернуться {0}", waitingNoDate: "Запущено; день возврата не назначен",
-    timeHint: "чч:мм",
+    waitingHide: "Скрыть запущенное", waitingShow: "Показать запущенное", sendOff: "В работу…",
+    timeHint: "чч:мм", hourHint: "чч", minuteHint: "мм",
     wip: "Focus Tasks ещё в работе. Стабильная версия готовится - напишите мне в Telegram, и я скажу, когда она выйдет:",
     wipWho: "@zastashkov", sWip: "Плагин в работе",
     sBuild: "Сборка", buildStable: "Стабильная", buildTest: "Тестовая", buildLine: "{0} · {1} · {2}",
@@ -358,32 +360,51 @@ function insertBlock(text, block, section) {
 // A Notion-like date picker: a field to type a date, the month (Monday first) with arrows and
 // «Today», «Clear date» below. A picked day saves at once; Esc, a click outside or a scroll closes it.
 class DatePicker {
-  // `opts` turns the same card into a question: `title` says what the day is for, `quick` are the
-  // usual answers to it, `min` is the earliest day that answers it at all, and `clear: false` takes
-  // away «no date» where having none would make no sense.
+  // `opts` turns the same card into a question: `title` says what the day is for, `min` is the
+  // earliest day that answers it at all, `clear: false` takes away «no date» where having none would
+  // make no sense, and `time` adds the two fields for an hour of that day.
   constructor(anchor, value, onPick, onCancel, opts = {}) {
-    Object.assign(this, { value, onPick, onCancel, min: opts.min || null });
+    Object.assign(this, { value, onPick, onCancel, min: opts.min || null, tooEarly: opts.tooEarly || null });
     this.month = moment(value || opts.min || today()).startOf("month");
     this.el = document.body.createDiv({ cls: "ft-picker" });
     if (opts.title) this.el.createDiv({ cls: "ft-picker-caption", text: opts.title });
     const field = this.el.createDiv({ cls: "ft-picker-field" });
     this.input = field.createEl("input", { type: "text", cls: "ft-picker-input", attr: { placeholder: opts.hint || t("pickerPlaceholder") } });
     this.input.value = value ? moment(value).format("DD.MM.YY") : "";
-    // An hour is asked for only where it means something — the day a task comes back. Left empty it
-    // stays a plain date, the way every other date in the list is.
+    // An hour is asked for only where it means something — the moment a task comes back. Two fields,
+    // not one: type two digits for the hour and the caret moves to the minutes by itself, two more
+    // and Tab closes the card with the time set. Hands stay on the keyboard the whole way.
     if (opts.time) {
-      this.time = field.createEl("input", { type: "text", cls: "ft-picker-time", attr: { placeholder: t("timeHint") } });
-      this.time.value = opts.at || "";
-      this.time.onkeydown = (e) => {
-        e.stopPropagation();
-        if (e.key === "Escape") { e.preventDefault(); this.close(); return; }
-        if (e.key !== "Enter") return;
-        e.preventDefault();
-        const day = parseDay(this.input.value) || this.value;
-        if (day && this.allowed(day)) this.pick(day);
-        else this.input.addClass("is-invalid");
+      const pair = field.createDiv({ cls: "ft-picker-clock" });
+      const cell = (cls, value) => pair.createEl("input", { type: "text", cls: `ft-picker-part ${cls}`,
+        attr: { placeholder: t(cls === "is-hh" ? "hourHint" : "minuteHint"), maxlength: "2", inputmode: "numeric", value } });
+      this.hh = cell("is-hh", (opts.at || "").slice(0, 2));
+      pair.createSpan({ cls: "ft-picker-colon", text: ":" });
+      this.mm = cell("is-mm", (opts.at || "").slice(3, 5));
+      // The segments are filled from the keyboard and nothing else: two digits for the hour and the
+      // caret moves on by itself, two for the minutes and Tab ends the run. A segment selects itself
+      // when it is entered, so typing always replaces what was there.
+      const cap = (el) => (el === this.hh ? 23 : 59);
+      const digits = (el) => { el.value = el.value.replace(/\D/g, "").slice(0, 2); };
+      const fill = (el) => {
+        digits(el);
+        const full = el.value.length === 2 || Number(el.value) * 10 > cap(el);   // «3» cannot start an hour
+        if (full && el === this.hh) { this.hh.value = this.hh.value.padStart(2, "0"); this.mm.focus(); }
       };
-      this.time.oninput = () => this.time.removeClass("is-invalid");
+      this.hh.oninput = () => fill(this.hh);
+      this.mm.oninput = () => digits(this.mm);
+      for (const el of [this.hh, this.mm]) {
+        el.onfocus = () => el.select();
+        el.onblur = () => { if (el.value) el.value = String(Math.min(Number(el.value), cap(el))).padStart(2, "0"); };
+        el.onkeydown = (e) => {
+          e.stopPropagation();
+          if (e.key === "Escape") { e.preventDefault(); this.close(); return; }
+          if (e.key === "Enter") { e.preventDefault(); this.submit(); return; }
+          // the last Tab of the run is the «done» of the run: nothing else to fill in
+          if (e.key === "Tab" && !e.shiftKey && el === this.mm) { e.preventDefault(); this.submit(); return; }
+          if (e.key === "Backspace" && el === this.mm && !this.mm.value) { e.preventDefault(); this.hh.focus(); }
+        };
+      }
     }
     this.head = this.el.createDiv({ cls: "ft-picker-head" });
     this.grid = this.el.createDiv({ cls: "ft-picker-grid" });
@@ -395,12 +416,7 @@ class DatePicker {
       if (e.key === "Escape") { e.preventDefault(); this.close(); return; }
       if (e.key !== "Enter") return;
       e.preventDefault();
-      const day = parseDay(this.input.value);
-      if (day && this.allowed(day)) this.pick(day);
-      else {
-        this.input.addClass("is-invalid");
-        if (day && opts.tooEarly) new Notice(opts.tooEarly);
-      }
+      this.submit();
     };
     this.input.oninput = () => this.input.removeClass("is-invalid");
     this.outside = (e) => { if (!this.el.contains(e.target)) this.close(); };
@@ -415,7 +431,9 @@ class DatePicker {
       document.addEventListener("keydown", this.keys, true);
       document.addEventListener("scroll", this.scrolled, true);
     }, 0);
-    if (!Platform.isMobile) this.input.focus();  // on a phone the keyboard would cover the month
+    // The day is already answered (today, unless told otherwise); the hour is what is actually being
+    // typed, so that is where the caret starts.
+    if (!Platform.isMobile) (this.hh || this.input).focus();  // on a phone the keyboard would cover the month
   }
 
   draw() {
@@ -440,6 +458,15 @@ class DatePicker {
       if (iso === now) cell.addClass("is-today");
       if (iso === this.value) cell.addClass("is-selected");
       if (!this.allowed(iso)) cell.addClass("is-blocked");
+      // With an hour still to type, a day is an answer to half the question: it fills the field and
+      // hands the caret back to the clock instead of closing the card.
+      else if (this.hh) cell.onclick = () => {
+        this.value = iso;
+        this.input.value = moment(iso).format("DD.MM.YY");
+        this.input.removeClass("is-invalid");
+        this.draw();
+        this.hh.focus();
+      };
       else cell.onclick = () => this.pick(iso);
     }
   }
@@ -456,10 +483,25 @@ class DatePicker {
     Object.assign(this.el.style, { left: `${left}px`, top: `${top}px` });
   }
 
-  // The hour rides along with the day: an empty or unreadable field simply means «no hour».
+  // What the fields add up to, whichever key ended the run.
+  submit() {
+    const day = parseDay(this.input.value) || this.value;
+    if (!day || !this.allowed(day)) {
+      this.input.addClass("is-invalid");
+      if (day && this.tooEarly) new Notice(this.tooEarly);
+      return;
+    }
+    this.pick(day);
+  }
+
+  // The hour rides along with the day: empty hours simply mean «that whole day», and minutes left
+  // empty on a filled hour mean o'clock.
   pick(day) {
-    const at = this.time ? parseTime(this.time.value) : null;
-    if (this.time && this.time.value.trim() && !at) { this.time.addClass("is-invalid"); return; }
+    let at = null;
+    if (this.hh && this.hh.value.trim()) {
+      at = parseTime(`${this.hh.value}:${this.mm.value.trim() || "00"}`);
+      if (!at) { this.hh.addClass("is-invalid"); return; }
+    }
     this.close(true);
     this.onPick(day, at);
   }
@@ -951,6 +993,7 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     // What was finished here today lives in the area's own header: a second grey row under
     // «Show upcoming» read as its twin and made the bottom of every area look like a footer.
+    if (!all && open && area.waitingLoose.length) this.waitChip(title, area.waitingLoose, "wait:" + area.name);
     if (!all && open && area.doneLoose.length)
       this.chip(title, "ft-done-chip", "check", area.doneLoose.length,
         p.isShown("done:" + area.name, false), "done:" + area.name,
@@ -987,6 +1030,7 @@ class FocusRenderer extends MarkdownRenderChild {
         for (const project of area.future.projects) await this.project(block, area, project, true);
       }
     }
+    if (area.waitingLoose.length) await this.waitingList(box, area.waitingLoose, "wait:" + area.name);
     if (area.doneLoose.length) await this.completed(box, area.doneLoose, "done:" + area.name);
   }
 
@@ -1120,6 +1164,9 @@ class FocusRenderer extends MarkdownRenderChild {
     const laterOpen = !all && !later && p.isShown(laterKey, true);
     const doneOpen = !all && !later && p.isShown(doneKey, false);
     const unfold = async () => { if (!p.isShown(key, all)) await p.toggleShown(key, all); };
+    const waitKey = "wait:" + path;
+    const waitOpen = !all && !later && p.isShown(waitKey, true);
+    if (!all && !later && project.waiting?.length) this.waitChip(head, project.waiting, waitKey, unfold);
     if (!all && !later && project.later?.length)
       this.chip(head, "ft-later-chip", "clock", project.later.length, laterOpen, laterKey, t(laterOpen ? "laterHide" : "laterShow"), true, unfold);
     if (!all && !later && project.done?.length)
@@ -1134,12 +1181,31 @@ class FocusRenderer extends MarkdownRenderChild {
     this.more(head, (menu) => this.projectMenu(menu, area, project, head));
     this.grip(head, { type: "project", area, project });
     if (!open) return;
-    const shows = project.tasks.length || (laterOpen && project.later?.length) || (doneOpen && project.done?.length);
+    const shows = project.tasks.length || (waitOpen && project.waiting?.length)
+      || (laterOpen && project.later?.length) || (doneOpen && project.done?.length);
     if (!shows) return;   // an empty body still draws the line under the project's caret
     const body = box.createDiv({ cls: "ft-project-body" });
     if (project.tasks.length) await this.list(body, project.tasks, all);
+    if (waitOpen) await this.waitingList(body, project.waiting, waitKey);
     if (laterOpen) await this.list(body, project.later);
     if (doneOpen) await this.completed(body, project.done, doneKey, true);
+  }
+
+  // «▷N» — what is running here and is not due back yet. The moment that day (or that hour) comes
+  // the task leaves this counter for the focus itself, so the number only counts what still ticks.
+  waitChip(head, waiting, key, unfold = null) {
+    const open = this.plugin.isShown(key, true);
+    this.chip(head, "ft-wait-chip", "play", waiting.length, open, key,
+      open ? t("waitingHide") : t("waitingShow"), true, unfold);
+  }
+
+  // The rows themselves: the date reads as «look again then», and ▷ on a row hands it back to me.
+  async waitingList(box, waiting, key) {
+    // Nothing left in it: the block would still draw its dashed line, and a fold left open would
+    // keep that line under the list long after the last task came back.
+    if (!waiting.length || !this.plugin.isShown(key, true)) return;
+    const block = box.createDiv({ cls: "ft-wait-block" });
+    await this.list(block, waiting);
   }
 
   // A counter on a header that folds a part of it: «⏳3» upcoming, «✓2» closed today.
@@ -1298,13 +1364,20 @@ class FocusRenderer extends MarkdownRenderChild {
   // mark of a task an agent added and the user has not looked at yet) and its deadline, when that is
   // a different day from the one the focus goes by.
   marks(li, task) {
-    if (task.status === STATUS_PROGRESS) {
-      const run = li.createSpan({ cls: "ft-running" });
-      const when = task.date ? this.dateText(task.date) + (task.at ? ` ${task.at}` : "") : null;
-      run.setAttr("aria-label", when ? t("waitingSince", when) : t("waitingNoDate"));
-      setIcon(run, "play");
-      run.onclick = (e) => { e.stopPropagation(); this.plugin.setRunning(task, false); };
-    }
+    // ▷ is on every row, not only on the ones already sent off: on an ordinary row it waits for the
+    // pointer and sends the task off, on a running one it stands there and hands it back. Sending
+    // something off is the most common thing done to a row here, and it was two clicks deep.
+    const running = task.status === STATUS_PROGRESS;
+    const run = li.createSpan({ cls: running ? "ft-running" : "ft-running is-offer" });
+    const when = task.date ? this.dateText(task.date) + (task.at ? ` ${task.at}` : "") : null;
+    run.setAttr("aria-label", running ? (when ? t("waitingSince", when) : t("waitingNoDate")) : t("sendOff"));
+    setIcon(run, "play");
+    run.onclick = (e) => {
+      e.stopPropagation();
+      const many = this.selected.has(task) && this.selected.size > 1 ? this.chosen() : task;
+      if (running) this.plugin.setRunning(many, false);
+      else this.askReturn(many, run);
+    };
     if (task.described) {
       const note = li.createSpan({ cls: "ft-described" });
       note.setAttr("aria-label", t("described"));
@@ -1377,7 +1450,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (!list.length || !anchor || this.editing) return;
     const min = today();
     const one = list.length === 1 ? list[0] : null;
-    const was = one && one.status === STATUS_PROGRESS && one.date >= min ? one.date : null;
+    const was = one && one.status === STATUS_PROGRESS && one.date >= min ? one.date : today();
     this.anchor = list[0];
     this.editing = true;
     anchor.addClass("is-active");
@@ -2113,7 +2186,7 @@ module.exports = class FocusTasks extends Plugin {
   async collect(all) {
     const byArea = new Map();
     const areaOf = (name) => {
-      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [], doneLoose: [] });
+      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [], doneLoose: [], waiting: [], waitingLoose: [] });
       return byArea.get(name);
     };
     const first = (tasks) => tasks.map((x) => x.date).filter(Boolean).sort()[0] || "9999";
@@ -2122,7 +2195,7 @@ module.exports = class FocusTasks extends Plugin {
     for (const n of this.notes()) {
       const area = areaOf(n.area);
       if (!n.project) { if (!area.note) area.note = n.file; continue; }
-      const bucket = { file: n.file, area, tasks: [], later: [], done: [], first: "9999" };
+      const bucket = { file: n.file, area, tasks: [], later: [], done: [], waiting: [], first: "9999" };
       projects.set(n.file.path, bucket);
       area.buckets = [...(area.buckets || []), bucket];
     }
@@ -2145,9 +2218,14 @@ module.exports = class FocusTasks extends Plugin {
         }
         continue;
       }
-      // Started and out of my hands. It stays on screen where it lives, whatever its date says:
-      // hiding it behind a counter meant losing sight of it, and of its area with it. The row goes
-      // quiet instead and sinks under the work that is actually mine today.
+      // Started and out of my hands: off the focus until the moment it is due back, behind the «▷N»
+      // of its project or area. What must never happen is the area going with it — that is how a
+      // task disappeared with nothing on screen to click.
+      if (waitingBack(task)) {
+        area.waiting.push(task);
+        (bucket ? bucket.waiting : area.waitingLoose).push(task);
+        continue;
+      }
       const focused = inFocus(task) || task.status === STATUS_PROGRESS;
       area[focused ? "focus" : "later"]++;
       if (bucket) (focused || all ? bucket.tasks : bucket.later).push(task);
@@ -2157,9 +2235,9 @@ module.exports = class FocusTasks extends Plugin {
     // Notes have no order of their own: a dragged order wins, the rest follows the nearest date and
     // then the name.
     const cmpTask = this.rowOrder();
-    // A task still waiting to come back sits under the ones that are mine today: it is on screen to
-    // be found, not to be done.
-    const cmpRow = (x, y) => (waitingBack(x) ? 1 : 0) - (waitingBack(y) ? 1 : 0) || cmpTask(x, y);
+    // A task that came due sits under the work that was already mine today: it asks to be looked at,
+    // not to be done.
+    const cmpRow = (x, y) => ((x.status === STATUS_PROGRESS ? 1 : 0) - (y.status === STATUS_PROGRESS ? 1 : 0)) || cmpTask(x, y);
     for (const area of byArea.values()) {
       area.loose.sort(cmpRow);
       area.future.loose.sort(cmpTask);
@@ -2176,14 +2254,16 @@ module.exports = class FocusTasks extends Plugin {
         // A project that is on screen owns the rest of itself: its upcoming steps and what it closed
         // today hang off its own row, not in the area's piles. Only a project with nothing due and
         // nothing done today waits whole under «Show upcoming».
-        const here = !!b.tasks.length || !!b.done.length;
+        const here = !!b.tasks.length || !!b.done.length || !!b.waiting.length;
         if (all || here) area.projects.push(b);
         if (!all && !here) area.future.projects.push({ file: b.file, tasks: b.later, later: [], done: [], first: first(b.later) });
       }
       delete area.buckets;
     }
     let areas = [...byArea.values()];
-    if (!all) areas = areas.filter((a) => a.focus || a.done.length);
+    // An area whose only work is running keeps its place: the «▷N» on its header is the only way
+    // back to those tasks, and an area that vanished would take that button with it.
+    if (!all) areas = areas.filter((a) => a.focus || a.done.length || a.waiting.length);
     // A dragged order wins; the rest follows it: areas by name, projects by their nearest date.
     const rank = (list, key) => { const i = (list || []).indexOf(key); return i < 0 ? 1e9 : i; };
     const order = this.data.order;
@@ -2195,6 +2275,10 @@ module.exports = class FocusTasks extends Plugin {
       a.future.projects.sort(byOrder(a));
       a.done.sort((x, y) => cmp(x.project || "", y.project || "") || cmp(x.text, y.text));
       a.doneLoose.sort((x, y) => cmp(x.text, y.text));
+      const byReview = (x, y) => (x.date || "9999").localeCompare(y.date || "9999") || cmp(x.text, y.text);
+      a.waiting.sort(byReview);
+      a.waitingLoose.sort(byReview);
+      for (const b of a.projects) b.waiting?.sort(byReview);
       for (const b of a.projects) b.done?.sort((x, y) => cmp(x.text, y.text));
     }
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));

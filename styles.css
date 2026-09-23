@@ -137,12 +137,15 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .ft-picker-caption { margin: 0 0.15rem 0.45rem; font-weight: 600; font-size: 0.95rem; }
 .ft-picker-field { display: flex; gap: 0.35rem; }
 .ft-picker-field .ft-picker-input { flex: 1 1 auto; min-width: 0; }
-/* `min-width` is the one that decides here: Obsidian gives its inputs one, and a flex basis alone
-   left the hour eating half the card. */
-.ft-picker-time { flex: 0 0 5.2rem; min-width: 0; box-sizing: border-box; height: 2.2rem; padding: 0 0.6rem; border-radius: 8px; font-size: 0.95rem;
-  text-align: center; background: var(--background-modifier-form-field); border: 1px solid var(--background-modifier-border); }
-.ft-picker-time:focus { border-color: var(--interactive-accent); box-shadow: none; }
-.ft-picker-time.is-invalid { border-color: var(--text-error); }
+/* The hour, as two fields with a colon between them. `min-width` is the one that decides the width
+   here: Obsidian gives its inputs one, and a flex basis alone left the clock eating half the card. */
+.ft-picker-clock { flex: 0 0 auto; display: flex; align-items: center; gap: 0.2rem; }
+.ft-picker-part { flex: 0 0 2.1rem; min-width: 0; box-sizing: border-box; height: 2.2rem; padding: 0 0.3rem;
+  border-radius: 8px; font-size: 0.95rem; text-align: center; font-variant-numeric: tabular-nums;
+  background: var(--background-modifier-form-field); border: 1px solid var(--background-modifier-border); }
+.ft-picker-part:focus { border-color: var(--interactive-accent); box-shadow: none; }
+.ft-picker-part.is-invalid { border-color: var(--text-error); }
+.ft-picker-colon { color: var(--text-muted); }
 .ft-picker-day.is-blocked { opacity: 0.3; cursor: default; }
 .ft-picker-day.is-blocked:hover { background: none; }
 .ft-picker-head { display: flex; align-items: center; justify-content: space-between; margin: 0.7rem 0.2rem 0.4rem; }
@@ -231,6 +234,12 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
   margin: calc(var(--ft-line) * 0.5em - 0.5rem) 0 0 0.4em; color: var(--text-faint); }
 .focus-tasks-view li.ft-task > .ft-running svg { width: 0.8rem; height: 0.8rem; }
 .focus-tasks-view li.ft-task > .ft-running:hover { color: var(--interactive-accent); }
+/* On a row that is not running yet the same ▷ is an offer: it keeps its place in the line so nothing
+   jumps, and shows itself when the pointer or the keyboard arrives. */
+.focus-tasks-view li.ft-task > .ft-running.is-offer { opacity: 0; }
+.focus-tasks-view li.ft-task:hover > .ft-running.is-offer,
+.focus-tasks-view li.ft-task > .ft-running.is-offer:focus-visible,
+.focus-tasks-view li.ft-task > .ft-running.is-offer.is-active { opacity: 1; }
 
 /* The dot is a button: its menu sets the level or takes the mark off. */
 .focus-tasks-view li.ft-task > .ft-priority { cursor: pointer; flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
