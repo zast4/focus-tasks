@@ -79,7 +79,12 @@ const selectedAre = async (names) => {
   try {
     await until(async () => J(await selected()) === J(names), "selected: " + J(names));
   } catch (e) {
-    throw new Error(`${e.message}; on screen: ${J(await selected())}`);
+    const state = await page.eval(`
+      const p = app.plugins.plugins['focus-tasks'];
+      return [...p.views].map((v) => ({ sel: v.selected.size, scope: !!v.scope, active: app.workspace.activeLeaf === v.leaf,
+        activeType: app.workspace.activeLeaf?.view?.getViewType?.(), editing: !!v.editing,
+        rows: v.rows().length, marked: [...v.containerEl.querySelectorAll('li.ft-task.is-selected')].length }));`);
+    throw new Error(`${e.message}; on screen: ${J(await selected())}; views: ${J(state)}`);
   }
 };
 const menu = async (title) => {
@@ -536,10 +541,22 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
     return selected();
   };
   const names = await pick("Stretch", "Run 5k");
+  // the drag must have something to change: make sure they are not in that project already
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (const name of ${J(names)}) {
+      const task = p.tasks().find((x) => x.text === name);
+      if (task) await p.setFields(task, { projects: null });
+    }
+    p.refresh(); return true;`);
+  await settle();
+  await pick("Stretch", "Run 5k");
   const from = await pos(`__ft.grip(__ft.task(${J(names[0])}))`, "grip of the first selected row");
   const to = await pos(`__ft.at(__ft.project('Marathon 2027'))`, "Marathon 2027 header");
   await page.drag(from, to);
   for (const name of names) await taskIs(name, { projects: "[[Marathon 2027]]" });
+  await toPane();             // keys only reach the list while its own tab is in front
+  await page.key("Escape");   // Esc is the way out of a selection; a finished drop usually clears it too
   await selectedAre([]);
   await settle();
   await pick(names[0], names[names.length - 1]);
@@ -564,6 +581,42 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
   await toPane();
   await page.key("Escape");
   await selectedAre([]);
+});
+
+step("⌘Z takes back the last change: a tick, a date, a new row", async () => {
+  await toPane();
+  const name = await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view())[0]?.querySelector('.ft-text')?.textContent.trim() || null`), "a row to work with");
+  const was = fm(name);
+  // a tick, then ⌘Z
+  await toPane();
+  await click(`__ft.at(__ft.task(${J(name)}).querySelector('input'))`);
+  await taskIs(name, { status: "done" });
+  await toPane();
+  await page.key("Meta+z");
+  await taskIs(name, { status: "open", completedDate: null }, "the tick was taken back");
+  // a date, then ⌘Z
+  await click(`__ft.grip(__ft.task(${J(name)}))`);
+  await menu("Tomorrow");
+  await taskIs(name, { scheduled: TOMORROW });
+  await toPane();
+  await page.key("Meta+z");
+  await taskIs(name, { scheduled: was.scheduled ?? null }, "the date is back to what it was");
+  await idle();
+  await settle();
+  // a new task, then ⌘Z (through the command, so the step does not depend on a hover-only button)
+  await page.eval(`await app.commands.executeCommandById('focus-tasks:add-task'); return true;`);
+  await modalInput();
+  await page.type("Лишняя строка");
+  await page.key("Enter");
+  await until(() => page.eval(`return !!document.querySelector('.prompt input')`), "where to put it");
+  await page.type("Sport");
+  await sleep(300);
+  await page.key("Enter");
+  await until(() => exists(taskPath("Лишняя строка")), "the note was made");
+  await idle();
+  await toPane();
+  await page.key("Meta+z");
+  await until(() => !exists(taskPath("Лишняя строка")), "⌘Z removed the note it made");
 });
 
 step("the tasks folder setting", async () => {
@@ -641,7 +694,7 @@ step("delete an area: its projects and tasks go with it", async () => {
 
 step("commands are registered", async () => {
   const ids = await page.eval(`return Object.keys(app.commands.commands).filter((k) => k.startsWith('focus-tasks:')).sort()`);
-  const want = ["add-area", "add-task", "area-from-note", "fold-all", "open", "toggle-all", "unfold-all"].map((k) => "focus-tasks:" + k);
+  const want = ["add-area", "add-task", "area-from-note", "fold-all", "open", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
   if (J(ids) !== J(want)) throw new Error(J(ids));
 });
 

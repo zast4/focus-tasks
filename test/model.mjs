@@ -1021,6 +1021,131 @@ test("a cancelled task with no area is not asked about", async () => {
   eq(names(plugin.orphans()), ["Real"], "only the open one needs a home");
 });
 
+// --- ⌘Z ------------------------------------------------------------------------------------------
+
+test("undo takes back a completed task", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Run", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.toggle(plugin.tasks()[0]);
+  eq(frontmatter(app, "Tasks/Run.md").status, "done");
+  await plugin.undo();
+  eq(frontmatter(app, "Tasks/Run.md").status, "open", "back to open");
+  eq(frontmatter(app, "Tasks/Run.md").completedDate, undefined, "and the day is gone");
+});
+
+test("undo takes back a date, one step at a time", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Run", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.setDate(plugin.tasks()[0], DAY(1));
+  await plugin.setDate(plugin.tasks()[0], DAY(5));
+  await plugin.undo();
+  eq(frontmatter(app, "Tasks/Run.md").scheduled, DAY(1), "the last date change is undone");
+  await plugin.undo();
+  eq(frontmatter(app, "Tasks/Run.md").scheduled, TODAY, "and the one before it");
+});
+
+test("undo takes back a date given to several rows at once", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "A", { area: "Work", scheduled: TODAY });
+    taskNote(a, "B", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.setDates(plugin.tasks(), null);
+  eq(frontmatter(app, "Tasks/A.md").scheduled, undefined);
+  await plugin.undo();
+  eq(frontmatter(app, "Tasks/A.md").scheduled, TODAY, "both rows are back");
+  eq(frontmatter(app, "Tasks/B.md").scheduled, TODAY);
+});
+
+test("undo takes back a new task by removing it", async () => {
+  const { app, plugin } = await stand((a) => areaNote(a, "Work"));
+  await plugin.createTask("Лишняя", { area: "Work", project: null }, TODAY);
+  eq(plugin.tasks().length, 1);
+  await plugin.undo();
+  eq(plugin.tasks().length, 0, "the note it made is gone");
+});
+
+test("undo takes back a rename, name and text", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Старое имя", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.rename(plugin.tasks()[0], "Новое имя");
+  eq(plugin.tasks()[0].text, "Новое имя");
+  await plugin.undo();
+  eq(plugin.tasks()[0].text, "Старое имя", "the text is back");
+  ok(app.vault.files.has("Tasks/Старое имя.md"), "and so is the file name");
+});
+
+test("undo takes back a move, with the order it wrote", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Plan");
+    taskNote(a, "Step", { area: "Work", scheduled: TODAY });
+  });
+  const project = projectOf(areaOf(await plugin.collect(true), "Work"), "Plan");
+  await plugin.drop({ type: "task", task: plugin.tasks()[0] }, { into: true, target: { type: "project", area: { name: "Work" }, project } }, { tasks: {} });
+  eq(frontmatter(app, "Tasks/Step.md").projects?.length, 1, "it went into the project");
+  await plugin.undo();
+  eq(frontmatter(app, "Tasks/Step.md").projects, undefined, "and came back out");
+});
+
+test("undo takes back making a task into a project", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Большое дело", { area: "Work", scheduled: TODAY }, "план");
+  });
+  await plugin.toProject(plugin.tasks()[0]);
+  ok(app.vault.files.has("Areas/Большое дело.md"), "the project was made");
+  await plugin.undo();
+  eq(app.vault.files.has("Areas/Большое дело.md"), false, "the project note is gone");
+  eq(plugin.tasks().length, 1, "the task is back");
+  ok(bodyOf(app, "Tasks/Большое дело.md").includes("план"), "with its description");
+});
+
+test("undo takes back a deleted task as well", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Run", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.removeTask(plugin.tasks()[0]);
+  eq(plugin.tasks().length, 0);
+  await plugin.undo();
+  eq(plugin.tasks().length, 1, "it is back");
+});
+
+test("undo does not touch what someone else has written since", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Run", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.toggle(plugin.tasks()[0]);
+  await app.fileManager.processFrontMatter(app.vault.getAbstractFileByPath("Tasks/Run.md"), (fm) => { fm.priority = "high"; });
+  await plugin.undo();
+  const fm = frontmatter(app, "Tasks/Run.md");
+  eq(fm.status, "done", "the note was left as the other writer made it");
+  eq(fm.priority, "high", "and their field is intact");
+});
+
+test("undo says when there is nothing left to undo", async () => {
+  const { app, plugin } = await stand((a) => areaNote(a, "Work"));
+  eq(await plugin.undo(), 0);
+  ok(app.notices.length > 0, "and it says so");
+});
+
+test("the history does not grow without end", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Run", { area: "Work", scheduled: TODAY });
+  });
+  for (let i = 0; i < 40; i++) await plugin.setDate(plugin.tasks()[0], DAY(i % 7));
+  ok(plugin.history.length <= 30, "at most thirty steps: " + plugin.history.length);
+});
+
 // --- fuzzing: nothing may vanish ----------------------------------------------------------------
 
 // A pseudo-random vault of areas, projects and tasks with every kind of junk seen in the wild.

@@ -272,3 +272,7 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 .focus-tasks-view li.ft-task > .ft-described { flex: none; display: inline-flex; align-items: center; margin-left: 0.5em;
   height: calc(var(--ft-line) * 1em); color: var(--text-faint); }
 .focus-tasks-view li.ft-task > .ft-described svg { width: 0.85rem; height: 0.85rem; }
+
+/* The list can hold the keyboard (so Esc and ⌘1–4 reach it) without drawing a box around itself. */
+.focus-tasks-view:focus { outline: none; }
+.focus-tasks-view:focus-visible { outline: none; }

@@ -141,7 +141,8 @@ export class FakeVault {
     return file;
   }
   on(name, fn) { (this.events[name] = this.events[name] || []).push(fn); return { name, fn }; }
-  off() {}
+  off(name, fn) { this.events[name] = (this.events[name] || []).filter((x) => x !== fn); }
+  offref(ref) { if (ref) this.off(ref.name, ref.fn); }
   fire(name, ...args) { for (const fn of this.events[name] || []) if (typeof fn === "function") fn(...args); }
 }
 
