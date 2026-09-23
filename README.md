@@ -21,7 +21,8 @@ click away.
 - **The field names are [TaskNotes](https://github.com/callumalpass/tasknotes)'**, so that plugin can
   be installed on the same notes and bring its recurrence, reminders, time tracking and calendar
   views, while this list stays the daily focus on top. `uid` and `area` are this plugin's own; both
-  sides keep keys they do not know.
+  sides keep keys they do not know. **Settings → Focus Tasks → TaskNotes** installs it and points it
+  at these notes in one click — see [TaskNotes, in one click](#tasknotes-in-one-click).
 
 ## The view
 
@@ -69,9 +70,51 @@ task can be restored from the notice that appears.
 | `type` of an area / project | `area` / `project` | `project`/`проект` and `area`/`область` are always recognised |
 | Steps / Inbox / Projects headings | `Steps` / `Inbox` / `Projects` | sections new lines go to |
 | Date format | `DD.MM.YY` | any moment.js format |
+| TaskNotes | — | install the companion plugin and point it at these tasks (see above) |
 
 Folded state, «opened» areas and the drag order are saved in the plugin's `data.json` (synced with
 the vault); «All» is remembered per device.
+
+## Upgrading from 0.1.0
+
+**0.2.0 changes what a task is.** In 0.1.0 a task was a checkbox line inside an area's note; now every
+task is a note of its own in the tasks folder, with its own `uid`. The new version does not read
+checkbox lines at all: your areas and projects will still be there, empty, and the list will say how
+many lines it found and link back here.
+
+Nothing is lost — the lines are still in your notes. To move them:
+
+1. Back up the vault (or at least the folder with your area notes). The script writes many files.
+2. Dry run — nothing is written without `--apply`:
+   `node tools/migrate-to-notes.mjs --vault "<your vault>" --folder Tasks --out Задачи`
+   It prints how many tasks it would make and where.
+3. Run it for real by adding `--apply`. Add `--wishes` to take the «### TODO» blocks of ordinary
+   notes too; they become tasks with `status: someday`.
+4. Open the list. The tasks folder in *Settings → Focus Tasks* must be the one you passed as `--out`.
+
+Prefer to stay on the old model? Pin 0.1.0: in BRAT, *Choose version* → `0.1.0`, or install that
+release by hand.
+
+## TaskNotes, in one click
+
+TaskNotes is optional — this list works on its own. Installed, it reads the very same notes and adds
+recurrence, reminders, time tracking, its calendar and its Bases views.
+
+Open **Settings → Focus Tasks**: the *TaskNotes* row says where it stands and gives you the one button
+that matters.
+
+- Not installed → **Install**: Focus Tasks downloads it through Obsidian's own plugin installer,
+  turns it on, and points it at these tasks.
+- Installed but looking elsewhere → **Point it at these tasks**: sets its *task identification* to the
+  property `type` = `задача` and its tasks folder to the one in these settings. This is the step
+  people miss by hand, and without it TaskNotes finds nothing and looks broken.
+- Already aimed → the row says so, and **Its settings** opens TaskNotes.
+
+If Obsidian ever changes its installer, the button says so and sends you to *Community plugins →
+Browse → TaskNotes*; the one setting to fix by hand is the identification above.
+
+Its default Bases views filter by the `#task` tag. Delete `TaskNotes/Views/` once and let it write
+them again — they will then read `list(note["type"]).contains("задача")` and show these tasks.
 
 ## Install with BRAT (from inside Obsidian)
 
@@ -148,6 +191,7 @@ passes (`--keep` leaves it).
 - **Имена полей — как у [TaskNotes](https://github.com/callumalpass/tasknotes)**: его можно поставить
   на те же заметки и получить повторы, напоминания, учёт времени и его виды, а этот список останется
   дневным фокусом сверху. Свои здесь только `uid` и `area`; чужие ключи обе стороны сохраняют.
+  Ставится в один клик: **Настройки → Focus Tasks → TaskNotes**.
 
 Отмеченная задача до конца дня остаётся внизу своей области в блоке «Выполненные» (галочка там
 возвращает её в работу): видно, что сделано за день.
@@ -163,6 +207,25 @@ passes (`--keep` leaves it).
 добавляет или убирает одну, Esc снимает выделение; ручка выделенной строки тащит их все, а её дата,
 меню или ⌘1–4 (как при правке) ставят дату всем сразу. Внизу — «Все» / «Скрыть», «+ Область», «+ Область из заметки»,
 «Свернуть всё» / «Развернуть всё». Язык интерфейса — в настройках (Auto / English / Русский).
+
+**Обновление с 0.1.0.** В 0.1.0 задача была строкой-чекбоксом внутри заметки области, теперь каждая
+задача — отдельная заметка со своим `uid`. Строки-чекбоксы новая версия не читает: области и проекты
+останутся на месте, но пустыми, а список сам скажет, сколько таких строк нашёл. Ничего не пропало —
+строки лежат в заметках. Перенос: сделай бэкап, прогони
+`node tools/migrate-to-notes.mjs --vault "<хранилище>" --folder Tasks --out Задачи` (без `--apply`
+ничего не пишется, только отчёт), потом с `--apply`; `--wishes` заберёт ещё и блоки «### TODO» из
+обычных заметок как задачи со `status: someday`. Хочется остаться на старой модели — в BRAT
+*Choose version* → `0.1.0`.
+
+**TaskNotes в один клик.** Он не обязателен — список работает сам по себе. Но если поставить, он
+читает те же заметки и добавляет повторы, напоминания, учёт времени, календарь и свои виды Bases.
+В **Настройках → Focus Tasks** строка *TaskNotes* показывает, где он сейчас, и даёт одну нужную
+кнопку: «Поставить» (скачает штатным установщиком Obsidian, включит и наведёт на эти задачи),
+«Навести на эти задачи» (поставит опознавание задач по свойству `type` = `задача` и папку задач из
+этих настроек — именно этот шаг руками все и пропускают, без него TaskNotes не находит ничего и
+выглядит сломанным) или «Его настройки». Его готовые виды Bases фильтруют по тегу `#task`: удали
+папку `TaskNotes/Views/` один раз и дай ему переписать её — тогда они читают
+`list(note["type"]).contains("задача")`.
 
 Установка прямо из Obsidian — через BRAT: *Настройки → Сторонние плагины → Обзор* → поставить и
 включить **BRAT**; палитра команд → **BRAT: Add a beta plugin for testing** → `zast4/focus-tasks`

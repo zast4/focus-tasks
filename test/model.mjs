@@ -227,6 +227,39 @@ test("a text with characters a file name cannot hold still works", async () => {
   ok(!/[\\/:"]/.test(task.file.basename), "the file name is safe: " + task.file.basename);
 });
 
+test("checkbox lines left from 0.1.0 are counted, so the list can say why it is empty", async () => {
+  const { app, plugin } = await stand((a) => writeNote(a, "Areas/Sport.md", { area: "Sport", type: "area" },
+    "## Inbox\n- [ ] Run 5k ⏳ 2026-09-22\n- [x] Stretch ✅ 2026-09-21\n- not a task"));
+  eq(plugin.tasks().length, 0, "none of them is a task note");
+  eq(await plugin.checkboxLeftovers(), 2, "but both checkbox lines are seen");
+});
+
+test("TaskNotes is only «aimed» when it looks for our tasks where they are", async () => {
+  const { app, plugin } = await stand((a) => areaNote(a, "Sport"));
+  const tn = { settings: { taskIdentificationMethod: "tag", taskTag: "task", taskPropertyName: "",
+    taskPropertyValue: "", tasksFolder: "TaskNotes/Tasks" }, saved: 0,
+    async saveSettings() { this.saved++; } };
+  app.plugins.plugins["tasknotes"] = tn;
+  ok(!plugin.companionAimed(tn), "its own defaults find nothing of ours");
+  ok(await plugin.tuneCompanion(true), "we can point it at them");
+  eq(tn.settings.taskIdentificationMethod, "property");
+  eq(tn.settings.taskPropertyName, "type");
+  eq(tn.settings.taskPropertyValue, "задача");
+  eq(tn.settings.tasksFolder, plugin.tasksFolder);
+  eq(tn.saved, 1, "and its own save is what writes it");
+  ok(plugin.companionAimed(tn), "now it is aimed");
+  tn.settings.tasksFolder = "Somewhere else";
+  ok(!plugin.companionAimed(tn), "moving the folder takes it off our notes again");
+});
+
+test("a TaskNotes that renamed its settings is left alone, not half-written", async () => {
+  const { app, plugin } = await stand((a) => areaNote(a, "Sport"));
+  const tn = { settings: { identifyTasksBy: "tag" }, async saveSettings() { throw new Error("must not be called"); } };
+  app.plugins.plugins["tasknotes"] = tn;
+  ok(!(await plugin.tuneCompanion(true)), "we say we could not, instead of guessing");
+  eq(JSON.stringify(tn.settings), JSON.stringify({ identifyTasksBy: "tag" }), "its settings are untouched");
+});
+
 test("a link in the text becomes the words it shows in the file name", async () => {
   const { app, plugin } = await stand((a) => areaNote(a, "Sport"));
   const text = "Прочитать [[Books/Дюна|Дюну]] и [[Zettelkasten/План обучения]]";

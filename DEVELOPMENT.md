@@ -14,9 +14,10 @@ He uses this plugin every day, so new work must never land in his vault on its o
 Three words drive it:
 
 - he says nothing → keep committing to `next`; his vault stays exactly as it is.
-- **«ревью»** → report everything in `git log shipped..next` as one summary, oldest first,
-  grouped by what changed for him, not by commit. He does not track what he has already read,
-  so the report always starts at `shipped`, however many rounds went into it.
+- **«ревью»** → report everything that happened since the last merge, not only the code: the commits
+  in `git log shipped..next`, grouped by what changed for him, **and the answers to every question he
+  asked in between**, repeated in full. He reads nothing of the running commentary, so the report is
+  the only thing he sees — it always starts at `shipped`, however many rounds went into it.
 - **«вливай»** → merge `next` into `notes-model`, copy `main.js`, `manifest.json`,
   `styles.css` into `~/vaults/Vault/.obsidian/plugins/focus-tasks/`, reload the plugin over
   CDP, then move the tag: `git tag -f shipped notes-model`. All three suites must be green
@@ -51,6 +52,8 @@ and do not reopen one that turned done while you were working.
   - `check`: a box marks its row at once and ignores further clicks until the list is re-read (a
     second click would undo the first); a failed write puts the row back. `toggle` holds one toggle
     per line in the plugin, so the same task clicked in two views does not toggle twice.
+  - `checkboxLeftovers()` counts `- [ ]` lines in the area notes; the view shows the 0.1.0 upgrade
+    hint when there are no task notes at all.
   - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
     + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
   - `completed(box, done, key)`: «Completed · N» — under a project for its steps, under an area for its
@@ -69,6 +72,15 @@ and do not reopen one that turned done while you were working.
   `setDates`, `moveTasks`, `remove` with undo, `rename`, `insertAfter`, `addLine`, `toggle`); areas and projects
   (`createArea`, `createProject`, `renameProject`, `deleteProject` / `deleteArea`, linked notes:
   `linked`, `setLinked`, `pickNote`, `areaFromNote`, `projectFromNote`).
+
+### TaskNotes in one click
+
+`COMPANION` holds its id, repo and the property we identify tasks by. `installCompanion()` goes
+through `app.plugins.installPlugin` — Obsidian's own installer, **not public API**: it is feature-
+checked, and without it the user is sent to the plugin browser. `tuneCompanion()` writes
+`taskIdentificationMethod` / `taskPropertyName` / `taskPropertyValue` / `tasksFolder` into TaskNotes'
+settings and calls its `saveSettings()`, but only when all four keys are already there — if it ever
+renames them we say so instead of writing nonsense. `companionAimed()` is what the settings row reads.
 
 ## The data contract
 

@@ -697,6 +697,19 @@ step("the settings tab renders", async () => {
   if (!ok) throw new Error("settings missing");
 });
 
+step("the settings offer TaskNotes, and know when it is not there", async () => {
+  const seen = await page.eval(`app.setting.open(); app.setting.openTabById('focus-tasks'); await new Promise((r) => setTimeout(r, 300));
+    const el = app.setting.activeTab?.containerEl;
+    const row = [...el.querySelectorAll('.setting-item')].find((r) => r.textContent.includes('TaskNotes'));
+    const out = { row: !!row, button: row?.querySelector('button')?.textContent || null,
+      installed: !!app.plugins.manifests?.tasknotes };
+    app.setting.close();
+    return out;`);
+  if (!seen.row) throw new Error("no TaskNotes row in the settings");
+  const want = seen.installed ? ["Point it at these tasks", "Its settings", "Turn on"] : ["Install"];
+  if (!want.includes(seen.button)) throw new Error(`the button reads ${J(seen.button)}, expected one of ${J(want)}`);
+});
+
 step("Russian interface", async () => {
   await plugin(`p.settings.language = 'ru'; p.applyLanguage(); p.refresh(); return true;`);
   await until(() => page.eval(`return !!__ft.text('.ft-foot-button', '+ Область')`), "Russian labels");

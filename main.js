@@ -33,12 +33,16 @@
 const {
   Plugin, PluginSettingTab, Setting, ItemView, Modal, SuggestModal, FuzzySuggestModal, Notice, Menu,
   MarkdownRenderChild, MarkdownRenderer, Component, Keymap, moment, setIcon, prepareSimpleSearch,
-  Platform, Scope, normalizePath,
+  Platform, Scope, normalizePath, requestUrl,
 } = require("obsidian");
 
 const VIEW_TYPE = "focus-tasks-view";
 const PROJECT_WORDS = ["project", "проект"];
 const TASK_WORDS = ["task", "задача"];
+const TASK_TYPE = "задача";   // what a new task note gets; TASK_WORDS is what we also read
+// TaskNotes: the optional companion on the same notes. Its own field names are our contract
+// already; the one thing it has to be told is how to recognise a task.
+const COMPANION = { id: "tasknotes", repo: "callumalpass/tasknotes", property: "type" };
 const STATUS_OPEN = "open", STATUS_DONE = "done", STATUS_CANCELLED = "cancelled", STATUS_SOMEDAY = "someday";
 
 const DEFAULTS = {
@@ -101,6 +105,17 @@ const STRINGS = {
     sFolder: "Folder", sFolderDesc: "Where the notes of areas and projects live. Notes linked to them can be anywhere.",
     sTasksFolder: "Tasks folder", sTasksFolderDesc: "Where task notes are kept, one note per task.",
     sLanguage: "Language", sLanguageDesc: "Interface language (Auto follows Obsidian).",
+    oldFormat: "{0} tasks here are still checkbox lines from version 0.1.0 — a task is a note of its own now, so they are not shown. ",
+    oldFormatHow: "How to move them",
+    sCompanion: "TaskNotes",
+    sCompanionOff: "Optional. On the same task notes it adds recurrence, reminders, time tracking and calendar views — this list stays the daily focus on top.",
+    sCompanionOn: "Installed. It reads the same notes: tasks are found by the property “{0}” = “{1}” in the folder “{2}”.",
+    sCompanionStale: "Installed, but looking elsewhere — it will not see these tasks until it finds them by the property “{0}” = “{1}” in “{2}”.",
+    sInstall: "Install", sEnable: "Turn on", sTune: "Point it at these tasks", sCompanionOpen: "Its settings",
+    installing: "Installing TaskNotes…", installed: "TaskNotes is installed and on",
+    installFailed: "Could not install TaskNotes: {0}. Settings → Community plugins → Browse → TaskNotes",
+    tuned: "TaskNotes now looks for “{0}” = “{1}” in “{2}”",
+    tuneFailed: "TaskNotes keeps its settings differently now — set task identification by hand: property “{0}” = “{1}”, folder “{2}”",
     sAreaName: "Area note name", sAreaNameDesc: "File name of a new area note; {area} is the area name without a leading emoji.",
     sAreaFm: "Extra frontmatter for new area notes", sAreaFmDesc: "YAML lines added to every new area note (optional).",
     sProjectFm: "Extra frontmatter for new project notes", sProjectFmDesc: "YAML lines added to every new project note; {areaNote} is its area's note (optional).",
@@ -156,6 +171,17 @@ const STRINGS = {
     sFolder: "Папка", sFolderDesc: "Где лежат заметки областей и проектов. Привязанные к ним заметки могут быть где угодно.",
     sTasksFolder: "Папка задач", sTasksFolderDesc: "Где лежат заметки задач, по одной заметке на задачу.",
     sLanguage: "Язык", sLanguageDesc: "Язык интерфейса (Auto — как в Obsidian).",
+    oldFormat: "Здесь ещё {0} задач строками-чекбоксами из версии 0.1.0 — теперь задача это отдельная заметка, поэтому их не видно. ",
+    oldFormatHow: "Как перенести",
+    sCompanion: "TaskNotes",
+    sCompanionOff: "По желанию. На тех же заметках задач он добавляет повторы, напоминания, учёт времени и календарь — этот список остаётся фокусом на день.",
+    sCompanionOn: "Стоит. Читает те же заметки: задачи ищет по свойству «{0}» = «{1}» в папке «{2}».",
+    sCompanionStale: "Стоит, но смотрит не туда — наших задач он не увидит, пока не будет искать их по свойству «{0}» = «{1}» в «{2}».",
+    sInstall: "Поставить", sEnable: "Включить", sTune: "Навести на эти задачи", sCompanionOpen: "Его настройки",
+    installing: "Ставлю TaskNotes…", installed: "TaskNotes поставлен и включён",
+    installFailed: "Не поставился TaskNotes: {0}. Настройки → Сторонние плагины → Обзор → TaskNotes",
+    tuned: "TaskNotes теперь ищет «{0}» = «{1}» в «{2}»",
+    tuneFailed: "TaskNotes хранит настройки иначе — поставь опознавание задач руками: свойство «{0}» = «{1}», папка «{2}»",
     sAreaName: "Имя заметки области", sAreaNameDesc: "Имя файла новой области; {area} — имя области без эмодзи в начале.",
     sAreaFm: "Дополнительный frontmatter новых областей", sAreaFmDesc: "YAML-строки, которые добавятся в каждую новую заметку области (необязательно).",
     sProjectFm: "Дополнительный frontmatter новых проектов", sProjectFmDesc: "YAML-строки для каждой новой заметки проекта; {areaNote} — заметка его области (необязательно).",
@@ -560,6 +586,15 @@ class FocusRenderer extends MarkdownRenderChild {
     this.inner = this.addChild(new Component());
     const el = createDiv();
     const none = !p.notes().length;
+    // Coming from 0.1.0 the areas are still there but every task is a checkbox line, which this
+    // version does not read: without a word the list just looks broken.
+    const old010 = !p.tasks().length ? await p.checkboxLeftovers() : 0;
+    if (old010) {
+      const line = el.createDiv({ cls: "ft-empty ft-onboarding" });
+      line.createSpan({ text: t("oldFormat", old010) });
+      line.createEl("a", { cls: "ft-empty-link", text: t("oldFormatHow"),
+        href: "https://github.com/zast4/focus-tasks#upgrading-from-010" });
+    }
     if (none) el.createDiv({ cls: "ft-empty ft-onboarding", text: t("noAreas") });
     else if (!areas.length) {
       // An empty focus is not an empty vault: say how much is waiting and offer the way to it, or the
@@ -1533,6 +1568,7 @@ class FocusSettingTab extends PluginSettingTab {
       }));
     text("sFolder", "sFolderDesc", "folder");
     text("sTasksFolder", "sTasksFolderDesc", "tasksFolder");
+    this.companion(containerEl);
     new Setting(containerEl).setName(t("sLanguage")).setDesc(t("sLanguageDesc")).addDropdown((d) => d
       .addOptions({ auto: "Auto", en: "English", ru: "Русский" }).setValue(s.language).onChange(async (v) => {
         s.language = v;
@@ -1556,6 +1592,48 @@ class FocusSettingTab extends PluginSettingTab {
     text("sTypeProject", "sTypeDesc", "typeProject");
     text("sProjects", "sProjectsDesc", "projectsHeading");
     text("sDateFormat", "sDateFormatDesc", "dateFormat");
+  }
+
+  // TaskNotes on the same notes: one row that says where it stands, one button that moves it on.
+  // Installing it by hand is a trip through the plugin browser, and what people miss afterwards is
+  // task identification — set to its default, TaskNotes sees none of these notes and looks broken.
+  companion(containerEl) {
+    const p = this.plugin;
+    const id = COMPANION.id;
+    const manifest = this.app.plugins.manifests?.[id];
+    const live = this.app.plugins.plugins[id];
+    const folder = p.settings.tasksFolder || DEFAULTS.tasksFolder;
+    const type = TASK_TYPE;
+    const row = new Setting(containerEl).setName(t("sCompanion"));
+    const again = () => this.display();
+    if (!manifest) {
+      row.setDesc(t("sCompanionOff"));
+      row.addButton((b) => b.setCta().setButtonText(t("sInstall")).onClick(async () => {
+        b.setDisabled(true);
+        await p.installCompanion();
+        again();
+      }));
+      return;
+    }
+    if (!live) {
+      row.setDesc(t("sCompanionOff"));
+      row.addButton((b) => b.setCta().setButtonText(t("sEnable")).onClick(async () => {
+        await this.app.plugins.enablePlugin(id);
+        again();
+      }));
+      return;
+    }
+    const aimed = p.companionAimed(live, type, folder);
+    row.setDesc(aimed ? t("sCompanionOn", COMPANION.property, type, folder)
+                      : t("sCompanionStale", COMPANION.property, type, folder));
+    if (!aimed) row.addButton((b) => b.setCta().setButtonText(t("sTune")).onClick(async () => {
+      await p.tuneCompanion();
+      again();
+    }));
+    row.addButton((b) => b.setButtonText(t("sCompanionOpen")).onClick(() => {
+      this.app.setting.open();
+      this.app.setting.openTabById(id);
+    }));
   }
 }
 
@@ -2014,6 +2092,70 @@ module.exports = class FocusTasks extends Plugin {
     this.refresh();
   }
 
+  // Checkbox lines left in the area and project notes of version 0.1.0. Only asked for when the
+  // list has no task notes at all, so this reads a handful of notes on a rare day.
+  async checkboxLeftovers() {
+    let n = 0;
+    for (const note of this.notes()) {
+      const text = await this.app.vault.cachedRead(note.file);
+      n += (text.match(/^\s*[-*]\s*\[[ xX-]\]\s+\S/gm) || []).length;
+      if (n > 200) break;
+    }
+    return n;
+  }
+
+  // --- the companion plugin ------------------------------------------------------------------
+
+  // Obsidian's own installer, the one the plugin browser uses. It is not part of the public API, so
+  // everything here is guarded: when it is gone, the user is sent to the browser instead.
+  async installCompanion() {
+    const plugins = this.app.plugins;
+    if (typeof plugins.installPlugin !== "function") {
+      this.app.setting.open();
+      this.app.setting.openTabById("community-plugins");
+      new Notice(t("installFailed", "API"));
+      return false;
+    }
+    new Notice(t("installing"));
+    try {
+      const manifest = JSON.parse((await requestUrl(`https://raw.githubusercontent.com/${COMPANION.repo}/main/manifest.json`)).text);
+      await plugins.installPlugin(COMPANION.repo, manifest.version, manifest);
+      await plugins.enablePlugin(COMPANION.id);
+    } catch (e) {
+      console.error("focus-tasks: TaskNotes did not install", e);
+      new Notice(t("installFailed", e?.message || e));
+      return false;
+    }
+    new Notice(t("installed"));
+    await this.tuneCompanion(true);
+    return true;
+  }
+
+  // Does TaskNotes look for tasks where ours are?
+  companionAimed(live, type = TASK_TYPE, folder = this.tasksFolder) {
+    const s = live?.settings;
+    return !!s && s.taskIdentificationMethod === "property" && s.taskPropertyName === COMPANION.property
+      && s.taskPropertyValue === type && s.tasksFolder === folder;
+  }
+
+  // Point it at our notes: identify a task by `type: задача`, keep them in our folder. Only keys it
+  // already has are touched — if it ever renames them, we say so instead of writing nonsense.
+  async tuneCompanion(quiet = false) {
+    const live = this.app.plugins.plugins[COMPANION.id];
+    const folder = this.tasksFolder;
+    const want = { taskIdentificationMethod: "property", taskPropertyName: COMPANION.property,
+      taskPropertyValue: TASK_TYPE, tasksFolder: folder };
+    const known = live?.settings && Object.keys(want).every((k) => k in live.settings);
+    if (!known || typeof live.saveSettings !== "function") {
+      new Notice(t("tuneFailed", COMPANION.property, TASK_TYPE, folder));
+      return false;
+    }
+    Object.assign(live.settings, want);
+    await live.saveSettings();
+    if (!quiet) new Notice(t("tuned", COMPANION.property, TASK_TYPE, folder));
+    return true;
+  }
+
   // --- undo ---------------------------------------------------------------------------------
 
   // What deleting touches is written down first: the notes that go to the trash and the ones that
@@ -2175,7 +2317,7 @@ module.exports = class FocusTasks extends Plugin {
   async createNow(text, target, day) {
     await this.ensureFolder(this.tasksFolder);
     const name = await this.freeName(fileName(text).slice(0, 60) || t("newTask"));
-    const front = ["---", `uid: ${newUid()}`, "type: задача", `status: ${STATUS_OPEN}`];
+    const front = ["---", `uid: ${newUid()}`, `type: ${TASK_TYPE}`, `status: ${STATUS_OPEN}`];
     if (target.area) front.push(`area: ${JSON.stringify(target.area)}`);
     if (target.project) front.push("projects:", `  - "[[${target.project}]]"`);
     if (day) front.push(`scheduled: ${day}`);
