@@ -448,6 +448,32 @@ step("the row shows what the note says: a priority dot and a deadline on another
   await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the badges are gone again");
 });
 
+step("«In progress» takes a task out of the focus and the area's ▷ brings it back", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Ask the lawyer")),
+    `---\nuid: ft-run-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Ask the lawyer')`), "the task is in the focus");
+  await click(`__ft.grip(__ft.task('Ask the lawyer'))`);
+  await menu("In progress");
+  await taskIs("Ask the lawyer", { status: "in-progress", scheduled: TODAY }, "the status is set, the date left alone");
+  await until(() => page.eval(`return !__ft.task('Ask the lawyer')`), "and it left the focus");
+  await until(() => page.eval(`
+    const c = __ft.area('Sport')?.querySelector('.ft-wait-chip');
+    return !!c && c.textContent.trim() === '1' && c.hasClass('is-ripe');`),
+    "the area's ▷ counts it and says it is ripe for a look");
+  const key = await plugin(`return 'wait:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
+  await plugin(`if (!p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
+  await until(() => page.eval(`
+    const r = __ft.task('Ask the lawyer');
+    return !!r && !!r.closest('.ft-wait-block') && !!r.querySelector('.ft-running');`),
+    "and it is listed under the area, marked as running");
+  await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-running'))`, "the ▷ on the row");
+  await taskIs("Ask the lawyer", { status: "open" }, "the row's ▷ hands it back");
+  await until(() => page.eval(`return !!__ft.task('Ask the lawyer') && !__ft.task('Ask the lawyer').closest('.ft-wait-block')`), "back in the focus");
+  fs.unlinkSync(path.join(VAULT, taskPath("Ask the lawyer")));
+  await settle();
+});
+
 step("the dot a robot leaves can be taken off from the row itself", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Added by a script")),
     `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: low\n---\n`);

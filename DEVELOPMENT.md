@@ -60,6 +60,10 @@ and do not reopen one that turned done while you were working.
     hint when there are no task notes at all.
   - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
     + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
+  - `waitChip` / `waitingList` + `setRunning`: `status: in-progress` — started and out of his hands.
+    Such a task leaves the focus whatever its date and waits behind the «▷N» of its project or area
+    (`wait:<path|area>`, closed by default); the chip takes the accent colour once a review day has
+    come, and that ripeness alone keeps the area on screen. The ▷ on a row hands the task back.
   - `priorityItems(menu, task|tasks)` + `setPriority`: the levels of TaskNotes' `priority`, and
     `null` to take the mark off; reachable from the dot itself, the row's menu and a selection's.
   - `chip(head, …)`: a counter that folds a part of a row — «⏳N» upcoming (`steps-later:<path>`,
@@ -99,7 +103,9 @@ Other tools read the same notes, so keep these stable:
   (`project` / `проект`) makes it a **project**, anything else an area;
 - a **task** = a note of its own in the tasks folder (`Задачи` by default) with `type: задача`:
   - `uid` — its identity, never changes (a rename or a move keeps it);
-  - `status`: `open` / `done` / `cancelled` / `someday`;
+  - `status`: `open` / `in-progress` / `done` / `cancelled` / `someday`; `in-progress` is TaskNotes'
+    own built-in status, so a task sent off reads the same in both plugins, and `obsidian_tasks.py`
+    keeps it out of every focus report (`OUT_OF_FOCUS`);
   - `area` — the area's name, `projects` — a list with a wikilink to the project's note (absent = a
     loose task; we keep one project per task, the list is TaskNotes' shape);
   - `scheduled` — the date the focus goes by, `due`, `completedDate` — the day it was checked off;

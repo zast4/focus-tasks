@@ -197,6 +197,18 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 
 /* What the frontmatter says and the row would otherwise hide: the priority dot right after the text
    (low = «an agent added this, not looked at yet»), and a deadline that falls on another day. */
+/* Running: sent off, delegated, waiting on someone. The ▷ on a header counts them and turns the
+   accent colour once a review day has come; the ▷ on a row hands the task back. */
+.focus-tasks-view .ft-wait-chip { color: var(--text-muted); }
+.focus-tasks-view .ft-wait-chip.is-ripe { color: var(--interactive-accent); }
+.focus-tasks-view .ft-wait-block { margin-top: 0.45em; padding-top: 0.2em;
+  border-top: 1px dashed var(--background-modifier-border); }
+.focus-tasks-view li.ft-task.is-waiting > .ft-text { color: var(--text-muted); }
+.focus-tasks-view li.ft-task > .ft-running { flex: none; display: inline-flex; align-items: center; cursor: pointer;
+  margin: calc(var(--ft-line) * 0.5em - 0.5rem) 0 0 0.4em; color: var(--text-faint); }
+.focus-tasks-view li.ft-task > .ft-running svg { width: 0.8rem; height: 0.8rem; }
+.focus-tasks-view li.ft-task > .ft-running:hover { color: var(--interactive-accent); }
+
 /* The dot is a button: its menu sets the level or takes the mark off. */
 .focus-tasks-view li.ft-task > .ft-priority { cursor: pointer; flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
   border-radius: 50%; background: var(--text-faint); }

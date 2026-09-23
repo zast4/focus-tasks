@@ -45,6 +45,10 @@ const TASK_TYPE = "задача";   // what a new task note gets; TASK_WORDS is 
 // already; the one thing it has to be told is how to recognise a task.
 const COMPANION = { id: "tasknotes", repo: "callumalpass/tasknotes", property: "type" };
 const STATUS_OPEN = "open", STATUS_DONE = "done", STATUS_CANCELLED = "cancelled", STATUS_SOMEDAY = "someday";
+// Started and out of my hands: delegated, sent, waiting on someone. It leaves the focus but not the
+// list — its date stops meaning «do it» and starts meaning «look at it again». TaskNotes knows this
+// status out of the box, so a task marked here reads the same in both plugins.
+const STATUS_PROGRESS = "in-progress";
 
 const DEFAULTS = {
   folder: "Tasks",
@@ -95,11 +99,14 @@ const STRINGS = {
     repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
     undoKept: "Put back {0} of {1}: the rest changed in the meantime",
     allDone: "done {0}", undone: "Undone: {0}", nothingToUndo: "Nothing to undo", cmdUndo: "Undo the last change",
-    aDate: "the date", aPriority: "the priority", aMove: "the move", aRename: "the new text", aDone: "completing the task", aNew: "the new task", aProject: "making it a project", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
+    aDate: "the date", aPriority: "the priority", aRunning: "the status", aMove: "the move", aRename: "the new text", aDone: "completing the task", aNew: "the new task", aProject: "making it a project", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
     orphans: "Without an area", orphansHelp: "These tasks are in no area, so the focus cannot show them. Pick a place for each.",
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
+    inProgress: "In progress", backToWork: "Back to the focus", waitingHide: "Hide what is running",
+    waitingShow: "Show what is running", waitingRipe: "Show what is running ({0} to look at)",
+    waitingSince: "Running; look again {0}", waitingNoDate: "Running; no day set to look again",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -163,11 +170,14 @@ const STRINGS = {
     repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
     undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
     allDone: "сделано {0}", undone: "Отменено: {0}", nothingToUndo: "Нечего отменять", cmdUndo: "Отменить последнее действие",
-    aDate: "дата", aPriority: "приоритет", aMove: "перенос", aRename: "текст задачи", aDone: "выполнение задачи", aNew: "новая задача", aProject: "превращение в проект", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
+    aDate: "дата", aPriority: "приоритет", aRunning: "статус", aMove: "перенос", aRename: "текст задачи", aDone: "выполнение задачи", aNew: "новая задача", aProject: "превращение в проект", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
     orphans: "Без области", orphansHelp: "Эти задачи ни в одной области, поэтому фокус их не показывает. Разложи их по местам.",
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
+    inProgress: "В работе", backToWork: "Вернуть в фокус", waitingHide: "Скрыть запущенное",
+    waitingShow: "Показать запущенное", waitingRipe: "Показать запущенное (пора глянуть: {0})",
+    waitingSince: "Запущено; вернуться {0}", waitingNoDate: "Запущено; день возврата не назначен",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
@@ -845,6 +855,7 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     // What was finished here today lives in the area's own header: a second grey row under
     // «Show upcoming» read as its twin and made the bottom of every area look like a footer.
+    if (!all && open && area.waitingLoose.length) this.waitChip(title, area.waitingLoose, "wait:" + area.name);
     if (!all && open && area.doneLoose.length)
       this.chip(title, "ft-done-chip", "check", area.doneLoose.length,
         p.isShown("done:" + area.name, false), "done:" + area.name,
@@ -881,6 +892,7 @@ class FocusRenderer extends MarkdownRenderChild {
         for (const project of area.future.projects) await this.project(block, area, project, true);
       }
     }
+    if (area.waitingLoose.length) await this.waitingList(box, area.waitingLoose, "wait:" + area.name);
     if (area.doneLoose.length) await this.completed(box, area.doneLoose, "done:" + area.name);
   }
 
@@ -1015,6 +1027,9 @@ class FocusRenderer extends MarkdownRenderChild {
     const laterOpen = !all && !later && p.isShown(laterKey, true);
     const doneOpen = !all && !later && p.isShown(doneKey, false);
     const unfold = async () => { if (!p.isShown(key, all)) await p.toggleShown(key, all); };
+    const waitKey = "wait:" + path;
+    const waitOpen = !all && !later && p.isShown(waitKey, true);
+    if (!all && !later && project.waiting?.length) this.waitChip(head, project.waiting, waitKey, unfold);
     if (!all && !later && project.later?.length)
       this.chip(head, "ft-later-chip", "clock", project.later.length, laterOpen, laterKey, t(laterOpen ? "laterHide" : "laterShow"), true, unfold);
     if (!all && !later && project.done?.length)
@@ -1029,11 +1044,30 @@ class FocusRenderer extends MarkdownRenderChild {
     this.more(head, (menu) => this.projectMenu(menu, area, project, head));
     this.grip(head, { type: "project", area, project });
     if (!open) return;
-    if (!project.tasks.length && !laterOpen && !doneOpen) return;
+    if (!project.tasks.length && !laterOpen && !doneOpen && !waitOpen) return;
     const body = box.createDiv({ cls: "ft-project-body" });
     if (project.tasks.length) await this.list(body, project.tasks, all);
+    if (waitOpen) await this.waitingList(body, project.waiting, waitKey);
     if (laterOpen) await this.list(body, project.later);
     if (doneOpen) await this.completed(body, project.done, doneKey, true);
+  }
+
+  // «▷N» — what is running here. Plain while it ticks, in the accent colour once a review day has
+  // come: one glance tells whether anything delegated is waiting for me rather than for them.
+  waitChip(head, waiting, key, unfold = null) {
+    const p = this.plugin;
+    const open = p.isShown(key, true);
+    const ripe = waiting.filter((x) => inFocus(x)).length;
+    this.chip(head, "ft-wait-chip" + (ripe ? " is-ripe" : ""), "play", waiting.length, open, key,
+      open ? t("waitingHide") : ripe ? t("waitingRipe", ripe) : t("waitingShow"), true, unfold);
+  }
+
+  // The rows themselves: the date reads as «look again then», and ▷ on a row hands it back to me.
+  async waitingList(box, waiting, key) {
+    if (!this.plugin.isShown(key, true)) return;
+    const block = box.createDiv({ cls: "ft-wait-block" });
+    await this.list(block, waiting);
+    for (const li of block.querySelectorAll("li.ft-task")) li.addClass("is-waiting");
   }
 
   // A counter on a header that folds a part of it: «⏳3» upcoming, «✓2» closed today.
@@ -1192,6 +1226,12 @@ class FocusRenderer extends MarkdownRenderChild {
   // mark of a task an agent added and the user has not looked at yet) and its deadline, when that is
   // a different day from the one the focus goes by.
   marks(li, task) {
+    if (task.status === STATUS_PROGRESS) {
+      const run = li.createSpan({ cls: "ft-running" });
+      run.setAttr("aria-label", task.date ? t("waitingSince", this.dateText(task.date)) : t("waitingNoDate"));
+      setIcon(run, "play");
+      run.onclick = (e) => { e.stopPropagation(); this.plugin.setRunning(task, false); };
+    }
     if (task.described) {
       const note = li.createSpan({ cls: "ft-described" });
       note.setAttr("aria-label", t("described"));
@@ -1220,6 +1260,13 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // «Today» / «Yesterday» / the date: past red, today green, future in the accent colour; no date — a
   // faint calendar.
+  // The same wording the row shows, for a tooltip that has no room for a widget.
+  dateText(day) {
+    const now = today(), yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
+    return day === now ? t("today") : day === yesterday ? t("yesterday")
+      : moment(day).format(this.plugin.settings.dateFormat || "DD.MM.YY");
+  }
+
   dateLabel(el, task) {
     el.empty();
     el.className = "ft-date";
@@ -1493,6 +1540,7 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addSeparator();
     this.priorityItems(menu, task);
     menu.addSeparator();
+    this.progressItem(menu, task);
     menu.addItem((i) => i.setTitle(t("place")).setIcon("folder-input").onClick(() => p.placeTask(task)));
     menu.addItem((i) => i.setTitle(t("toProject")).setIcon("folder-plus").onClick(() => p.toProject(task)));
     menu.addSeparator();
@@ -1502,6 +1550,16 @@ class FocusRenderer extends MarkdownRenderChild {
       if (i.setWarning) i.setWarning(true);
     });
     showMenu(menu, e);
+  }
+
+  // One line either way: send it off, or take it back.
+  progressItem(menu, tasks) {
+    const list = Array.isArray(tasks) ? tasks : [tasks];
+    const running = list.length && list.every((x) => x.status === STATUS_PROGRESS);
+    menu.addItem((i) => i
+      .setTitle(running ? t("backToWork") : t("inProgress"))
+      .setIcon(running ? "undo-2" : "play")
+      .onClick(() => this.plugin.setRunning(list, !running)));
   }
 
   // The dot on a row is a mark, and a mark you cannot take off is a nuisance: every level, and
@@ -1531,6 +1589,8 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => this.dateSelection(null)));
     menu.addSeparator();
     this.priorityItems(menu, this.chosen());
+    menu.addSeparator();
+    this.progressItem(menu, this.chosen());
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
     showMenu(menu, e);
@@ -1896,7 +1956,7 @@ module.exports = class FocusTasks extends Plugin {
   async collect(all) {
     const byArea = new Map();
     const areaOf = (name) => {
-      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [], doneLoose: [] });
+      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [], doneLoose: [], waiting: [], waitingLoose: [] });
       return byArea.get(name);
     };
     const first = (tasks) => tasks.map((x) => x.date).filter(Boolean).sort()[0] || "9999";
@@ -1905,7 +1965,7 @@ module.exports = class FocusTasks extends Plugin {
     for (const n of this.notes()) {
       const area = areaOf(n.area);
       if (!n.project) { if (!area.note) area.note = n.file; continue; }
-      const bucket = { file: n.file, area, tasks: [], later: [], done: [], first: "9999" };
+      const bucket = { file: n.file, area, tasks: [], later: [], done: [], waiting: [], first: "9999" };
       projects.set(n.file.path, bucket);
       area.buckets = [...(area.buckets || []), bucket];
     }
@@ -1926,6 +1986,13 @@ module.exports = class FocusTasks extends Plugin {
           area.done.push(task);                                  // держит область в фокусе до конца дня
           (bucket ? bucket.done : area.doneLoose).push(task);     // рисуется там, где задача живёт
         }
+        continue;
+      }
+      // Started and out of my hands: it leaves the focus whatever its date, and waits on the row it
+      // belongs to. Its date is no longer «do it» but «look at it again».
+      if (task.status === STATUS_PROGRESS) {
+        area.waiting.push(task);
+        (bucket ? bucket.waiting : area.waitingLoose).push(task);
         continue;
       }
       const focused = inFocus(task);
@@ -1954,14 +2021,16 @@ module.exports = class FocusTasks extends Plugin {
         // A project that is on screen owns the rest of itself: its upcoming steps and what it closed
         // today hang off its own row, not in the area's piles. Only a project with nothing due and
         // nothing done today waits whole under «Show upcoming».
-        const here = !!b.tasks.length || !!b.done.length;
+        const here = !!b.tasks.length || !!b.done.length || !!b.waiting.length;
         if (all || here) area.projects.push(b);
         if (!all && !here) area.future.projects.push({ file: b.file, tasks: b.later, later: [], done: [], first: first(b.later) });
       }
       delete area.buckets;
     }
     let areas = [...byArea.values()];
-    if (!all) areas = areas.filter((a) => a.focus || a.done.length);
+    // An area stays in the focus for what was closed today and for anything running whose review day
+    // has come — otherwise the one signal that a delegated task is ripe would be off screen.
+    if (!all) areas = areas.filter((a) => a.focus || a.done.length || a.waiting.some((x) => inFocus(x)));
     // A dragged order wins; the rest follows it: areas by name, projects by their nearest date.
     const rank = (list, key) => { const i = (list || []).indexOf(key); return i < 0 ? 1e9 : i; };
     const order = this.data.order;
@@ -1973,6 +2042,10 @@ module.exports = class FocusTasks extends Plugin {
       a.future.projects.sort(byOrder(a));
       a.done.sort((x, y) => cmp(x.project || "", y.project || "") || cmp(x.text, y.text));
       a.doneLoose.sort((x, y) => cmp(x.text, y.text));
+      const byReview = (x, y) => (x.date || "9999").localeCompare(y.date || "9999") || cmp(x.text, y.text);
+      a.waiting.sort(byReview);
+      a.waitingLoose.sort(byReview);
+      for (const b of a.projects) b.waiting?.sort(byReview);
       for (const b of a.projects) b.done?.sort((x, y) => cmp(x.text, y.text));
     }
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));
@@ -2191,6 +2264,21 @@ module.exports = class FocusTasks extends Plugin {
       for (const task of list) {
         const ok = await this.setFields(task, { priority: value });
         if (ok) task.priority = value;
+      }
+      this.refresh();
+    });
+  }
+
+  // Off my plate, or back on it. Nothing else moves: the date stays where it was, and while the task
+  // is running that date means «look at it again», not «do it».
+  async setRunning(tasks, running) {
+    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
+    if (!list.length) return;
+    await this.track(t("aRunning"), list.map((x) => x.file), async () => {
+      for (const task of list) {
+        const status = running ? STATUS_PROGRESS : STATUS_OPEN;
+        const ok = await this.setFields(task, { status });
+        if (ok) task.status = status;
       }
       this.refresh();
     });

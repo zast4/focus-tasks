@@ -87,12 +87,64 @@ test("cancelled and someday tasks stay out of the list", async () => {
   eq(names((await plugin.collect(true))[0].loose), ["Real"]);
 });
 
-test("an unknown status counts as open (TaskNotes writes in-progress)", async () => {
+test("what is running leaves the focus and waits on its area", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
     taskNote(app, "Running", { area: "Sport", scheduled: TODAY, status: "in-progress" });
+    taskNote(app, "Mine", { area: "Sport", scheduled: TODAY });
   });
-  eq(names((await plugin.collect(false))[0].loose), ["Running"]);
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.loose), ["Mine"], "the focus holds only what is mine to do");
+  eq(names(area.waitingLoose), ["Running"], "and the started one waits on the area's row");
+});
+
+test("an area stays on screen when something running is ripe for a look", async () => {
+  const { plugin } = await stand((app) => {
+    areaNote(app, "Sport");
+    taskNote(app, "Ripe", { area: "Sport", scheduled: DAY(-1), status: "in-progress" });
+    areaNote(app, "Work");
+    taskNote(app, "Not yet", { area: "Work", scheduled: DAY(5), status: "in-progress" });
+  });
+  eq(areaNames(await plugin.collect(false)), ["Sport"], "only the one with something to review");
+});
+
+test("sending a task off and taking it back is one flag, and ⌘Z undoes it", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Ask the accountant", { area: "Work", scheduled: TODAY });
+  });
+  const task = () => plugin.tasks().find((x) => x.text === "Ask the accountant");
+  await plugin.setRunning(task(), true);
+  eq(task().status, "in-progress");
+  eq(task().date, TODAY, "the date is untouched — it is the day to look again");
+  eq(names((await plugin.collect(false))[0].loose), [], "and it is out of the focus");
+  await plugin.setRunning(task(), false);
+  eq(task().status, "open");
+  eq(names((await plugin.collect(false))[0].loose), ["Ask the accountant"], "back in the focus");
+  await plugin.undo();
+  eq(task().status, "in-progress", "⌘Z puts it back where it was");
+});
+
+test("a running step waits inside its project, not in the area", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Sent to the lawyer", { area: "Work", project: "Launch", scheduled: DAY(3), status: "in-progress" });
+    taskNote(a, "Waiting on a reply", { area: "Work", scheduled: DAY(3), status: "in-progress" });
+    taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.projects[0].waiting), ["Sent to the lawyer"], "the project keeps its own");
+  eq(names(area.waitingLoose), ["Waiting on a reply"], "the area keeps the loose one");
+  eq(names(area.loose), ["Mine today"], "the focus is untouched by either");
+});
+
+test("a status nobody knows still counts as open", async () => {
+  const { plugin } = await stand((app) => {
+    areaNote(app, "Sport");
+    taskNote(app, "Odd", { area: "Sport", scheduled: TODAY, status: "выдумка" });
+  });
+  eq(names((await plugin.collect(false))[0].loose), ["Odd"]);
 });
 
 test("what was checked off today stays in its area, what was checked off before is gone", async () => {
@@ -1331,8 +1383,9 @@ test("fuzz: whatever is in the vault, every open task is somewhere on screen", a
     const all = await plugin.collect(true);
     const shown = new Set();
     for (const area of all) {
-      for (const t of [...area.loose, ...area.future.loose, ...area.done]) shown.add(t.file.path);
-      for (const pr of [...area.projects, ...area.future.projects]) for (const t of [...pr.tasks, ...(pr.later || [])]) shown.add(t.file.path);
+      for (const t of [...area.loose, ...area.future.loose, ...area.done, ...area.waiting]) shown.add(t.file.path);
+      for (const pr of [...area.projects, ...area.future.projects])
+        for (const t of [...pr.tasks, ...(pr.later || []), ...(pr.waiting || [])]) shown.add(t.file.path);
     }
     for (const t of plugin.orphans()) shown.add(t.file.path);
     const open = plugin.tasks().filter((t) => !["done", "cancelled", "someday"].includes(t.status));
