@@ -22,8 +22,10 @@ Three words drive it:
   CDP, then move the tag: `git tag -f shipped notes-model`. All three suites must be green
   before the merge.
 
-His notes are not branchable — `Задачи/`, areas and projects are live data. Touch them only
-when he asks, whatever branch is checked out.
+The branch holds plugin code only. His notes — `Задачи/`, areas and projects — are live data:
+touch them only when he asks, and then write them straight into the vault he is working in, so he
+sees the change at once. Data never waits for a merge. His ticks are his: do not mark a task done,
+and do not reopen one that turned done while you were working.
 
 ## Layout of main.js
 
