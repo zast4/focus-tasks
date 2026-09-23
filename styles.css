@@ -9,7 +9,10 @@
      task:                  [☐] Text      ← loose tasks and project steps share this column
    Cell contents are centred, so carets, icons and checkboxes line up vertically. Sizes in rem:
    the area title has a bigger font and must not stretch its cells. */
-.focus-tasks-view { --ft-col: 1.75rem; --ft-cb: var(--checkbox-size, 1rem); --ft-line: 1.5; }  /* line-height of a task row: the box is centred on the first line */
+.focus-tasks-view { --ft-col: 1.75rem; --ft-cb: var(--checkbox-size, 1rem); --ft-line: 1.5;  /* line-height of a task row: the box is centred on the first line */
+  --ft-pad: 0.45em; }  /* the hover and selection bands reach this far past the text on both sides;
+                          on the left the row is pulled back by the same amount, so the columns stay
+                          put — on the right it keeps the container's edge, or a phone would scroll */
 body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spares width for the text */
 
 
@@ -23,10 +26,12 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view .ft-caret svg { width: 1rem; height: 1rem; }
 .focus-tasks-view .ft-emoji { font-size: 1.15rem; }
 
-.focus-tasks-view .ft-area-title { display: flex; align-items: center; font-size: 1.3em; font-weight: 700; color: var(--text-normal); margin-bottom: 0.25em; }
+.focus-tasks-view .ft-area-title { display: flex; align-items: center; font-size: 1.3em; font-weight: 700; color: var(--text-normal);
+  padding: 0.1em var(--ft-pad); margin: 0 0 0.25em calc(var(--ft-pad) * -1); }
 .focus-tasks-view .ft-area-title > .ft-emoji + span { margin-left: 0.2rem; }
 
-.focus-tasks-view .ft-project { display: flex; align-items: flex-start; margin: 0.55em 0 0.1em var(--ft-col); font-weight: 600; color: var(--text-muted); line-height: 1.5; }
+.focus-tasks-view .ft-project { display: flex; align-items: flex-start; font-weight: 600; color: var(--text-muted); line-height: 1.5;
+  padding: 0.1em var(--ft-pad); margin: 0.55em 0 0.1em calc(var(--ft-col) - var(--ft-pad)); }
 .focus-tasks-view .ft-project > .ft-caret { height: 1.5em; align-items: center; }
 .focus-tasks-view .ft-project > .ft-link { flex: 0 1 auto; min-width: 0; margin-left: 0.2rem; }
 .focus-tasks-view .ft-project > .ft-count { flex: none; }
@@ -47,8 +52,9 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 /* Tasks: two columns in; nested steps («All») one more column per level. The theme pulls the checkbox
    into the list indent with a negative margin — reset it and centre the box in its column. */
 .focus-tasks-view ul.ft-list { margin: 0.1em 0; padding-inline-start: 0; }
-.focus-tasks-view li.ft-task { cursor: default; list-style: none; display: flex; align-items: flex-start; padding: 0.15em 0; text-indent: 0;
-  margin: 0 0 0 calc(var(--ft-col) * (2 + var(--ft-level, 0))) !important; }
+.focus-tasks-view li.ft-task { cursor: default; list-style: none; display: flex; align-items: flex-start;
+  padding: 0.25em var(--ft-pad); text-indent: 0;
+  margin: 0 0 3px calc(var(--ft-col) * (2 + var(--ft-level, 0)) - var(--ft-pad)) !important; }
 /* The box sits in a cell one line tall and is centred in it: themes size checkboxes in their own
    em (a checkbox has its own font), so any margin computed here would miss by a few pixels. */
 .focus-tasks-view li.ft-task > .ft-box { flex: none; display: flex; align-items: center; justify-content: center;
@@ -68,7 +74,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 /* Drag and drop: a grip just left of every row, as in TickTick — in the free column before the
    checkbox / caret, out of the flow so it moves nothing (hover on the desktop, always on the phone). */
 .focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title { position: relative; }
-.focus-tasks-view .ft-grip { position: absolute; left: -1.3rem; top: 0.3em; display: inline-flex; padding: 0.1rem; cursor: grab;
+.focus-tasks-view .ft-grip { position: absolute; left: calc(-1.3rem + var(--ft-pad)); top: 0.3em; display: inline-flex; padding: 0.1rem; cursor: grab;
   color: var(--text-faint); touch-action: none; opacity: 0; transition: opacity 0.1s; }
 .focus-tasks-view .ft-area-title > .ft-grip { top: 50%; transform: translateY(-50%); }
 .focus-tasks-view .ft-grip svg { width: 1rem; height: 1rem; }
@@ -77,7 +83,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-task:hover > .ft-grip { opacity: 1; }
 /* On a phone the grip is always there, and big enough to hit: the icon stays the same size, the
    target around it grows. */
-body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.5; left: -1.7rem; top: 0; padding: 0.45rem 0.35rem;
+body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.5; left: calc(-1.7rem + var(--ft-pad)); top: 0; padding: 0.45rem 0.35rem;
   min-width: 1.7rem; min-height: 1.7rem; align-items: center; justify-content: center; }
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-grip { top: 50%; }
 
@@ -86,8 +92,13 @@ body.is-mobile .focus-tasks-view .ft-area-title > .ft-grip { top: 50%; }
 .focus-tasks-view li.ft-task:hover, .focus-tasks-view .ft-project:hover, .focus-tasks-view .ft-area-title:hover { background-color: var(--background-modifier-hover); }
 body.is-mobile .focus-tasks-view li.ft-task:hover, body.is-mobile .focus-tasks-view .ft-project:hover,
 body.is-mobile .focus-tasks-view .ft-area-title:hover { background-color: transparent; }
-/* Selected rows (Shift / Cmd-click): the selection colour, also under the pointer. */
-.focus-tasks-view li.ft-task.is-selected, body.is-mobile .focus-tasks-view li.ft-task.is-selected { background-color: var(--text-selection); }
+/* Selected rows (Shift / Cmd-click): a grey band, a step above hover, also under the pointer.
+   Not `--text-selection`: themes tint that one, and a green selection reads as «done». */
+.focus-tasks-view li.ft-task.is-selected, body.is-mobile .focus-tasks-view li.ft-task.is-selected {
+  background-color: var(--background-modifier-hover);
+  background-color: color-mix(in srgb, var(--text-normal) 14%, transparent); }
+.focus-tasks-view li.ft-task.is-selected:hover {
+  background-color: color-mix(in srgb, var(--text-normal) 19%, transparent); }
 .focus-tasks-view .ft-dragging { opacity: 0.35; }
 .focus-tasks-view .ft-drop-into { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
 .ft-drop-line { position: fixed; height: 2px; background: var(--interactive-accent); border-radius: 1px; pointer-events: none; z-index: 1000; display: none; }
