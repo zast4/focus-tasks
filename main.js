@@ -23,7 +23,8 @@
  * A click on a task's text edits it in place (Enter saves and opens the next row, Esc cancels;
  * ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date). The date on the right opens a date picker.
  * The checkbox completes a task (`status: done` + `completedDate`); for the rest of the day it stays
- * at the bottom of its area under «Completed», where its box brings it back.
+ * at the bottom of its area under «Completed», where its box brings it back. A project whose every
+ * step was checked off today keeps its row too, marked «done N», so the next step has a place.
  * The grip on the left drags areas, projects and tasks; a plain click on it opens the row's menu.
  * Shift-click selects every task from the last clicked one, Cmd/Ctrl-click adds or drops one; the
  * grip of a selected row then drags them all, and its date, its menu or ⌘1–4 (as in the editor)
@@ -950,12 +951,16 @@ class FocusRenderer extends MarkdownRenderChild {
     const open = p.isShown(key, all);
     const head = box.createDiv({ cls: "ft-project" });
     if (later) head.addClass("is-later");
+    if (project.finished) head.addClass("is-done");
     this.track(head, { type: "project", area, project });
-    this.caret(head, open, () => p.toggleShown(key, all));
+    // Nothing is left to unfold in a finished project: an empty caret keeps the column lined up.
+    if (project.finished) head.createSpan({ cls: "ft-caret" });
+    else this.caret(head, open, () => p.toggleShown(key, all));
     head.createSpan({ cls: "ft-icon", text: "📁" });
     this.link(head.createSpan({ text: project.file.basename }), project.file);
     const focus = project.tasks.filter(inFocus).length;
-    if (all) head.createSpan({ cls: "ft-count", text: `${project.tasks.length}` + (focus ? t("inFocus", focus) : "") });
+    if (project.finished) head.createSpan({ cls: "ft-count is-done", text: t("allDone", project.done.length) });
+    else if (all) head.createSpan({ cls: "ft-count", text: `${project.tasks.length}` + (focus ? t("inFocus", focus) : "") });
     else if (!open) head.createSpan({ cls: "ft-count", text: String(project.tasks.length) });
     this.plus(head, t("addStep"), () => ({ area: area.name, project: project.file.basename, noDate: later || all }), () => {
       const body = head.nextElementSibling?.hasClass("ft-project-body") ? head.nextElementSibling : null;
@@ -966,7 +971,7 @@ class FocusRenderer extends MarkdownRenderChild {
     });
     this.more(head, (menu) => this.projectMenu(menu, area, project, head));
     this.grip(head, { type: "project", area, project });
-    if (!open) return;
+    if (!open || project.finished) return;
     const body = box.createDiv({ cls: "ft-project-body" });
     await this.list(body, project.tasks, all);
   }
@@ -1757,7 +1762,7 @@ module.exports = class FocusTasks extends Plugin {
     for (const n of this.notes()) {
       const area = areaOf(n.area);
       if (!n.project) { if (!area.note) area.note = n.file; continue; }
-      const bucket = { file: n.file, area, tasks: [], later: [], first: "9999" };
+      const bucket = { file: n.file, area, tasks: [], later: [], done: [], first: "9999" };
       projects.set(n.file.path, bucket);
       area.buckets = [...(area.buckets || []), bucket];
     }
@@ -1774,7 +1779,10 @@ module.exports = class FocusTasks extends Plugin {
       if (!task.area) continue;
       const area = areaOf(task.area);
       if (task.status === STATUS_DONE) {
-        if (task.doneDate === now) area.done.push(task);  // one «Completed» per area, the project is on the row
+        if (task.doneDate === now) {
+          area.done.push(task);  // one «Completed» per area, the project is on the row
+          if (bucket) bucket.done.push(task);  // …and the project counts its own, to stay visible
+        }
         continue;
       }
       const focused = inFocus(task);
@@ -1796,8 +1804,12 @@ module.exports = class FocusTasks extends Plugin {
       }
       for (const b of area.buckets || []) {
         b.first = first(b.tasks);
-        if (all || b.tasks.length) area.projects.push(b);
-        if (!all && (b.later.length || !b.tasks.length)) area.future.projects.push({ file: b.file, tasks: b.later, done: [], first: first(b.later) });
+        // Everything in it was checked off today: it keeps its place in the focus until the day is
+        // out, marked «done N». Otherwise closing the last step would take the project off screen —
+        // with no sign it was finished, and nowhere to add the next one.
+        b.finished = !all && !!b.done.length && !b.tasks.length && !b.later.length;
+        if (all || b.tasks.length || b.finished) area.projects.push(b);
+        if (!all && !b.finished && (b.later.length || !b.tasks.length)) area.future.projects.push({ file: b.file, tasks: b.later, done: [], first: first(b.later) });
       }
       delete area.buckets;
     }

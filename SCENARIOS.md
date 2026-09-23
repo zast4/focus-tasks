@@ -45,10 +45,17 @@ of a project checked off today keeps its area in the focus»; e2e: «the box com
 the day, and the area's «Completed» brings it back»*
 
 **A project.** A project is a note; its steps are tasks pointing at it. Only a dated step puts a
-project in the focus; a project whose steps are all future lives under «Show upcoming»; a project
-whose steps are all done today leaves the focus, and its area stays for what was done.
-→ *model: «a project with only future steps goes to the upcoming block», «a project whose steps are
-all done today leaves the focus but its area stays»*
+project in the focus; a project whose steps are all future lives under «Show upcoming».
+
+**A project finished today.** Checking off its last step must not take the project off the screen: I
+would lose both the sight of finishing it and the place to put what comes next. So it keeps its row
+until the day is out — the name steps back, «done N» in green stands where the count was, and its «+»
+opens the next step right there. One new step and it is an ordinary project again. Tomorrow it is
+gone from the focus and waits under «Show upcoming».
+→ *model: «a project whose steps are all done today keeps its place, marked done», «a project
+finished on an earlier day is gone from the focus», «a project with a step left open is not finished,
+however much was done today», «a new task in a project finished today brings it back to life»;
+e2e: «the last step of a project checked off: the project stays, marked done, and takes a new step»*
 
 **A task that grew.** A task is a service note, not a place to keep a plan: when it has one, it becomes
 a project. Its text becomes the project's name, its description the project's note, a checklist in that

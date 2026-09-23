@@ -40,6 +40,7 @@ What you can do in the view:
 | | |
 |---|---|
 | Complete a task | click its checkbox; for the rest of the day it stays at the bottom of its area under «Completed» (its box brings it back) |
+| Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** cancels |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date |
 | Date picker | click the date on the right (type `25.12`, `tomorrow`, or pick a day) |
@@ -150,6 +151,10 @@ passes (`--keep` leaves it).
 
 Отмеченная задача до конца дня остаётся внизу своей области в блоке «Выполненные» (галочка там
 возвращает её в работу): видно, что сделано за день.
+
+Проект, в котором сегодня закрыли последнюю задачу, тоже не исчезает: до конца дня он стоит
+на своём месте, вместо счётчика — зелёное «сделано N», а «+» рядом заводит следующий шаг.
+Одна новая задача — и это снова обычный проект.
 
 Открыть: иконка на ленте или команда **Focus Tasks: Открыть Фокус**, либо блок ` ```focus-tasks``` `
 в любой заметке. Клик по тексту — правка на месте (Enter — сохранить и новая строка ниже, Esc —

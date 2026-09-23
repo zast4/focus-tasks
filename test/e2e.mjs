@@ -439,6 +439,35 @@ step("«Make it a project»: the task becomes a project and stays in the focus a
   if ((fm("Plan the season")?.body || "").includes("16 недель")) throw new Error("the description is still in the task note");
 });
 
+step("the last step of a project checked off: the project stays, marked done, and takes a new step", async () => {
+  fs.writeFileSync(path.join(VAULT, "Tasks/Cleanup.md"),
+    `---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n`);
+  fs.writeFileSync(path.join(VAULT, taskPath("Throw out the old shoes")),
+    `---\nuid: ft-cleanup-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\nprojects:\n  - "[[Cleanup]]"\n---\n`);
+  await until(() => page.eval(`return !!__ft.task('Throw out the old shoes')`), "the step is on screen");
+  await click(`__ft.at(__ft.task('Throw out the old shoes').querySelector('input'))`);
+  await taskIs("Throw out the old shoes", { status: "done" });
+  await until(() => page.eval(`
+    const head = __ft.project('Cleanup');
+    return !!head && head.hasClass('is-done') && /1/.test(head.querySelector('.ft-count')?.textContent || '');`),
+    "the project kept its place and says it is done");
+  await until(() => page.eval(`return !!__ft.task('Throw out the old shoes')?.closest('.ft-done-block')`),
+    "its step is in «Completed» of the area");
+  // …and the next step goes straight into it
+  await click(`__ft.at(__ft.project('Cleanup').querySelector('.ft-plus'))`);
+  await editing();
+  await page.type("Order new ones");
+  await page.key("Enter");
+  await taskIs("Order new ones", { area: "💪Sport", projects: "[[Cleanup]]", scheduled: TODAY });
+  await editing();
+  await page.key("Escape");
+  await until(() => page.eval(`
+    const head = __ft.project('Cleanup');
+    return !!head && !head.hasClass('is-done') && !!__ft.task('Order new ones')?.closest('.ft-project-body');`),
+    "the project is an ordinary one again, with the new step inside");
+  await idle();
+});
+
 step("rename a project in place; its tasks follow it", async () => {
   await click(`__ft.grip(__ft.project('Marathon'))`);
   await menu("Rename");

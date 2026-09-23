@@ -51,6 +51,8 @@ and do not reopen one that turned done while you were working.
   - `check`: a box marks its row at once and ignores further clicks until the list is re-read (a
     second click would undo the first); a failed write puts the row back. `toggle` holds one toggle
     per line in the plugin, so the same task clicked in two views does not toggle twice.
+  - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
+    + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
   - `completed(box, done, key)`: «Completed · N» — under a project for its steps, under an area for its
     loose tasks (✅ today from `fileTasks`), folded by the `done:<area|path>` key; its rows are not
     tracked, so selection and drag skip them.

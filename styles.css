@@ -260,6 +260,9 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 /* A project reads as a container: the same weight as the area's name, a step down in size. */
 .focus-tasks-view .ft-project > .ft-link { color: var(--text-normal); }
 .focus-tasks-view .ft-project.is-later > .ft-link { color: var(--text-muted); }
+/* Finished today: the name steps back, «сделано N» in green says why it is still here. */
+.focus-tasks-view .ft-project.is-done > .ft-link { color: var(--text-muted); }
+.focus-tasks-view .ft-project.is-done > .ft-icon { opacity: 0.6; }
 
 /* The date column has room for «22.09.26 · 3 дн» without pushing the text around. */
 .focus-tasks-view li.ft-task > .ft-date { min-width: 5.2em; }

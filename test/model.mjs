@@ -545,7 +545,7 @@ test("evening: everything checked off today is counted in its area, and gone tom
   eq(area.done.map((x) => x.project || ""), ["", "Launch"], "each row knows where it came from");
 });
 
-test("a project whose steps are all done today leaves the focus but its area stays", async () => {
+test("a project whose steps are all done today keeps its place, marked done", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
@@ -553,8 +553,47 @@ test("a project whose steps are all done today leaves the focus but its area sta
   });
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Work"]);
-  eq(areas[0].projects.length, 0, "no empty project row in the focus");
+  eq(areas[0].projects.map((x) => x.file.basename), ["Launch"], "the project is still on screen");
+  ok(areas[0].projects[0].finished, "and it reads as finished");
+  eq(names(areas[0].projects[0].done), ["Last step"], "it counts what was done in it");
+  eq(areas[0].future.projects.length, 0, "and it is not doubled in the upcoming block");
   eq(names(areas[0].done), ["Last step"]);
+});
+
+test("a project finished on an earlier day is gone from the focus", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Old step", { area: "Work", project: "Launch", status: "done", completedDate: DAY(-1) });
+    taskNote(a, "Something else", { area: "Work", scheduled: TODAY });
+  });
+  const area = (await plugin.collect(false))[0];
+  eq(area.projects.length, 0, "yesterday's win does not follow me into today");
+  eq(area.future.projects.map((x) => x.file.basename), ["Launch"], "it waits under «upcoming»");
+});
+
+test("a project with a step left open is not finished, however much was done today", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Done step", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
+    taskNote(a, "Open step", { area: "Work", project: "Launch", scheduled: TODAY });
+  });
+  const area = (await plugin.collect(false))[0];
+  ok(!area.projects[0].finished, "there is still work in it");
+  eq(names(area.projects[0].tasks), ["Open step"]);
+});
+
+test("a new task in a project finished today brings it back to life", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
+  });
+  await plugin.createTask("Next step", { area: "Work", project: "Launch" }, TODAY);
+  const area = (await plugin.collect(false))[0];
+  ok(!area.projects[0].finished, "it is an ordinary project again");
+  eq(names(area.projects[0].tasks), ["Next step"]);
 });
 
 // --- dates and statuses as people (and other plugins) write them -------------------------------
