@@ -18,10 +18,16 @@ jobs:
         run: |
           test "$(jq -r .version manifest.json)" = "$GITHUB_REF_NAME"
           test "$(jq -r .version package.json)" = "$GITHUB_REF_NAME"
+      # The release notes are this version's section of CHANGELOG.md — a breaking version has to say
+      # so on the release page, where BRAT sends people.
+      - name: Release notes from the changelog
+        run: |
+          awk -v v="## $GITHUB_REF_NAME" '$0 == v {found=1; next} found && /^## / {exit} found' CHANGELOG.md > notes.md
+          test -s notes.md || echo "Focus Tasks $GITHUB_REF_NAME" > notes.md
       - name: Publish the release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           npm run zip
-          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes "Focus Tasks $GITHUB_REF_NAME" \
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md \
             main.js manifest.json styles.css "dist/focus-tasks-$GITHUB_REF_NAME.zip"
