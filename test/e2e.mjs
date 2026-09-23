@@ -787,6 +787,10 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
   await settle();
   const again = await pick(names[0], names[names.length - 1]);
   await page.eval(`app.workspace.setActiveLeaf(app.workspace.getLeavesOfType('markdown')[0], { focus: true }); return true;`);
+  // the list drops its keyboard scope on active-leaf-change; pressing before that lands in a race
+  await until(() => page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    return [...p.views].every((v) => !v.scope);`), "the list let go of the keyboard");
   await page.key("Meta+4");
   await sleep(800);
   for (const name of again) if (fm(name)?.scheduled !== TODAY) throw new Error(`⌘4 in another tab changed ${name}`);

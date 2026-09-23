@@ -2315,7 +2315,7 @@ module.exports = class FocusTasks extends Plugin {
         // Everything in it was checked off today: it keeps its place in the focus until the day is
         // out, marked «done N». Otherwise closing the last step would take the project off screen —
         // with no sign it was finished, and nowhere to add the next one.
-        b.finished = !all && !!b.done.length && !b.tasks.length && !b.later.length;
+        b.finished = !all && b.done.some(inFocus) && !b.tasks.length && !b.later.length;
         // A project that is on screen owns the rest of itself: its upcoming steps and what it closed
         // today hang off its own row, not in the area's piles. Only a project with nothing due and
         // nothing done today waits whole under «Show upcoming».
@@ -2326,9 +2326,11 @@ module.exports = class FocusTasks extends Plugin {
       delete area.buckets;
     }
     let areas = [...byArea.values()];
-    // An area whose only work is running keeps its place: the «▷N» on its header is the only way
-    // back to those tasks, and an area that vanished would take that button with it.
-    if (!all) areas = areas.filter((a) => a.focus || a.done.length || a.running);
+    // What puts an area in the focus is today's work: something due, something overdue, something
+    // running. A tick keeps it there till the end of the day only when what was ticked was that work
+    // — closing a task out of the отложка is a bonus, not a reason to pull its whole area into the
+    // day. (An area whose only work is running stays too: the ⏳ on its header is the only way back.)
+    if (!all) areas = areas.filter((a) => a.focus || a.running || a.done.some(inFocus));
     // A dragged order wins; the rest follows it: areas by name, projects by their nearest date.
     const rank = (list, key) => { const i = (list || []).indexOf(key); return i < 0 ? 1e9 : i; };
     const order = this.data.order;

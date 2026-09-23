@@ -326,18 +326,33 @@ test("a step of a project checked off today keeps its area in the focus", async 
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
     projectNote(app, "Sport", "Marathon");
-    taskNote(app, "Laced", { area: "Sport", project: "Marathon", status: "done", completedDate: TODAY });
+    taskNote(app, "Laced", { area: "Sport", project: "Marathon", status: "done", scheduled: TODAY, completedDate: TODAY });
   });
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Sport"], "the area with only a completed step");
   eq(names(areas[0].done), ["Laced"], "the done step shows in the area's Completed");
 });
 
+test("a task ticked out of the отложка does not drag its area into the focus", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Health");
+    areaNote(a, "Work");
+    taskNote(a, "Кровь", { area: "Health" });                                        // отложка, still open
+    taskNote(a, "Физио", { area: "Health", status: "done", completedDate: TODAY });   // ticked today, no date
+    taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
+  });
+  const areas = await plugin.collect(false);
+  // the focus is what I decided to do today; a bonus out of the отложка is not that
+  eq(areaNames(areas), ["Work"], "Health has nothing due today, and the tick does not put it there");
+  const all = await plugin.collect(true);
+  eq(names(all.find((a) => a.name === "Health").done), ["Физио"], "«All» still shows what was ticked");
+});
+
 test("a completed task remembers which project it came from", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
     projectNote(app, "Sport", "Marathon");
-    taskNote(app, "Laced", { area: "Sport", project: "Marathon", status: "done", completedDate: TODAY });
+    taskNote(app, "Laced", { area: "Sport", project: "Marathon", status: "done", scheduled: TODAY, completedDate: TODAY });
   });
   const area = (await plugin.collect(false))[0];
   eq(area.done[0].project, "Marathon");
@@ -843,9 +858,9 @@ test("evening: everything checked off today is counted in its area, and gone tom
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
-    taskNote(a, "One", { area: "Work", status: "done", completedDate: TODAY });
-    taskNote(a, "Two", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
-    taskNote(a, "Three", { area: "Work", status: "done", completedDate: DAY(-1) });
+    taskNote(a, "One", { area: "Work", status: "done", scheduled: TODAY, completedDate: TODAY });
+    taskNote(a, "Two", { area: "Work", project: "Launch", status: "done", scheduled: TODAY, completedDate: TODAY });
+    taskNote(a, "Three", { area: "Work", status: "done", scheduled: DAY(-1), completedDate: DAY(-1) });
   });
   const area = (await plugin.collect(false))[0];
   eq(names(area.done), ["One", "Two"], "today's two, the project's step included");
@@ -856,7 +871,7 @@ test("a project whose steps are all done today keeps its place, marked done", as
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
-    taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
+    taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", scheduled: TODAY, completedDate: TODAY });
   });
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Work"]);
@@ -895,7 +910,7 @@ test("a new task in a project finished today brings it back to life", async () =
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
-    taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", completedDate: TODAY });
+    taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", scheduled: TODAY, completedDate: TODAY });
   });
   await plugin.createTask("Next step", { area: "Work", project: "Launch" }, TODAY);
   const area = (await plugin.collect(false))[0];
