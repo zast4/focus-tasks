@@ -104,9 +104,12 @@ const STRINGS = {
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
-    inProgress: "In progress", backToWork: "Back to the focus", waitingHide: "Hide what is running",
+    inProgress: "In progress…", backToWork: "Back to the focus", waitingHide: "Hide what is running",
     waitingShow: "Show what is running",
     waitingSince: "Running; look again {0}", waitingNoDate: "Running; no day set to look again",
+    returnWhen: "Look at it again", returnHint: "tomorrow or later",
+    returnTooSoon: "Tomorrow at the earliest: until then the task is in the focus anyway",
+    inThree: "in 3 days", inWeek: "in a week",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -175,9 +178,12 @@ const STRINGS = {
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
-    inProgress: "В работе", backToWork: "Вернуть в фокус", waitingHide: "Скрыть запущенное",
+    inProgress: "В работу…", backToWork: "Вернуть в фокус", waitingHide: "Скрыть запущенное",
     waitingShow: "Показать запущенное",
     waitingSince: "Запущено; вернуться {0}", waitingNoDate: "Запущено; день возврата не назначен",
+    returnWhen: "Вернуться к задаче", returnHint: "завтра или позже",
+    returnTooSoon: "Не раньше завтра: сегодня задача и так в фокусе",
+    inThree: "через 3 дня", inWeek: "через неделю",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
@@ -312,15 +318,27 @@ function insertBlock(text, block, section) {
 // A Notion-like date picker: a field to type a date, the month (Monday first) with arrows and
 // «Today», «Clear date» below. A picked day saves at once; Esc, a click outside or a scroll closes it.
 class DatePicker {
-  constructor(anchor, value, onPick, onCancel) {
-    Object.assign(this, { value, onPick, onCancel });
-    this.month = moment(value || today()).startOf("month");
+  // `opts` turns the same card into a question: `title` says what the day is for, `quick` are the
+  // usual answers to it, `min` is the earliest day that answers it at all, and `clear: false` takes
+  // away «no date» where having none would make no sense.
+  constructor(anchor, value, onPick, onCancel, opts = {}) {
+    Object.assign(this, { value, onPick, onCancel, min: opts.min || null });
+    this.month = moment(value || opts.min || today()).startOf("month");
     this.el = document.body.createDiv({ cls: "ft-picker" });
-    this.input = this.el.createEl("input", { type: "text", cls: "ft-picker-input", attr: { placeholder: t("pickerPlaceholder") } });
+    if (opts.title) this.el.createDiv({ cls: "ft-picker-caption", text: opts.title });
+    this.input = this.el.createEl("input", { type: "text", cls: "ft-picker-input", attr: { placeholder: opts.hint || t("pickerPlaceholder") } });
     this.input.value = value ? moment(value).format("DD.MM.YY") : "";
+    if (opts.quick?.length) {
+      const quick = this.el.createDiv({ cls: "ft-picker-quick" });
+      for (const [label, iso] of opts.quick) {
+        const chip = quick.createEl("button", { cls: "ft-picker-chip", text: label });
+        if (iso === value) chip.addClass("is-selected");
+        chip.onclick = () => this.pick(iso);
+      }
+    }
     this.head = this.el.createDiv({ cls: "ft-picker-head" });
     this.grid = this.el.createDiv({ cls: "ft-picker-grid" });
-    this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("clearDate") }).onclick = () => this.pick(null);
+    if (opts.clear !== false) this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("clearDate") }).onclick = () => this.pick(null);
     this.draw();
     this.place(anchor);
     this.input.onkeydown = (e) => {
@@ -329,8 +347,11 @@ class DatePicker {
       if (e.key !== "Enter") return;
       e.preventDefault();
       const day = parseDay(this.input.value);
-      if (day) this.pick(day);
-      else this.input.addClass("is-invalid");
+      if (day && this.allowed(day)) this.pick(day);
+      else {
+        this.input.addClass("is-invalid");
+        if (day && opts.tooEarly) new Notice(opts.tooEarly);
+      }
     };
     this.input.oninput = () => this.input.removeClass("is-invalid");
     this.outside = (e) => { if (!this.el.contains(e.target)) this.close(); };
@@ -369,9 +390,13 @@ class DatePicker {
       if (day.month() !== this.month.month()) cell.addClass("is-other");
       if (iso === now) cell.addClass("is-today");
       if (iso === this.value) cell.addClass("is-selected");
-      cell.onclick = () => this.pick(iso);
+      if (!this.allowed(iso)) cell.addClass("is-blocked");
+      else cell.onclick = () => this.pick(iso);
     }
   }
+
+  // A day the card was told not to accept: drawn, so the month still reads as a month, but dead.
+  allowed(iso) { return !this.min || iso >= this.min; }
 
   place(anchor) {
     const r = anchor.getBoundingClientRect();
@@ -1289,11 +1314,50 @@ class FocusRenderer extends MarkdownRenderChild {
     }
   }
 
+  // The row of a task as it stands on screen: what a picker opened from a menu hangs on.
+  rowLabel(task) {
+    const row = this.rows().find(([, x]) => x === task)?.[0];
+    return row?.querySelector(".ft-date") || row || null;
+  }
+
+  // Sending a task off is one question — when do I look at it again? The day is not optional: the
+  // status is written together with it, so a running task can never be one that silently has no way
+  // back. Cancel the card and nothing was changed at all.
+  askReturn(tasks, el = null) {
+    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
+    const anchor = el || this.rowLabel(list[0]);
+    if (!list.length || !anchor || this.editing) return;
+    const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
+    const min = day(1);
+    const now = list.length === 1 && list[0].status === STATUS_PROGRESS && list[0].date >= min ? list[0].date : null;
+    this.anchor = list[0];
+    this.editing = true;
+    anchor.addClass("is-active");
+    this.picker = new DatePicker(anchor, now, async (chosen) => {
+      this.editing = false;
+      this.picker = null;
+      this.clearSelection();
+      if (chosen) await this.plugin.setRunning(list, true, chosen);
+      this.render();
+    }, () => {
+      this.editing = false;
+      this.picker = null;
+      anchor.removeClass("is-active");
+      this.render();
+    }, {
+      title: t("returnWhen"), hint: t("returnHint"), tooEarly: t("returnTooSoon"), min, clear: false,
+      quick: [[t("tomorrow"), day(1)], [t("inThree"), day(3)], [t("inWeek"), day(7)]],
+    });
+  }
+
   // The picker for the date of the row, or of every selected row when this is one of them.
   editDate(task, el) {
     if (this.editing) return;
     if (!this.selected.has(task)) this.clearSelection();
     const tasks = this.selected.size ? this.chosen() : [task];
+    // A running task has no ordinary date: the day on it is the day it comes back, so the same click
+    // asks that question again instead of offering «today / no date», which would strand it.
+    if (tasks.every((x) => x.status === STATUS_PROGRESS)) return this.askReturn(tasks, el);
     const days = [...new Set(tasks.map((x) => x.date || null))];
     this.anchor = task;
     this.editing = true;
@@ -1531,9 +1595,14 @@ class FocusRenderer extends MarkdownRenderChild {
     const p = this.plugin;
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     const menu = new Menu();
-    menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => p.setDate(task, day(0))));
-    menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => p.setDate(task, day(1))));
-    menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => p.setDate(task, null)));
+    // A running task has no ordinary date to set: the only day it has is the day it comes back.
+    if (task.status === STATUS_PROGRESS) {
+      menu.addItem((i) => i.setTitle(t("returnWhen") + "…").setIcon("calendar-clock").onClick(() => this.askReturn(task)));
+    } else {
+      menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => p.setDate(task, day(0))));
+      menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => p.setDate(task, day(1))));
+      menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => p.setDate(task, null)));
+    }
     menu.addSeparator();
     // A drag is not always possible — a finger loses to the scroll, a keyboard has no drag at all.
     menu.addItem((i) => i.setTitle(t("moveUp")).setIcon("arrow-up").onClick(() => this.shift(task, -1)));
@@ -1553,14 +1622,14 @@ class FocusRenderer extends MarkdownRenderChild {
     showMenu(menu, e);
   }
 
-  // One line either way: send it off, or take it back.
+  // One line either way: send it off — which asks for the day it comes back — or take it back now.
   progressItem(menu, tasks) {
     const list = Array.isArray(tasks) ? tasks : [tasks];
     const running = list.length && list.every((x) => x.status === STATUS_PROGRESS);
     menu.addItem((i) => i
       .setTitle(running ? t("backToWork") : t("inProgress"))
       .setIcon(running ? "undo-2" : "play")
-      .onClick(() => this.plugin.setRunning(list, !running)));
+      .onClick(() => (running ? this.plugin.setRunning(list, false) : this.askReturn(list))));
   }
 
   // The dot on a row is a mark, and a mark you cannot take off is a nuisance: every level, and
@@ -1584,10 +1653,15 @@ class FocusRenderer extends MarkdownRenderChild {
     const menu = new Menu();
     menu.addItem((i) => i.setTitle(t("selected", this.selected.size)).setIcon("list-checks").setDisabled(true));
     menu.addSeparator();
-    menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => this.dateSelection(day(0))));
-    menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => this.dateSelection(day(1))));
-    menu.addItem((i) => i.setTitle(t("pickDate")).setIcon("calendar-days").onClick(() => this.pickDates(task)));
-    menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => this.dateSelection(null)));
+    const chosen = this.chosen();
+    if (chosen.every((x) => x.status === STATUS_PROGRESS)) {
+      menu.addItem((i) => i.setTitle(t("returnWhen") + "…").setIcon("calendar-clock").onClick(() => this.askReturn(chosen)));
+    } else {
+      menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => this.dateSelection(day(0))));
+      menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => this.dateSelection(day(1))));
+      menu.addItem((i) => i.setTitle(t("pickDate")).setIcon("calendar-days").onClick(() => this.pickDates(task)));
+      menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => this.dateSelection(null)));
+    }
     menu.addSeparator();
     this.priorityItems(menu, this.chosen());
     menu.addSeparator();
@@ -2137,10 +2211,16 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // The date the focus goes by; null takes the task back to the someday list.
+  // Taking the day off a running task would strand it behind the ▷ counter with nothing to bring it
+  // back, so it comes home instead: no day to return on means the task is mine again as of now.
   async setDate(task, day) {
     return this.track(t("aDate"), [task.file], async () => {
-      const ok = await this.setFields(task, { scheduled: day || null });
-      if (ok) task.date = day || null;
+      const home = !day && task.status === STATUS_PROGRESS;
+      const ok = await this.setFields(task, { scheduled: day || null, ...(home ? { status: STATUS_OPEN } : {}) });
+      if (ok) {
+        task.date = day || null;
+        if (home) task.status = STATUS_OPEN;
+      }
       return ok;
     });
   }
@@ -2268,16 +2348,24 @@ module.exports = class FocusTasks extends Plugin {
     });
   }
 
-  // Off my plate, or back on it. Nothing else moves: the date stays where it was, and while the task
-  // is running that date means «look at it again», not «do it».
-  async setRunning(tasks, running) {
+  // Off my plate, or back on it. Sending a task off names the day it comes back, and that day is
+  // written together with the status — the two can never disagree, and nothing is left running with
+  // no way home. Taking it back moves a return day still ahead to today: the task is in my hands as
+  // of now, and any other date would only keep it out of the focus I just pulled it into.
+  async setRunning(tasks, running, day = null) {
     const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
     if (!list.length) return;
     await this.track(t("aRunning"), list.map((x) => x.file), async () => {
       for (const task of list) {
         const status = running ? STATUS_PROGRESS : STATUS_OPEN;
-        const ok = await this.setFields(task, { status });
-        if (ok) task.status = status;
+        const fields = { status };
+        if (running && day) fields.scheduled = day;
+        if (!running && (!task.date || task.date > today())) fields.scheduled = today();
+        const ok = await this.setFields(task, fields);
+        if (ok) {
+          task.status = status;
+          if ("scheduled" in fields) task.date = fields.scheduled;
+        }
       }
       this.refresh();
     });

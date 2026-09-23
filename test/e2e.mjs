@@ -456,14 +456,26 @@ step("the row shows what the note says: a priority dot and a deadline on another
   await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the badges are gone again");
 });
 
-step("«In progress»: it waits behind ▷ until its day, and comes back when the day is here", async () => {
+step("«In progress» asks for the day it comes back, and without that day nothing is written", async () => {
   const later = ymd(new Date(Date.now() + 5 * 864e5));
+  const week = ymd(new Date(Date.now() + 7 * 864e5));
   fs.writeFileSync(path.join(VAULT, taskPath("Ask the lawyer")),
     `---\nuid: ft-run-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${later}\n---\n`);
   await toPane();
+  // walking away from the card leaves the task exactly as it was: the status never goes in alone
   await click(`__ft.grip(__ft.task('Ask the lawyer'))`, "the row of the task");
-  await menu("In progress");
-  await taskIs("Ask the lawyer", { status: "in-progress", scheduled: later }, "the status is set, the date left alone");
+  await menu("In progress…");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption')`), "the «look at it again» card");
+  await page.key("Escape");
+  await until(() => page.eval(`return !document.querySelector('.ft-picker')`), "the card closed");
+  await taskIs("Ask the lawyer", { status: "open", scheduled: later }, "cancelling the card changes nothing at all");
+  // «today» is not an answer to «when do I look at it again», so the card will not take it
+  await click(`__ft.grip(__ft.task('Ask the lawyer'))`, "the row of the task");
+  await menu("In progress…");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker-day.is-today.is-blocked')`),
+    "today is dead in the card");
+  await click(`__ft.at(__ft.text('.ft-picker-chip', 'in a week'))`, "the «in a week» chip");
+  await taskIs("Ask the lawyer", { status: "in-progress", scheduled: week }, "the status and the day it comes back are one change");
   await until(() => page.eval(`return !__ft.task('Ask the lawyer')`), "with its day ahead it is out of sight");
   await until(() => page.eval(`
     const c = __ft.area('Sport')?.querySelector('.ft-wait-chip');
@@ -483,7 +495,7 @@ step("«In progress»: it waits behind ▷ until its day, and comes back when th
     return !!r && !r.closest('.ft-wait-block') && !!r.querySelector('.ft-running');`),
     "on its day it is back in the focus, still marked as running");
   await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-running'))`, "the ▷ on the row");
-  await taskIs("Ask the lawyer", { status: "open" }, "the row's ▷ hands it back");
+  await taskIs("Ask the lawyer", { status: "open", scheduled: TODAY }, "the row's ▷ hands it back, into today's focus");
   await settle();
   if (await page.eval(`return !!__ft.view().querySelector('.ft-wait-block')`))
     throw new Error("an empty «running» block is still on screen");

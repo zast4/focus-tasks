@@ -131,6 +131,17 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
   background: var(--background-modifier-form-field); border: 1px solid var(--background-modifier-border); }
 .ft-picker-input:focus { border-color: var(--interactive-accent); box-shadow: none; }
 .ft-picker-input.is-invalid { border-color: var(--text-error); }
+/* The same card can be a question instead of a field: a caption saying what the day is for, the usual
+   answers to it as chips, and the days it will not take drawn but dead — so the month still reads as
+   a month. Written heavier than the plain `.ft-picker button` rule above, or that one wins. */
+.ft-picker-caption { margin: 0 0.15rem 0.45rem; font-weight: 600; font-size: 0.95rem; }
+.ft-picker-quick { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
+.ft-picker button.ft-picker-chip { flex: 1 1 auto; min-width: 0; padding: 0.3rem 0.35rem; text-align: center;
+  white-space: nowrap; background: var(--background-modifier-hover); font-size: 0.8rem; }
+.ft-picker button.ft-picker-chip:hover { background: var(--background-modifier-active-hover); color: var(--text-normal); }
+.ft-picker button.ft-picker-chip.is-selected { background: var(--interactive-accent); color: var(--text-on-accent); }
+.ft-picker-day.is-blocked { opacity: 0.3; cursor: default; }
+.ft-picker-day.is-blocked:hover { background: none; }
 .ft-picker-head { display: flex; align-items: center; justify-content: space-between; margin: 0.7rem 0.2rem 0.4rem; }
 .ft-picker-title { font-weight: 600; font-size: 1rem; }
 .ft-picker-nav { display: flex; align-items: center; gap: 0.1rem; }
