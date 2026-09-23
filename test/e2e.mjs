@@ -22,6 +22,8 @@ const SHOTS = path.join(ROOT, "test", "shots");
 const TODAY = ymd(new Date());
 // the picker's own field format: «2026-09-30» → «30.09.26»
 const ddmmyy = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(2, 4)}`;
+// How a row writes a day ahead: «25.09», the year only when it is another one.
+const ddmm = (iso) => (iso.slice(0, 4) === TODAY.slice(0, 4) ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : ddmmyy(iso));
 const TOMORROW = ymd(new Date(Date.now() + 864e5));
 const YESTERDAY = ymd(new Date(Date.now() - 864e5));
 
@@ -196,7 +198,7 @@ step("+ on a project makes steps that point at it, and ⌘1–4 date them while 
   await page.key("Meta+2");
   await until(() => page.eval(`
     const row = document.querySelector('.focus-tasks-view .is-editing')?.closest('li');
-    return row?.querySelector('.ft-date')?.textContent.trim();`).then((d) => d === ddmmyy(TOMORROW)),
+    return row?.querySelector('.ft-date')?.textContent.trim();`).then((d) => d === ddmm(TOMORROW)),
     "the draft shows the day it will get");
   await page.key("Enter");
   await taskIs("Plan route", { projects: "[[Marathon]]", scheduled: TOMORROW }, "the key set the date of a task that did not exist yet");
@@ -237,7 +239,7 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
   if (J(steps) !== J(["Buy shoes fast", "Lace them"]))
     throw new Error("the new row did not stay under the one it was typed from: " + J(steps));
   await idle();
-  await until(() => page.eval(`return __ft.task('Lace them')?.querySelector('.ft-date')?.textContent === 'Today'`), "«Today» on the right");
+  await until(() => page.eval(`return __ft.task('Lace them')?.querySelector('.ft-date.is-today.is-bare')?.textContent === ''`), "today says nothing on the right");
 });
 
 step("⌘2 tomorrow, ⌘4 no date", async () => {
@@ -462,8 +464,12 @@ step("a note written by another plugin: no uid, no area — the project gives bo
 
 step("the row shows what the note says: a priority dot and a deadline on another day", async () => {
   await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
-    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'low'; fm.due = ${J(TOMORROW)}; }); return true;`);
-  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-priority.is-low')`), "the low-priority dot");
+    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'high'; fm.due = ${J(TOMORROW)}; }); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-priority.is-high')`), "the high-priority dot");
+  // only a high priority is marked: a low one leaves the row clean
+  await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
+    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'low'; }); return true;`);
+  await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-priority')`), "no dot for a low priority");
   await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the deadline badge");
   await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
     await app.fileManager.processFrontMatter(f, (fm) => { delete fm.priority; delete fm.due; }); return true;`);
@@ -567,8 +573,8 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
 
 step("the dot a robot leaves can be taken off from the row itself", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Added by a script")),
-    `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: low\n---\n`);
-  await until(() => page.eval(`return !!__ft.task('Added by a script')?.querySelector('.ft-priority.is-low')`), "the low dot is on the row");
+    `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: high\n---\n`);
+  await until(() => page.eval(`return !!__ft.task('Added by a script')?.querySelector('.ft-priority.is-high')`), "the high dot is on the row");
   await click(`__ft.at(__ft.task('Added by a script').querySelector('.ft-priority'))`, "the dot");
   await menu("No priority");
   await taskIs("Added by a script", { priority: null }, "the mark came off");
@@ -1018,6 +1024,47 @@ step("the ⏳ of an area folds its upcoming work — in «All» too, where the f
     if (p.everything() !== was.all) p.setEverything(was.all);
     p.refresh(); return true;`);
   for (const name of ["Chip today", "Chip tomorrow"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
+  await settle();
+});
+
+step("the plain focus is flat: a project's step is a row with its project's name, the tree is in «All»", async () => {
+  const saved = await plugin(`return JSON.stringify({ all: p.everything(), folded: { ...p.data.folded }, opened: { ...p.data.opened } });`);
+  fs.writeFileSync(path.join(VAULT, "Tasks/Flatland.md"), '---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n');
+  fs.writeFileSync(path.join(VAULT, taskPath("Flat step")),
+    `---\nuid: ft-flat-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\nprojects:\n  - "[[Flatland]]"\n---\n`);
+  fs.writeFileSync(path.join(VAULT, taskPath("Flat later")),
+    `---\nuid: ft-flat-2\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TOMORROW}\nprojects:\n  - "[[Flatland]]"\n---\n`);
+  await plugin(`
+    if (p.everything()) p.setEverything(false);
+    const a = (await p.collect(false)).find((x) => x.name.includes('Sport'));
+    if (a && !p.isShown('area:' + a.name, false)) await p.toggleShown('area:' + a.name, false);
+    p.refresh(); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Flat step')`), "the step is on screen");
+  const look = await page.eval(`
+    const area = __ft.area('Sport').closest('.ft-area');
+    const row = __ft.task('Flat step');
+    return { header: !!__ft.project('Flatland'), tag: row.querySelector('.ft-project-tag')?.textContent.trim() || null,
+      inArea: row.parentElement.parentElement === area,
+      numbers: [...area.querySelectorAll(':scope > .ft-area-title .ft-chip')].map((c) => c.textContent.trim()) };`);
+  if (look.header) throw new Error("the plain focus still draws a project header: " + J(look));
+  if (look.tag !== "📁Flatland") throw new Error("the step does not name its project: " + J(look));
+  if (!look.inArea) throw new Error("the step is not a row of the area's own list: " + J(look));
+  if (look.numbers.some(Boolean)) throw new Error("the area's switches still carry numbers: " + J(look));
+  // the project's step for tomorrow is in the area's own ⏳ pile, with the same tag
+  if (!(await page.eval(`return !!__ft.area('Sport').closest('.ft-area').querySelector('.ft-future-block')`)))
+    await click(`__ft.at(__ft.area('Sport').querySelector('.ft-later-chip'))`, "the ⏳ of the area");
+  await until(() => page.eval(`return !!__ft.task('Flat later')?.closest('.ft-future-block')?.parentElement.isSameNode(__ft.area('Sport').closest('.ft-area'))
+    && !!__ft.task('Flat later').querySelector('.ft-project-tag')`), "the step ahead in the area's pile");
+  // «All» brings the tree back
+  await plugin(`p.setEverything(true); return true;`);
+  await until(() => page.eval(`return !!__ft.project('Flatland')`), "the project header in «All»");
+  await plugin(`
+    const was = JSON.parse(${J(saved)});
+    p.data.folded = was.folded; p.data.opened = was.opened;
+    p.saveFolds();
+    if (p.everything() !== was.all) p.setEverything(was.all);
+    p.refresh(); return true;`);
+  for (const f of [taskPath("Flat step"), taskPath("Flat later"), "Tasks/Flatland.md"]) fs.unlinkSync(path.join(VAULT, f));
   await settle();
 });
 

@@ -122,6 +122,9 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 .focus-tasks-view .ft-date.is-ahead { color: var(--text-muted); }
 .focus-tasks-view .ft-date.is-empty { color: var(--text-faint); opacity: 0; }
 .focus-tasks-view li.ft-task:hover > .ft-date.is-empty { opacity: 0.8; }
+/* Today with no hour: nothing to read, a calendar to click under the pointer. */
+.focus-tasks-view .ft-date.is-bare { color: var(--text-faint); opacity: 0; }
+.focus-tasks-view li.ft-task:hover > .ft-date.is-bare, .focus-tasks-view .ft-date.is-bare.is-active { opacity: 0.8; }
 body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view .ft-date svg { width: 0.95rem; height: 0.95rem; }
 .focus-tasks-view .ft-date.is-active { outline: 1px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
@@ -192,6 +195,10 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view .ft-chip:hover { color: var(--interactive-accent); }
 .focus-tasks-view .ft-chip-icon { display: inline-flex; }
 .focus-tasks-view .ft-chip-icon svg { width: 0.9rem; height: 0.9rem; }
+/* The flat focus: the switch without its number, there under the pointer, lit while its pile is open. */
+.focus-tasks-view .ft-chip.is-quiet.is-off { opacity: 0; }
+.focus-tasks-view .ft-area-title:hover > .ft-chip.is-quiet, .focus-tasks-view .ft-chip.is-quiet:focus-visible,
+body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 /* Neither block has a heading any more: a hairline is what separates it from the live list. Without
    one, everything the ⏳ opened read as today's work — the rows are identical otherwise. */
 .focus-tasks-view .ft-done-block,
@@ -265,10 +272,13 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view .ft-due.is-late { color: var(--text-error); }
 .focus-tasks-view .ft-due svg { width: 0.8rem; height: 0.8rem; }
 
-/* A completed row says which project it came from, so one «Completed» per area is enough. */
-.focus-tasks-view li.ft-done > .ft-done-project { flex: none; display: inline-flex; align-items: center; gap: 0.2em; margin-left: 0.6em;
+/* A row of the flat focus (and a completed one) says which project it came from: the list has no
+   project headers to say it for it. */
+.focus-tasks-view li.ft-task > .ft-project-tag { flex: none; display: inline-flex; align-items: center; gap: 0.2em; margin-left: 0.6em;
   height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; color: var(--text-faint); white-space: nowrap; max-width: 40%; overflow: hidden; }
-.focus-tasks-view li.ft-done > .ft-done-project > .ft-icon { width: auto; }
+.focus-tasks-view li.ft-task > .ft-project-tag > .ft-icon { width: auto; }
+/* In the flat focus the tag also leads to its project: it looks like text until the pointer is on it. */
+.focus-tasks-view li.ft-task > .ft-project-tag:hover { color: var(--text-accent); cursor: pointer; }
 
 /* Tasks another tool wrote with no area of their own: apart, and one click from a home. */
 .focus-tasks-view .ft-orphans { margin-top: 1.2em; }
@@ -286,15 +296,13 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-box { width: calc(var(--ft-col
 body.is-mobile .focus-tasks-view li.ft-task > .ft-text { margin-left: 0; }
 .focus-tasks-view li.ft-task > .ft-box > .task-list-item-checkbox:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 
-/* How late a task is, in words next to the red: colour alone is not readable by everyone. */
-.focus-tasks-view .ft-date > .ft-late { margin-left: 0.4em; opacity: 0.8; font-variant-numeric: tabular-nums; }
 
 /* Text that carries meaning uses the muted colour, not the faint one: faint fails contrast in the
    default themes. Faint stays for decoration (carets, grips, empty-date icon). */
 .focus-tasks-view .ft-count,
 .focus-tasks-view .ft-rest-title,
 .focus-tasks-view li.ft-done > .ft-text,
-.focus-tasks-view li.ft-done > .ft-done-project,
+.focus-tasks-view li.ft-task > .ft-project-tag,
 .focus-tasks-view .ft-future,
 .ft-picker-weekday { color: var(--text-muted); }
 
@@ -346,14 +354,17 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 .focus-tasks-view .ft-project.is-done > .ft-link { color: var(--text-muted); }
 .focus-tasks-view .ft-project.is-done > .ft-icon { opacity: 0.6; }
 
-/* The date column has room for «22.09.26 · 3 дн» without pushing the text around. */
-.focus-tasks-view li.ft-task > .ft-date { min-width: 5.2em; }
+/* The date column has room for «25.09 20:00» without pushing the text around. */
+.focus-tasks-view li.ft-task > .ft-date { min-width: 4.8em; }
 
 /* A task that carries a description: the rule says a plan belongs in a project, and the row says it
    quietly — the choice stays with the user. */
 .focus-tasks-view li.ft-task > .ft-described { flex: none; display: inline-flex; align-items: center; margin-left: 0.5em;
   height: calc(var(--ft-line) * 1em); color: var(--text-faint); }
 .focus-tasks-view li.ft-task > .ft-described svg { width: 0.85rem; height: 0.85rem; }
+/* …and only under the pointer, like the ▷ beside it: two icons on every row were noise. */
+.focus-tasks-view li.ft-task > .ft-described { opacity: 0; }
+.focus-tasks-view li.ft-task:hover > .ft-described, body.is-mobile .focus-tasks-view li.ft-task > .ft-described { opacity: 1; }
 
 /* The list can hold the keyboard (so Esc and ⌘1–4 reach it) without drawing a box around itself. */
 .focus-tasks-view:focus { outline: none; }

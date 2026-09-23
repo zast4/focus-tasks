@@ -170,6 +170,8 @@ step("the date picker fits the screen and sets a date by tap", async () => {
 });
 
 step("a finger drags a task into a project", async () => {
+  // the plain focus is flat, with no project headers to drop onto: the tree is in «All»
+  await page.eval(`const p = app.plugins.plugins['focus-tasks']; window.__wasAll = p.everything(); p.setEverything(true); return true;`);
   const from = await until(() => at(`__m.task('Позвонить маме сегодня').querySelector('.ft-grip')`), "the grip");
   const onto = await until(() => at(`__m.project('Ремонт')`), "the project header");
   await page.eval(`window.__drag = []; for (const t of ['pointerdown','pointermove','pointerup','pointercancel','touchcancel'])
@@ -192,6 +194,7 @@ step("a finger drags a task into a project", async () => {
       const e = document.elementFromPoint(${onto.x}, ${onto.y});
       return { hit: e && (e.className || e.tagName), marked: !!document.querySelector('.ft-drop-into'),
                line: (document.querySelector('.ft-drop-line') || {}).style?.display };`)));
+  await page.eval(`app.plugins.plugins['focus-tasks'].setEverything(window.__wasAll); return true;`);
 });
 
 step("«+» on an area adds a task with the on-screen keyboard", async () => {

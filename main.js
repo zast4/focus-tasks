@@ -1006,8 +1006,12 @@ class FocusRenderer extends MarkdownRenderChild {
     if (area.note) this.link(name, area.note);
     const tasks = [...area.loose, ...area.projects.flatMap((pr) => pr.tasks)];
     const focus = tasks.filter(inFocus).length;
+    // The plain focus is one flat list per area: a step of a project is a row like any other, with
+    // the project's name beside it. The tree — projects, their piles, the counters — is what «All»
+    // is for; here it only stood between the eye and today's work.
+    const flat = !all && !wide;
     if (all) title.createSpan({ cls: "ft-count", text: t("openCount", tasks.length) + (focus ? t("inFocus", focus) : "") });
-    else if (!open) {
+    else if (!open && !flat) {
       // «0» under an area's name reads as «broken»; when the day is simply finished here, say so.
       const count = title.createSpan({ cls: "ft-count", text: tasks.length ? String(tasks.length) : area.done.length ? t("allDone", area.done.length) : "" });
       if (!tasks.length && area.done.length) count.addClass("is-done");
@@ -1017,16 +1021,25 @@ class FocusRenderer extends MarkdownRenderChild {
     // the same thing in twice the space and read like a footer.
     const futureKey = (wide ? "futureoff:" : "future:") + area.name;
     const futureShown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
-    const ahead = area.future.loose.length + area.future.projects.reduce((n, pr) => n + pr.tasks.length, 0);
+    // In the flat focus the area's piles take its projects' piles in too: there is no project row
+    // left to hang them on.
+    const later = flat
+      ? [...area.future.loose, ...area.projects.flatMap((pr) => pr.later || []), ...area.future.projects.flatMap((pr) => pr.tasks)]
+      : null;
+    const closed = flat ? [...area.doneLoose, ...area.projects.flatMap((pr) => pr.done || [])] : area.doneLoose;
+    const ahead = flat ? later.length : area.future.loose.length + area.future.projects.reduce((n, pr) => n + pr.tasks.length, 0);
+    // The flat focus keeps the two switches but not their numbers: an icon that shows up under the
+    // pointer (and stays lit while its pile is open) — the count is in its tooltip.
+    const quiet = (label, n) => (flat ? `${label} · ${n}` : label);
     if (!all && open && ahead)
       // `true`, not `!wide`: the flag is read from the «opened» map either way, and writing it to the
       // other one in «All» mode meant the click landed where nobody was looking.
-      this.chip(title, "ft-later-chip", "clock", ahead, futureShown, futureKey,
-        t(futureShown ? "hideUpcoming" : "showUpcoming") + (area.running ? ` · ${t("ofThemRunning", area.running)}` : ""), true);
-    if (!all && open && area.doneLoose.length)
-      this.chip(title, "ft-done-chip", "check", area.doneLoose.length,
+      this.chip(title, "ft-later-chip", "clock", flat ? null : ahead, futureShown, futureKey,
+        quiet(t(futureShown ? "hideUpcoming" : "showUpcoming"), ahead) + (area.running ? ` · ${t("ofThemRunning", area.running)}` : ""), true);
+    if (!all && open && closed.length)
+      this.chip(title, "ft-done-chip", "check", flat ? null : closed.length,
         p.isShown("done:" + area.name, false), "done:" + area.name,
-        t(p.isShown("done:" + area.name, false) ? "doneHide" : "doneShow"));
+        quiet(t(p.isShown("done:" + area.name, false) ? "doneHide" : "doneShow"), closed.length));
     this.plus(title, t("addToArea"), async () => ({ area: area.name, project: null, noDate: all }),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
     this.more(title, (menu) => this.areaMenu(menu, area));
@@ -1043,6 +1056,14 @@ class FocusRenderer extends MarkdownRenderChild {
           empty.remove();
         };
       }
+      return;
+    }
+    if (flat) {
+      // Due ones that were sent off still go last, under the whole list and not under their project.
+      const rows = tasks.slice().sort((x, y) => (x.status === STATUS_PROGRESS ? 1 : 0) - (y.status === STATUS_PROGRESS ? 1 : 0));
+      if (rows.length) await this.list(box, rows, false, true);
+      if (futureShown && later.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), later, true);
+      if (closed.length) await this.completed(box, closed, "done:" + area.name);
       return;
     }
     if (area.loose.length) await this.list(box, area.loose);
@@ -1073,11 +1094,7 @@ class FocusRenderer extends MarkdownRenderChild {
       check.checked = true;
       this.check(li, check, task);
       await this.text(li, task);
-      if (task.project && !inProject) {
-        const tag = li.createSpan({ cls: "ft-done-project" });
-        tag.createSpan({ cls: "ft-icon", text: "📁" });
-        tag.createSpan({ text: task.project });
-      }
+      if (task.project && !inProject) this.projectTag(li, task);
       this.grip(li, { type: "task", task });  // the phone has no right click: the grip is the way in
       li.oncontextmenu = (e) => {
         e.preventDefault();
@@ -1132,6 +1149,15 @@ class FocusRenderer extends MarkdownRenderChild {
       li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(task, e); };
       this.grip(li, { type: "task", task });
     }
+  }
+
+  // The project a row belongs to, faint beside its text; a click opens the project's note.
+  projectTag(li, task) {
+    const tag = li.createSpan({ cls: "ft-project-tag" });
+    tag.createSpan({ cls: "ft-icon", text: "📁" });
+    tag.createSpan({ text: task.project });
+    const note = this.plugin.notes().find((n) => n.project && n.file.basename === task.project);
+    if (note) tag.onclick = (e) => { if (picking(e)) return; e.stopPropagation(); this.open(note.file, e); };
   }
 
   // The task's text as markdown (links work), without the paragraph around it.
@@ -1203,21 +1229,22 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // What is not today, in two groups: what is already running, then what is only planned. One list
   // would put a promise made to somebody else among the «maybe next week» rows.
-  async ahead(box, tasks) {
+  async ahead(box, tasks, tagged = false) {
     const running = tasks.filter((x) => x.status === STATUS_PROGRESS);
     const planned = tasks.filter((x) => x.status !== STATUS_PROGRESS);
-    if (running.length) await this.list(box, running);
+    if (running.length) await this.list(box, running, false, tagged);
     if (!planned.length) return;
     if (running.length) box.createDiv({ cls: "ft-ahead-split" });
-    await this.list(box, planned);
+    await this.list(box, planned, false, tagged);
   }
 
   // A counter on a header that folds a part of it: «⏳3» upcoming, «✓2» closed today.
   chip(head, cls, icon, count, open, key, label, closedByDefault = false, unfold = null) {
     const chip = head.createSpan({ cls: `ft-chip ${cls}`, attr: { "aria-label": label } });
     chip.toggleClass("is-off", !open);
+    chip.toggleClass("is-quiet", count === null);   // no number: shown under the pointer only
     setIcon(chip.createSpan({ cls: "ft-chip-icon" }), icon);
-    chip.createSpan({ text: String(count) });
+    if (count !== null) chip.createSpan({ text: String(count) });
     chip.onclick = async (e) => {
       e.stopPropagation();
       // «Show me this» means show it: a folded project would swallow the rows the chip just opened.
@@ -1388,8 +1415,10 @@ class FocusRenderer extends MarkdownRenderChild {
       setIcon(note, "text");
     }
     const level = String(task.priority || "").toLowerCase();
-    if (["low", "normal", "high", "highest", "lowest", "medium"].includes(level)) {
-      const rank = ["high", "highest"].includes(level) ? "high" : ["low", "lowest"].includes(level) ? "low" : "normal";
+    // Only a high priority is marked: a dot on every row said «normal» a hundred times and nothing
+    // else. The rest is set and seen from the menu.
+    if (["high", "highest"].includes(level)) {
+      const rank = "high";
       const dot = li.createSpan({ cls: `ft-priority is-${rank}` });
       dot.setAttr("aria-label", t(rank === "high" ? "priorityHigh" : rank === "low" ? "priorityLow" : "priorityNormal"));
       dot.onclick = (e) => {
@@ -1426,20 +1455,35 @@ class FocusRenderer extends MarkdownRenderChild {
       setIcon(el, "calendar-plus");
       return;
     }
-    const now = today(), yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
-    const named = task.date === now ? t("today") : task.date === yesterday ? t("yesterday") : moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY");
-    el.setText(task.at ? `${named} ${task.at}` : named);
-    // A task still waiting to come back has a moment, not a due date: «Сегодня 20:00» in the green
-    // of today's work read as work for today, in a group that is explicitly not today.
+    // One way of writing a date everywhere. Today says nothing — a row in the focus is today's by
+    // being there — unless it has an hour; a day gone by says how many days late, in red; a day ahead
+    // is «25.09» (with the year only when it is another year). The full date is in the tooltip.
+    const now = today();
+    const full = moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY");
+    el.setAttr("aria-label", task.at ? `${full} ${task.at}` : full);
+    // A task still waiting to come back has a moment, not a due date: in the green of today's work it
+    // read as work for today, in a group that is explicitly not today.
     if (waitingBack(task)) el.addClass("is-ahead");
     else el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
-    // Late is said in words as well as in red: colour alone is not something everyone can read, and
-    // the number of days is the ZFG signal that a task is stuck.
-    const late = task.date < now ? moment(now).diff(moment(task.date), "days") : 0;
-    if (late >= 2) {
-      el.createSpan({ cls: "ft-late", text: `· ${late}${t("daysShort")}` });
-      el.setAttr("aria-label", t("overdueBy", late));
+    if (task.date === now) {
+      if (task.at) el.setText(task.at);
+      else {
+        // Nothing to read, but still the place to click for a new date: a faint calendar on hover.
+        el.addClass("is-bare");
+        setIcon(el, "calendar");
+      }
+      return;
     }
+    if (task.date < now) {
+      // Late is said in words as well as in red: colour alone is not something everyone can read, and
+      // the number of days is the ZFG signal that a task is stuck.
+      const late = moment(now).diff(moment(task.date), "days");
+      el.setText(`${late}${t("daysShort")}`);
+      el.setAttr("aria-label", `${full} · ${t("overdueBy", late)}`);
+      return;
+    }
+    const day = moment(task.date).format(task.date.slice(0, 4) === now.slice(0, 4) ? "DD.MM" : "DD.MM.YY");
+    el.setText(task.at ? `${day} ${task.at}` : day);
   }
 
   // Redraw as soon as one of the waiting tasks is due, and not a moment later.
@@ -1855,7 +1899,8 @@ class FocusRenderer extends MarkdownRenderChild {
     el.onclick = (e) => { if (!el.isContentEditable) this.open(this.plugin.linked(file) || file, e); };
   }
 
-  async list(parent, tasks, all = false) {
+  // `tagged`: the rows of the flat focus, where a project's step names its project.
+  async list(parent, tasks, all = false, tagged = false) {
     const ul = parent.createEl("ul", { cls: "contains-task-list ft-list" });
     for (const task of tasks) {
       const li = ul.createEl("li", { cls: "task-list-item ft-task" });
@@ -1865,6 +1910,7 @@ class FocusRenderer extends MarkdownRenderChild {
       const box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       this.check(li, box, task);
       const text = await this.text(li, task);
+      if (tagged && task.project) this.projectTag(li, task);
       this.marks(li, task);
       const date = li.createSpan();
       this.dateLabel(date, task);
