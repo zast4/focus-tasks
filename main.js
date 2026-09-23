@@ -419,9 +419,9 @@ class DatePicker {
       this.submit();
     };
     this.input.oninput = () => this.input.removeClass("is-invalid");
-    this.outside = (e) => { if (!this.el.contains(e.target)) this.close(); };
+    this.outside = (e) => { if (!this.el.contains(e.target)) this.commit(); };
     this.keys = (e) => { if (e.key === "Escape") { e.preventDefault(); this.close(); } };
-    this.scrolled = (e) => { if (!this.el.contains(e.target)) this.close(); };
+    this.scrolled = (e) => { if (!this.el.contains(e.target)) this.commit(); };
     // The click that opened the picker is still travelling, so listening starts a tick later — and
     // only if the picker is still open by then, or the listeners would outlive it.
     setTimeout(() => {
@@ -495,15 +495,25 @@ class DatePicker {
   }
 
   // The hour rides along with the day: empty hours simply mean «that whole day», and minutes left
-  // empty on a filled hour mean o'clock.
+  // empty on a filled hour mean o'clock. Returns false when the fields hold something unreadable.
   pick(day) {
     let at = null;
     if (this.hh && this.hh.value.trim()) {
       at = parseTime(`${this.hh.value}:${this.mm.value.trim() || "00"}`);
-      if (!at) { this.hh.addClass("is-invalid"); return; }
+      if (!at) { this.hh.addClass("is-invalid"); return false; }
     }
     this.close(true);
     this.onPick(day, at);
+    return true;
+  }
+
+  // Walking away from the card is an answer too: what stands in the fields is applied. Typing a day
+  // and an hour and then clicking elsewhere used to throw both away — the one gesture nobody reads
+  // as «cancel». Escape is what cancels.
+  commit() {
+    if (this.closed) return;
+    const day = parseDay(this.input.value) || this.value;
+    if (!day || !this.allowed(day) || !this.pick(day)) this.close();
   }
 
   close(picked) {

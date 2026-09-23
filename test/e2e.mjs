@@ -491,6 +491,18 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
   await page.type("45");
   await page.key("Tab");
   await taskIs("Ask the lawyer", { status: "in-progress", scheduled: `${TODAY}T18:45` }, "the moment is written in one change");
+  // set a moment and walk away from the card: leaving it is not «cancel»
+  await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-date'))`, "the date of the row");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker-clock')`), "the card again");
+  await page.eval(`
+    const p = document.querySelector('.ft-picker');
+    p.querySelector('.ft-picker-input').value = ${J(ddmmyy(TOMORROW))};
+    p.querySelector('.ft-picker-part.is-hh').value = '07';
+    p.querySelector('.ft-picker-part.is-mm').value = '30';
+    return true;`);
+  await click(`__ft.at(__ft.view().querySelector('.ft-foot-gap'))`, "somewhere outside the card");
+  await until(() => page.eval(`return !document.querySelector('.ft-picker')`), "the card closed");
+  await taskIs("Ask the lawyer", { scheduled: `${TOMORROW}T07:30` }, "what stood in the fields was kept");
   // out of the focus, behind the counter of its area, and reachable from there
   await until(() => page.eval(`
     const r = __ft.task('Ask the lawyer');
