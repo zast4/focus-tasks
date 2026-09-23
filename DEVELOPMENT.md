@@ -159,7 +159,11 @@ Other tools read the same notes, so keep these stable:
   - the body of the note is the task's description;
 - the file name is a readable label only: it follows the text, the `uid` does not;
 - a linked note = `note: "[[...]]"` in an area's or a project's note;
-- the order the rows were dragged into lives in `data.json` (`order.tasks["area:<name>" | "project:<note>"]`).
+- the order the rows were dragged into lives in `data.json` (`order.tasks["area:<name>" | "project:<note>"]`);
+- what is **folded** does not: it lives per device in local storage (`focus-tasks-folds`, beside
+  `focus-tasks-all`). In `data.json` it travelled with Sync, and two machines on one vault folded each
+  other's headers back open — a click that undid itself a second later. The first run on a device
+  still inherits whatever `data.json` remembers.
 
 Tasks the plugin does not touch: `cancelled` and `someday` (хотелки in ordinary notes are not migrated
 yet). The Tasks plugin is not part of this model — a task is no longer a checkbox line.
@@ -209,7 +213,7 @@ touch events on a 390×844 screen.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
 
-It must pass (48/48) before a release, together with the model suite (125) and the phone suite (15). On failure the vault stays open and screenshots go to
+It must pass (48/48) before a release, together with the model suite (126) and the phone suite (15). On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

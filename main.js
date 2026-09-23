@@ -2010,6 +2010,7 @@ if (typeof globalThis !== "undefined") { globalThis.__ftParseDay = parseDay; glo
 const BUILD_FILES = ["main.js", "manifest.json", "styles.css"];
 const BUILD_NOTE = "build.json";
 const BUILD_ROOT = "Internals/FocusTasks";
+const FOLD_KEY = "focus-tasks-folds";   // per device: what is folded is not something to share
 
 // Which build this file IS. `tools/deliver.mjs` rewrites this line in the copy it delivers, so the
 // answer travels inside the code: it cannot be half-written, lost or left behind by a sync.
@@ -2020,7 +2021,11 @@ module.exports = class FocusTasks extends Plugin {
     await this.readBuild();
     const saved = (await this.loadData()) || {};
     this.settings = Object.assign({}, DEFAULTS, saved.settings);
-    this.data = { folded: saved.folded || {}, opened: saved.opened || {}, order: Object.assign({ areas: [], projects: {}, tasks: {} }, saved.order) };
+    // Folds come from this device; the first run here inherits whatever the vault still remembers.
+    let here = null;
+    try { here = JSON.parse(this.app.loadLocalStorage(FOLD_KEY) || "null"); } catch { /* written by hand, ignore */ }
+    this.data = { folded: here?.folded || saved.folded || {}, opened: here?.opened || saved.opened || {},
+      order: Object.assign({ areas: [], projects: {}, tasks: {} }, saved.order) };
     this.applyLanguage();
     this.views = new Set();
     this.toggling = new Set();  // lines with a toggle in flight
@@ -2063,7 +2068,7 @@ module.exports = class FocusTasks extends Plugin {
 
   async saveAll() {
     this.forgetScan();  // a changed folder or type means the vault has to be read again
-    await this.saveData({ settings: this.settings, folded: this.data.folded, opened: this.data.opened, order: this.data.order });
+    await this.saveData({ settings: this.settings, order: this.data.order });
   }
 
   async openView() {
@@ -2084,11 +2089,18 @@ module.exports = class FocusTasks extends Plugin {
   // The focus: areas and projects open unless folded. «Other areas»: closed unless opened.
   isShown(key, all) { return all ? !!this.data.opened[key] : !this.data.folded[key]; }
 
+  // What is folded is this screen's business, not the vault's: it lives beside «All», per device.
+  // In data.json it travelled with Sync, and two machines on one vault kept folding each other's
+  // headers back open — a click that undid itself a second later.
+  saveFolds() {
+    this.app.saveLocalStorage(FOLD_KEY, JSON.stringify({ folded: this.data.folded, opened: this.data.opened }));
+  }
+
   async toggleShown(key, all) {
     const map = all ? this.data.opened : this.data.folded;
     if (map[key]) delete map[key];
     else map[key] = true;
-    await this.saveAll();
+    this.saveFolds();
   }
 
   // open=false folds every header in `folds` ([key, all]); open=true opens them.
@@ -2098,20 +2110,20 @@ module.exports = class FocusTasks extends Plugin {
       else if (open) delete this.data.folded[key];
       else this.data.folded[key] = true;
     }
-    await this.saveAll();
+    this.saveFolds();
     this.refresh();
   }
 
   async forget(key) {
     delete this.data.opened[key];
     delete this.data.folded[key];
-    await this.saveAll();
+    this.saveFolds();
   }
 
   async setOpen(key, open) {
     if (open) this.data.opened[key] = true;
     else delete this.data.opened[key];
-    await this.saveAll();
+    this.saveFolds();
   }
 
   // --- notes --------------------------------------------------------------------------------

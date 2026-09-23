@@ -271,6 +271,21 @@ test("the queue line counts commits in the language's own forms", async () => {
      ["коммит", "коммита", "коммитов", "коммитов", "коммит", "коммита"]);
 });
 
+test("what is folded stays on this device, out of the vault's data", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Mine", { area: "Work", scheduled: TODAY });
+  });
+  await plugin.toggleShown("area:Work", false);
+  eq(plugin.isShown("area:Work", false), false, "the area is folded here");
+  await plugin.saveAll();
+  const saved = (await plugin.loadData()) || {};   // what travels with the vault
+  eq(!!(saved.folded || saved.opened), false, "and the vault's own data knows nothing about it");
+  eq(!!saved.order, true, "the dragged order still belongs to the vault");
+  const device = JSON.parse(app.loadLocalStorage("focus-tasks-folds") || "{}");
+  eq(!!device.folded["area:Work"], true, "the device does");
+});
+
 test("a status nobody knows still counts as open", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
