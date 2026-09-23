@@ -40,20 +40,20 @@ late or more, the row says how many days, not only in red.
 **Evening: what got done.** Everything checked off today stays where it lives — a step under its own
 project, a loose task at the bottom of its area — beneath a hairline, and the green ✓N on that row
 counts it and folds it away. One pile at the bottom of the area made you hunt for which project a
-row came from, and a second grey row under «Show upcoming» read as its twin. Tomorrow they are gone from the list —
+row came from, and a second grey row under the list read like a footer. Tomorrow they are gone from the list —
 the dates they carry are what the weekly throughput counts.
 → *model: «evening: everything checked off today is counted in its area, and gone tomorrow», «a step
 of a project checked off today keeps its area in the focus»; e2e: «the box completes the task: status,
 the day, and the area's ✓ brings it back»*
 
 **A project.** A project is a note; its steps are tasks pointing at it. Only a dated step puts a
-project in the focus; a project whose steps are all future lives under «Show upcoming».
+project in the focus; a project whose steps are all future lives behind the ⏳N of its area.
 
 **A project finished today.** Checking off its last step must not take the project off the screen: I
 would lose both the sight of finishing it and the place to put what comes next. So it keeps its row
 until the day is out — the name steps back, «done N» in green stands where the count was, and its «+»
 opens the next step right there. One new step and it is an ordinary project again. Tomorrow it is
-gone from the focus and waits under «Show upcoming».
+gone from the focus and waits behind the ⏳N of its area.
 → *model: «a project whose steps are all done today keeps its place, marked done», «a project
 finished on an earlier day is gone from the focus», «a project with a step left open is not finished,
 however much was done today», «a new task in a project finished today brings it back to life»;

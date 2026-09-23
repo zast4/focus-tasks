@@ -204,10 +204,11 @@ step("«+» on an area adds a task with the on-screen keyboard", async () => {
   await taskIs("Помыть окна", { area: "🧤Рутина", scheduled: TODAY });
 });
 
-step("«Показать будущее» opens the undated work", async () => {
-  await tapOn(`__m.text('.ft-future span:not(.ft-future-icon)', 'Показать будущее · 1')`, "«Показать будущее»");
+step("the ⏳ on an area's header opens its upcoming work, by finger", async () => {
+  // the counter lives on the header now, among ▷ and ✓ — there is no grey row under the list
+  await tapOn(`__m.all('.ft-area-title .ft-later-chip')[0]`, "the ⏳ of the area");
   await until(() => page.eval(`return !!__m.task('Разобрать кладовку')`), "the undated task is on screen");
-  await tapOn(`__m.text('.ft-future span:not(.ft-future-icon)', 'Скрыть будущее')`, "«Скрыть будущее»");
+  await tapOn(`__m.all('.ft-area-title .ft-later-chip')[0]`, "the ⏳ again");
   await until(() => page.eval(`return !__m.task('Разобрать кладовку')`), "hidden again");
 });
 

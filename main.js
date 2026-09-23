@@ -991,9 +991,16 @@ class FocusRenderer extends MarkdownRenderChild {
       const count = title.createSpan({ cls: "ft-count", text: tasks.length ? String(tasks.length) : area.done.length ? t("allDone", area.done.length) : "" });
       if (!tasks.length && area.done.length) count.addClass("is-done");
     }
-    // What was finished here today lives in the area's own header: a second grey row under
-    // «Show upcoming» read as its twin and made the bottom of every area look like a footer.
+    // Everything an area holds beside today's work hangs off its own header, as counters: what is
+    // running, what is still ahead, what was closed today. A separate grey row under the list said
+    // the same thing in twice the space and read like a footer.
     if (!all && open && area.waitingLoose.length) this.waitChip(title, area.waitingLoose, "wait:" + area.name);
+    const futureKey = (wide ? "futureoff:" : "future:") + area.name;
+    const futureShown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
+    const ahead = area.future.loose.length + area.future.projects.reduce((n, pr) => n + pr.tasks.length, 0);
+    if (!all && open && ahead)
+      this.chip(title, "ft-later-chip", "clock", ahead, futureShown, futureKey,
+        t(futureShown ? "hideUpcoming" : "showUpcoming"), !wide);
     if (!all && open && area.doneLoose.length)
       this.chip(title, "ft-done-chip", "check", area.doneLoose.length,
         p.isShown("done:" + area.name, false), "done:" + area.name,
@@ -1018,17 +1025,12 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     if (area.loose.length) await this.list(box, area.loose);
     for (const project of area.projects) await this.project(box, area, project);
-    // «Show upcoming» is about what the AREA still holds: steps that belong to a project now live
-    // under that project, and counting them here left the block opening on nothing.
-    if (area.future.loose.length || area.future.projects.length) {
-      const futureKey = (wide ? "futureoff:" : "future:") + area.name;
-      const shown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
-      this.upcoming(box, area, shown, futureKey);
-      if (shown) {
-        const block = box.createDiv({ cls: "ft-future-block" });
-        if (area.future.loose.length) await this.list(block, area.future.loose);
-        for (const project of area.future.projects) await this.project(block, area, project, true);
-      }
+    // What the AREA still holds: its own dated-later tasks and the projects with nothing due today.
+    // Steps that belong to a project on screen live under that project, not here.
+    if (futureShown && (area.future.loose.length || area.future.projects.length)) {
+      const block = box.createDiv({ cls: "ft-future-block" });
+      if (area.future.loose.length) await this.list(block, area.future.loose);
+      for (const project of area.future.projects) await this.project(block, area, project, true);
     }
     if (area.waitingLoose.length) await this.waitingList(box, area.waitingLoose, "wait:" + area.name);
     if (area.doneLoose.length) await this.completed(box, area.doneLoose, "done:" + area.name);
@@ -1128,16 +1130,6 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // «Show upcoming · N» under the focus of an area; «Hide upcoming» when the block is open.
-  upcoming(box, area, shown, key) {
-    const row = box.createDiv({ cls: "ft-future" });
-    setIcon(row.createSpan({ cls: "ft-future-icon" }), shown ? "chevron-up" : "calendar-clock");
-    row.createSpan({ text: shown ? t("hideUpcoming") : t("showUpcoming") + (area.later ? ` · ${area.later}` : "") });
-    row.onclick = async () => {
-      await this.plugin.toggleShown(key, true);
-      this.plugin.refresh();
-    };
-  }
-
   // `later`: the project's copy in the upcoming block (its own fold state, new steps without a date).
   async project(box, area, project, later = false, all = false) {
     const p = this.plugin;

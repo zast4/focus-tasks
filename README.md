@@ -52,7 +52,7 @@ What you can do in the view:
 | Menu | click the grip on the left, or right-click a row |
 | Reorder / move | drag the grip: areas among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
 | Select several | **Shift**-click selects every task from the last clicked one, **⌘/Ctrl**-click adds or drops one, **Esc** clears; the grip of a selected row drags them all; its date, its menu or **⌘/Ctrl+1…4** (as while editing) set the date of all of them |
-| Upcoming | «Show upcoming» under an area opens its undated and future tasks |
+| Upcoming | the ⏳N on an area's header opens its undated and future tasks, next to ▷N running and ✓N done |
 | Everything | «All» at the bottom shows every area (also those with nothing due); «Hide» goes back |
 | Fold | carets on headers; «Collapse all» / «Expand all» at the bottom |
 | Areas | «+ Area», «+ Area from a note» at the bottom; area menu: new project, project from a note, link a note, delete |
@@ -199,8 +199,11 @@ passes (`--keep` leaves it).
 Отмеченная задача до конца дня остаётся там, где живёт: шаг - внутри своего проекта, разовая -
 внизу своей области, под тонкой линией (галочка возвращает её в работу). Зелёная ✓N на строке
 проекта или области считает сделанное и сворачивает его одним кликом. Будущие и бессрочные шаги
-проекта лежат за его же ⏳N, а не в общем «Показать будущее» области: видно, что осталось именно
-в этом проекте.
+проекта лежат за его же ⏳N: видно, что осталось именно в этом проекте.
+
+Всё, что область держит сверх сегодняшней работы, висит значками на её же строке: ▷N запущенное,
+⏳N будущее и бессрочное, ✓N закрытое сегодня. Отдельной серой строки «Показать будущее» под списком
+больше нет - она занимала место вдвое большее и читалась как подвал.
 
 Задачу, которую ты уже запустил - делегировал, отправил, ждёшь ответа, - отдаёт значок **▷**: он
 есть на каждой строке и проявляется при наведении (в меню строки тот же пункт «В работу…»). Он не
