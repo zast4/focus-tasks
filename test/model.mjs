@@ -87,15 +87,16 @@ test("cancelled and someday tasks stay out of the list", async () => {
   eq(names((await plugin.collect(true))[0].loose), ["Real"]);
 });
 
-test("what is running leaves the focus and waits behind the counter of its area", async () => {
+test("what is running waits with everything else that is not today", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
     taskNote(app, "Running", { area: "Sport", scheduled: DAY(4), status: "in-progress" });
     taskNote(app, "Mine", { area: "Sport", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.loose), ["Mine"], "the focus holds only what is mine to do");
-  eq(names(area.waitingLoose), ["Running"], "and the started one waits behind the area's ▷");
+  eq(names(area.loose), ["Mine"], "the focus holds only what is mine to do today");
+  eq(names(area.future.loose), ["Running"], "and the started one waits in the upcoming list");
+  eq(area.running, 1, "counted apart only to keep the area on screen and to say so on the chip");
 });
 
 test("the moment it is due back, a running task returns to the focus", async () => {
@@ -109,19 +110,20 @@ test("the moment it is due back, a running task returns to the focus", async () 
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Sport"], "the area is on screen: its day came");
   eq(names(areas[0].loose).sort(), ["Overdue", "Ripe today"], "today and overdue are back among the rows");
-  eq(names(areas[0].waitingLoose).sort(), ["No day at all", "Not yet"], "the rest still ticks behind ▷");
+  eq(names(areas[0].future.loose).sort(), ["No day at all", "Not yet"], "the rest waits with the upcoming work");
 });
 
-test("an area whose only work is running keeps its place, and its counter", async () => {
+test("an area whose only work is running keeps its place", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Work");
     taskNote(app, "Sent off", { area: "Work", scheduled: DAY(5), status: "in-progress" });
   });
   const areas = await plugin.collect(false);
-  // the ▷ on its header is the only way back to that task: an area that vanished would take it away
-  eq(areaNames(areas), ["Work"], "the area cannot vanish and take the button with it");
-  eq(names(areas[0].waitingLoose), ["Sent off"]);
+  // the ⏳ on its header is the only way back to that task: an area that vanished would take it away
+  eq(areaNames(areas), ["Work"], "the area cannot vanish and take the counter with it");
+  eq(names(areas[0].future.loose), ["Sent off"]);
   eq(areas[0].loose, [], "but there is nothing to do in it today");
+  eq(areas[0].running, 1);
 });
 
 test("an hour of the day decides when a running task comes back", async () => {
@@ -136,7 +138,7 @@ test("an hour of the day decides when a running task comes back", async () => {
   eq(at("Later today").at, "23:59", "and the hour is kept beside it");
   const area = (await plugin.collect(false))[0];
   eq(names(area.loose), ["Earlier today"], "its hour has passed: back among the rows");
-  eq(names(area.waitingLoose), ["Later today"], "this one's hour is still ahead: behind the ▷");
+  eq(names(area.future.loose), ["Later today"], "this one's hour is still ahead: it waits");
 });
 
 test("a task typed under another stays under it, not at the bottom", async () => {
@@ -210,7 +212,7 @@ test("nothing running left: the project has no block to draw", async () => {
     taskNote(a, "Mine today", { area: "Work", project: "Launch", scheduled: TODAY });
   });
   let area = (await plugin.collect(false))[0];
-  eq(names(area.projects[0].waiting), ["Sent off"], "the step waits behind the ▷ of its project");
+  eq(names(area.projects[0].later), ["Sent off"], "the step waits among the project's upcoming ones");
   await plugin.setRunning(plugin.tasks().find((x) => x.text === "Sent off"), false);
   area = (await plugin.collect(false))[0];
   eq(names(area.projects[0].tasks).includes("Sent off"), true, "and the task is back among today's steps");
@@ -251,8 +253,8 @@ test("a running step stays inside its project, not in the area", async () => {
     taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.projects[0].waiting), ["Sent to the lawyer"], "the project keeps its own");
-  eq(names(area.waitingLoose), ["Waiting on a reply"], "the area keeps the loose one");
+  eq(names(area.projects[0].later), ["Sent to the lawyer"], "the project keeps its own");
+  eq(names(area.future.loose), ["Waiting on a reply"], "the area keeps the loose one");
   eq(names(area.loose), ["Mine today"], "the focus is untouched by either");
 });
 
@@ -1530,9 +1532,9 @@ test("fuzz: whatever is in the vault, every open task is somewhere on screen", a
     const all = await plugin.collect(true);
     const shown = new Set();
     for (const area of all) {
-      for (const t of [...area.loose, ...area.future.loose, ...area.done, ...area.waiting]) shown.add(t.file.path);
+      for (const t of [...area.loose, ...area.future.loose, ...area.done]) shown.add(t.file.path);
       for (const pr of [...area.projects, ...area.future.projects])
-        for (const t of [...pr.tasks, ...(pr.later || []), ...(pr.waiting || [])]) shown.add(t.file.path);
+        for (const t of [...pr.tasks, ...(pr.later || [])]) shown.add(t.file.path);
     }
     for (const t of plugin.orphans()) shown.add(t.file.path);
     const open = plugin.tasks().filter((t) => !["done", "cancelled", "someday"].includes(t.status));

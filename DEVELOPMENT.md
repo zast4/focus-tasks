@@ -92,21 +92,24 @@ and do not reopen one that turned done while you were working.
   - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
     + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
   - `askReturn` + `setRunning`: `status: in-progress` — started and out of his hands. Sending a task
-    off is a question, not a toggle: `askReturn` opens the picker as a card («Вернуться к задаче»,
-    a plain calendar, an hour beside the day, `min` = today, no «clear»), and only an answer writes
-    anything — `setRunning(list, true, day, at)` puts the status and `scheduled` in one change
-    (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`). Cancel the card and the task is untouched.
-    Until that moment the task waits behind the «▷N» of its project or area (`waitChip` /
-    `waitingList`, `wait:<path|area>`, closed by default) — and the area itself stays in the focus for
-    it (`areas.filter(a => a.focus || a.done.length || a.waiting.length)`), or the only button back to
-    those tasks would vanish with it. `backDue(task)` decides waiting or back: the day, or the exact
-    moment when an hour was named. Nothing in the vault changes at 16:00, so the renderer keeps a
-    `pending` list of the waiting rows and a one-minute interval redraws when one comes due. ▷ is on
-    **every** row (`is-offer`, shown on hover): on an ordinary one it opens the card, on a running one
-    it hands the task back into today's focus, dropping the hour (`setRunning(list, false)`). Clicking
-    the date of a running task opens the card again, to put it off further; clearing its day any other
-    way (`setDate(task, null)`) hands it back too. `obsidian_tasks.py` keeps such tasks out of the
-    bot's focus reports until the day arrives (`running_ahead()`, day part only).
+    off is a question, not a toggle: `askReturn` opens the picker as a card («Вернуться к задаче», a
+    plain calendar, today by default, the hour in two keyboard-only segments, `min` = today, no
+    «clear»), and only an answer writes anything — `setRunning(list, true, day, at)` puts the status
+    and `scheduled` in one change (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`). Cancel the card and the task
+    is untouched.
+    **Running is not a list of its own.** «Not today» is one answer whoever holds the task, so a
+    running task waits where the upcoming ones wait: `area.future.loose` / `bucket.later`, behind the
+    same «⏳N», sorted by its own date. `area.running` / `bucket.running` only count them — to keep an
+    area that holds nothing else in the focus (`areas.filter(a => a.focus || a.done.length ||
+    a.running)`, or the counter and the way back would vanish with it) and to say «из них запущено N»
+    on the chip. The ▷ on the row is the whole visible difference. `backDue(task)` decides waiting or
+    back: the day, or the exact moment when an hour was named. Nothing in the vault changes at 16:00,
+    so the renderer keeps a `pending` list of the waiting rows and a one-minute interval redraws when
+    one comes due. ▷ is on **every** row (`is-offer`, shown on hover): on an ordinary one it opens the
+    card, on a running one it hands the task back into today's focus, dropping the hour. Clicking the
+    date of a running task opens the card again; clearing its day any other way (`setDate(task, null)`)
+    hands it back too. `obsidian_tasks.py` keeps such tasks out of the bot's focus reports until the
+    day arrives (`running_ahead()`, day part only).
   - `priorityItems(menu, task|tasks)` + `setPriority`: the levels of TaskNotes' `priority`, and
     `null` to take the mark off; reachable from the dot itself, the row's menu and a selection's.
   - `chip(head, …)`: a counter that folds a part of a row — «⏳N» upcoming (`steps-later:<path>`,

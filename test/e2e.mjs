@@ -232,7 +232,8 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
   const steps = await page.eval(`
     const head = __ft.project('Marathon');
     const body = head?.nextElementSibling;
-    return body ? [...body.querySelectorAll('li.ft-task')].map((r) => r.querySelector('.ft-text').textContent.trim()) : null;`);
+    return body ? [...body.querySelectorAll('li.ft-task')].filter((r) => !r.closest('.ft-later-block'))
+      .map((r) => r.querySelector('.ft-text').textContent.trim()) : null;`);
   if (J(steps) !== J(["Buy shoes fast", "Lace them"]))
     throw new Error("the new row did not stay under the one it was typed from: " + J(steps));
   await idle();
@@ -491,29 +492,32 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
   await page.key("Tab");
   await taskIs("Ask the lawyer", { status: "in-progress", scheduled: `${TODAY}T18:45` }, "the moment is written in one change");
   // out of the focus, behind the counter of its area, and reachable from there
-  await until(() => page.eval(`return !__ft.task('Ask the lawyer')`), "the row left the focus");
   await until(() => page.eval(`
-    const c = __ft.area('Sport')?.querySelector('.ft-wait-chip');
-    return !!c && c.textContent.trim() === '1';`), "the area's ▷ counts it");
-  const key = await plugin(`return 'wait:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
+    const r = __ft.task('Ask the lawyer');
+    return !r || !!r.closest('.ft-future-block');`), "the row left today's work");
+  // one counter for everything that is not today; the tooltip says how much of it is in other hands
+  await until(() => page.eval(`
+    const c = __ft.area('Sport')?.querySelector('.ft-later-chip');
+    return !!c && /running|запущен/i.test(c.getAttribute('aria-label') || '');`), "the area's ⏳ counts it among the upcoming");
+  const key = await plugin(`return 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
   await plugin(`if (!p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
   await until(() => page.eval(`
     const r = __ft.task('Ask the lawyer');
-    return !!r && !!r.closest('.ft-wait-block') && !!r.querySelector('.ft-running');`),
-    "and it is listed under the area, marked as running");
+    return !!r && !!r.closest('.ft-future-block') && !!r.querySelector('.ft-running');`),
+    "and it is listed with the upcoming work, marked as running");
   // the hour passes: it comes back into the focus by itself
   await plugin(`
     const task = p.tasks().find((x) => x.text === 'Ask the lawyer');
     await p.setRunning(task, true, ${J(TODAY)}, '00:00'); p.refresh(); return true;`);
   await until(() => page.eval(`
     const r = __ft.task('Ask the lawyer');
-    return !!r && !r.closest('.ft-wait-block') && !!r.querySelector('.ft-running');`),
+    return !!r && !r.closest('.ft-future-block') && !!r.querySelector('.ft-running');`),
     "its moment came: back among the rows, still marked as running");
   await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-running'))`, "the ▷ on the row");
   await taskIs("Ask the lawyer", { status: "open", scheduled: TODAY }, "the row's ▷ hands it back, into today's focus");
   await settle();
-  if (await page.eval(`return !!__ft.view().querySelector('.ft-wait-block')`))
-    throw new Error("an empty «running» block is still on screen");
+  if (await page.eval(`return !!__ft.view().querySelector('.ft-wait-block, .ft-wait-chip')`))
+    throw new Error("the old «running» block and counter are back");
   fs.unlinkSync(path.join(VAULT, taskPath("Ask the lawyer")));
   await settle();
 });
