@@ -2598,8 +2598,10 @@ module.exports = class FocusTasks extends Plugin {
   async seatAfter(task, anchor) {
     const key = listOf(task);
     if (key !== listOf(anchor)) return;
+    // Everything in the list, ticked ones included: a task that loses its seat when it is checked
+    // off would jump somewhere else the moment the box is unchecked.
     const order = this.tasks()
-      .filter((x) => listOf(x) === key && x.status !== STATUS_DONE && x.status !== STATUS_CANCELLED)
+      .filter((x) => listOf(x) === key)
       .sort(this.rowOrder())
       .map((x) => x.uid)
       .filter((uid) => uid && uid !== task.uid);

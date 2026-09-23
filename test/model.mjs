@@ -122,6 +122,22 @@ test("a task typed under another stays under it, not at the bottom", async () =>
     ["Aaa first", "Bbb second", "Zzz typed here", "Ccc third"]);
 });
 
+test("a row keeps its seat through a tick and an untick", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Aaa first", { area: "Work", scheduled: TODAY });
+    taskNote(a, "Ccc third", { area: "Work", scheduled: TODAY });
+  });
+  const first = plugin.tasks().find((x) => x.text === "Aaa first");
+  await plugin.insertAfter(first, "Zzz typed here", TODAY);
+  const typed = () => plugin.tasks().find((x) => x.text === "Zzz typed here");
+  await plugin.toggle(typed());
+  await plugin.insertAfter(first, "Yyy another", TODAY);   // перестраивает порядок списка
+  await plugin.toggle(typed());
+  eq(names((await plugin.collect(false))[0].loose),
+    ["Aaa first", "Yyy another", "Zzz typed here", "Ccc third"], "the ticked row came back to its place");
+});
+
 test("a task typed under a project's step stays inside that project", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
