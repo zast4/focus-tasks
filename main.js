@@ -104,12 +104,11 @@ const STRINGS = {
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
-    inProgress: "In progress…", backToWork: "Back to the focus", waitingHide: "Hide what is running",
-    waitingShow: "Show what is running",
+    inProgress: "In progress…", backToWork: "Back to the focus",
     waitingSince: "Running; look again {0}", waitingNoDate: "Running; no day set to look again",
+    timeHint: "hh:mm",
     returnWhen: "Look at it again", returnHint: "tomorrow or later",
-    returnTooSoon: "Tomorrow at the earliest: until then the task is in the focus anyway",
-    inThree: "in 3 days", inWeek: "in a week",
+    returnTooSoon: "The day to come back cannot be in the past",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -178,12 +177,11 @@ const STRINGS = {
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
-    inProgress: "В работу…", backToWork: "Вернуть в фокус", waitingHide: "Скрыть запущенное",
-    waitingShow: "Показать запущенное",
+    inProgress: "В работу…", backToWork: "Вернуть в фокус",
     waitingSince: "Запущено; вернуться {0}", waitingNoDate: "Запущено; день возврата не назначен",
+    timeHint: "чч:мм",
     returnWhen: "Вернуться к задаче", returnHint: "завтра или позже",
-    returnTooSoon: "Не раньше завтра: сегодня задача и так в фокусе",
-    inThree: "через 3 дня", inWeek: "через неделю",
+    returnTooSoon: "День возврата не может быть в прошлом",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
@@ -234,7 +232,21 @@ const fileName = (name) => name
   .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
   .replace(/[\\/#^\[\]|?*<>":]/g, "-").replace(/\s+/g, " ").trim();
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+// «16», «16:00», «16.30», «1630» → «16:00» / «16:30»; anything else is not a time.
+const parseTime = (text) => {
+  const m = String(text ?? "").trim().match(/^(\d{1,2})(?:[:. ]?(\d{2}))?$/);
+  if (!m) return null;
+  const h = Number(m[1]), min = Number(m[2] || 0);
+  return h < 24 && min < 60 ? `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}` : null;
+};
 const inFocus = (task) => task.date && task.date <= today();
+// A running task is given the moment it comes back — a day, and the time of day when one was named.
+const timeOf = (value) => String(value ?? "").match(/T(\d{2}:\d{2})/)?.[1] || null;
+const backDue = (task) => !!task.date && (task.at
+  ? `${task.date}T${task.at}` <= moment().format("YYYY-MM-DDTHH:mm")
+  : task.date <= today());
+// Sent off and still waiting for that moment: it stays where it lives, but the row goes quiet.
+const waitingBack = (task) => task.status === STATUS_PROGRESS && !backDue(task);
 // A date as the plugin reads it: «2026-09-22», «2026-09-22T18:30+03:00» and a Date all mean that day.
 const day = (value) => {
   if (value === null || value === undefined || value === "") return null;
@@ -326,15 +338,24 @@ class DatePicker {
     this.month = moment(value || opts.min || today()).startOf("month");
     this.el = document.body.createDiv({ cls: "ft-picker" });
     if (opts.title) this.el.createDiv({ cls: "ft-picker-caption", text: opts.title });
-    this.input = this.el.createEl("input", { type: "text", cls: "ft-picker-input", attr: { placeholder: opts.hint || t("pickerPlaceholder") } });
+    const field = this.el.createDiv({ cls: "ft-picker-field" });
+    this.input = field.createEl("input", { type: "text", cls: "ft-picker-input", attr: { placeholder: opts.hint || t("pickerPlaceholder") } });
     this.input.value = value ? moment(value).format("DD.MM.YY") : "";
-    if (opts.quick?.length) {
-      const quick = this.el.createDiv({ cls: "ft-picker-quick" });
-      for (const [label, iso] of opts.quick) {
-        const chip = quick.createEl("button", { cls: "ft-picker-chip", text: label });
-        if (iso === value) chip.addClass("is-selected");
-        chip.onclick = () => this.pick(iso);
-      }
+    // An hour is asked for only where it means something — the day a task comes back. Left empty it
+    // stays a plain date, the way every other date in the list is.
+    if (opts.time) {
+      this.time = field.createEl("input", { type: "text", cls: "ft-picker-time", attr: { placeholder: t("timeHint") } });
+      this.time.value = opts.at || "";
+      this.time.onkeydown = (e) => {
+        e.stopPropagation();
+        if (e.key === "Escape") { e.preventDefault(); this.close(); return; }
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const day = parseDay(this.input.value) || this.value;
+        if (day && this.allowed(day)) this.pick(day);
+        else this.input.addClass("is-invalid");
+      };
+      this.time.oninput = () => this.time.removeClass("is-invalid");
     }
     this.head = this.el.createDiv({ cls: "ft-picker-head" });
     this.grid = this.el.createDiv({ cls: "ft-picker-grid" });
@@ -407,9 +428,12 @@ class DatePicker {
     Object.assign(this.el.style, { left: `${left}px`, top: `${top}px` });
   }
 
+  // The hour rides along with the day: an empty or unreadable field simply means «no hour».
   pick(day) {
+    const at = this.time ? parseTime(this.time.value) : null;
+    if (this.time && this.time.value.trim() && !at) { this.time.addClass("is-invalid"); return; }
     this.close(true);
-    this.onPick(day);
+    this.onPick(day, at);
   }
 
   close(picked) {
@@ -544,6 +568,11 @@ class FocusRenderer extends MarkdownRenderChild {
     // focused before (a note's editor swallows Esc and ⌘1–4) and the list looks deaf.
     this.containerEl.tabIndex = -1;
     const later = () => { clearTimeout(this.timer); this.timer = setTimeout(() => this.render(), 300); };
+    // Rows waiting for an hour of the day have nothing to wake them: no file changes at 16:00. Once a
+    // minute the list checks whether one of them has come due, and only then redraws.
+    this.registerInterval(window.setInterval(() => {
+      if ((this.pending || []).some(backDue)) this.render();
+    }, 60000));
     this.registerEvent(this.plugin.app.metadataCache.on("changed", later));
     this.registerEvent(this.plugin.app.vault.on("delete", later));
     this.registerEvent(this.plugin.app.vault.on("rename", later));
@@ -606,6 +635,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const rest = everything ? (await p.collect(true)).filter((a) => !areas.some((x) => x.name === a.name)) : [];
     const shownAreas = [...areas, ...rest];
     this.fresh = new WeakMap();
+    this.pending = [];   // rows drawn quiet because they are not due back yet; the minute timer watches them
     // [key, all] of every foldable header on screen (also inside folded areas)
     this.folds = [
       ...areas.flatMap((a) => [["area:" + a.name, false], ...a.projects.map((pr) => ["project:" + pr.file.path, false]),
@@ -880,7 +910,6 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     // What was finished here today lives in the area's own header: a second grey row under
     // «Show upcoming» read as its twin and made the bottom of every area look like a footer.
-    if (!all && open && area.waitingLoose.length) this.waitChip(title, area.waitingLoose, "wait:" + area.name);
     if (!all && open && area.doneLoose.length)
       this.chip(title, "ft-done-chip", "check", area.doneLoose.length,
         p.isShown("done:" + area.name, false), "done:" + area.name,
@@ -917,7 +946,6 @@ class FocusRenderer extends MarkdownRenderChild {
         for (const project of area.future.projects) await this.project(block, area, project, true);
       }
     }
-    if (area.waitingLoose.length) await this.waitingList(box, area.waitingLoose, "wait:" + area.name);
     if (area.doneLoose.length) await this.completed(box, area.doneLoose, "done:" + area.name);
   }
 
@@ -1051,9 +1079,6 @@ class FocusRenderer extends MarkdownRenderChild {
     const laterOpen = !all && !later && p.isShown(laterKey, true);
     const doneOpen = !all && !later && p.isShown(doneKey, false);
     const unfold = async () => { if (!p.isShown(key, all)) await p.toggleShown(key, all); };
-    const waitKey = "wait:" + path;
-    const waitOpen = !all && !later && p.isShown(waitKey, true);
-    if (!all && !later && project.waiting?.length) this.waitChip(head, project.waiting, waitKey, unfold);
     if (!all && !later && project.later?.length)
       this.chip(head, "ft-later-chip", "clock", project.later.length, laterOpen, laterKey, t(laterOpen ? "laterHide" : "laterShow"), true, unfold);
     if (!all && !later && project.done?.length)
@@ -1068,32 +1093,12 @@ class FocusRenderer extends MarkdownRenderChild {
     this.more(head, (menu) => this.projectMenu(menu, area, project, head));
     this.grip(head, { type: "project", area, project });
     if (!open) return;
-    const shows = project.tasks.length || (waitOpen && project.waiting?.length)
-      || (laterOpen && project.later?.length) || (doneOpen && project.done?.length);
+    const shows = project.tasks.length || (laterOpen && project.later?.length) || (doneOpen && project.done?.length);
     if (!shows) return;   // an empty body still draws the line under the project's caret
     const body = box.createDiv({ cls: "ft-project-body" });
     if (project.tasks.length) await this.list(body, project.tasks, all);
-    if (waitOpen) await this.waitingList(body, project.waiting, waitKey);
     if (laterOpen) await this.list(body, project.later);
     if (doneOpen) await this.completed(body, project.done, doneKey, true);
-  }
-
-  // «▷N» — what is running here and has not come due yet. The moment a review day arrives the task
-  // leaves this counter for the focus itself, so the number here only ever counts what still ticks.
-  waitChip(head, waiting, key, unfold = null) {
-    const open = this.plugin.isShown(key, true);
-    this.chip(head, "ft-wait-chip", "play", waiting.length, open, key,
-      open ? t("waitingHide") : t("waitingShow"), true, unfold);
-  }
-
-  // The rows themselves: the date reads as «look again then», and ▷ on a row hands it back to me.
-  async waitingList(box, waiting, key) {
-    // Nothing left in it: the block would still draw its dashed line, and a fold left open would
-    // keep that line under the list long after the last task came back.
-    if (!waiting.length || !this.plugin.isShown(key, true)) return;
-    const block = box.createDiv({ cls: "ft-wait-block" });
-    await this.list(block, waiting);
-    for (const li of block.querySelectorAll("li.ft-task")) li.addClass("is-waiting");
   }
 
   // A counter on a header that folds a part of it: «⏳3» upcoming, «✓2» closed today.
@@ -1254,7 +1259,8 @@ class FocusRenderer extends MarkdownRenderChild {
   marks(li, task) {
     if (task.status === STATUS_PROGRESS) {
       const run = li.createSpan({ cls: "ft-running" });
-      run.setAttr("aria-label", task.date ? t("waitingSince", this.dateText(task.date)) : t("waitingNoDate"));
+      const when = task.date ? this.dateText(task.date) + (task.at ? ` ${task.at}` : "") : null;
+      run.setAttr("aria-label", when ? t("waitingSince", when) : t("waitingNoDate"));
       setIcon(run, "play");
       run.onclick = (e) => { e.stopPropagation(); this.plugin.setRunning(task, false); };
     }
@@ -1303,7 +1309,8 @@ class FocusRenderer extends MarkdownRenderChild {
       return;
     }
     const now = today(), yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
-    el.setText(task.date === now ? t("today") : task.date === yesterday ? t("yesterday") : moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY"));
+    const named = task.date === now ? t("today") : task.date === yesterday ? t("yesterday") : moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY");
+    el.setText(task.at ? `${named} ${task.at}` : named);
     el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
     // Late is said in words as well as in red: colour alone is not something everyone can read, and
     // the number of days is the ZFG signal that a task is stuck.
@@ -1327,17 +1334,17 @@ class FocusRenderer extends MarkdownRenderChild {
     const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
     const anchor = el || this.rowLabel(list[0]);
     if (!list.length || !anchor || this.editing) return;
-    const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
-    const min = day(1);
-    const now = list.length === 1 && list[0].status === STATUS_PROGRESS && list[0].date >= min ? list[0].date : null;
+    const min = today();
+    const one = list.length === 1 ? list[0] : null;
+    const was = one && one.status === STATUS_PROGRESS && one.date >= min ? one.date : null;
     this.anchor = list[0];
     this.editing = true;
     anchor.addClass("is-active");
-    this.picker = new DatePicker(anchor, now, async (chosen) => {
+    this.picker = new DatePicker(anchor, was, async (chosen, at) => {
       this.editing = false;
       this.picker = null;
       this.clearSelection();
-      if (chosen) await this.plugin.setRunning(list, true, chosen);
+      if (chosen) await this.plugin.setRunning(list, true, chosen, at);
       this.render();
     }, () => {
       this.editing = false;
@@ -1346,7 +1353,7 @@ class FocusRenderer extends MarkdownRenderChild {
       this.render();
     }, {
       title: t("returnWhen"), hint: t("returnHint"), tooEarly: t("returnTooSoon"), min, clear: false,
-      quick: [[t("tomorrow"), day(1)], [t("inThree"), day(3)], [t("inWeek"), day(7)]],
+      time: true, at: was ? one.at : null,
     });
   }
 
@@ -1698,7 +1705,9 @@ class FocusRenderer extends MarkdownRenderChild {
     const ul = parent.createEl("ul", { cls: "contains-task-list ft-list" });
     for (const task of tasks) {
       const li = ul.createEl("li", { cls: "task-list-item ft-task" });
-      if (!all && !inFocus(task)) li.addClass("is-later");
+      if (!all && !inFocus(task) && task.status !== STATUS_PROGRESS) li.addClass("is-later");
+      // Sent off and not due back yet: on screen, in its place, but quiet enough to read past.
+      if (waitingBack(task)) { li.addClass("is-waiting"); (this.pending ||= []).push(task); }
       const box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       this.check(li, box, task);
       const text = await this.text(li, task);
@@ -2018,7 +2027,7 @@ module.exports = class FocusTasks extends Plugin {
     // «Marathon», «Areas/Marathon» or «Marathon|alias» all name the same project note
     const project = link(fm.projects);
     return { file, uid: fm.uid ? String(fm.uid) : file.path, text: String(fm.title ?? "").trim() || file.basename,
-      status: String(fm.status ?? STATUS_OPEN).trim().toLowerCase(), date: day(fm.scheduled), due: day(fm.due),
+      status: String(fm.status ?? STATUS_OPEN).trim().toLowerCase(), date: day(fm.scheduled), at: timeOf(fm.scheduled), due: day(fm.due),
       doneDate: day(fm.completedDate), priority: fm.priority || null,
       area: fm.area ? String(fm.area) : null, project, source: link(fm.source), described };
   }
@@ -2031,7 +2040,7 @@ module.exports = class FocusTasks extends Plugin {
   async collect(all) {
     const byArea = new Map();
     const areaOf = (name) => {
-      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [], doneLoose: [], waiting: [], waitingLoose: [] });
+      if (!byArea.has(name)) byArea.set(name, { name, note: null, loose: [], projects: [], focus: 0, later: 0, future: { loose: [], projects: [] }, done: [], doneLoose: [] });
       return byArea.get(name);
     };
     const first = (tasks) => tasks.map((x) => x.date).filter(Boolean).sort()[0] || "9999";
@@ -2040,7 +2049,7 @@ module.exports = class FocusTasks extends Plugin {
     for (const n of this.notes()) {
       const area = areaOf(n.area);
       if (!n.project) { if (!area.note) area.note = n.file; continue; }
-      const bucket = { file: n.file, area, tasks: [], later: [], done: [], waiting: [], first: "9999" };
+      const bucket = { file: n.file, area, tasks: [], later: [], done: [], first: "9999" };
       projects.set(n.file.path, bucket);
       area.buckets = [...(area.buckets || []), bucket];
     }
@@ -2063,15 +2072,10 @@ module.exports = class FocusTasks extends Plugin {
         }
         continue;
       }
-      // Started and out of my hands. Its date is no longer «do it» but «look at it again»: until that
-      // day it waits behind the ▷ of its project or area, and on that day it comes back into the
-      // focus like anything else due — marked ▷, so it reads as «check this», not «do this».
-      if (task.status === STATUS_PROGRESS && !inFocus(task)) {
-        area.waiting.push(task);
-        (bucket ? bucket.waiting : area.waitingLoose).push(task);
-        continue;
-      }
-      const focused = inFocus(task);
+      // Started and out of my hands. It stays on screen where it lives, whatever its date says:
+      // hiding it behind a counter meant losing sight of it, and of its area with it. The row goes
+      // quiet instead and sinks under the work that is actually mine today.
+      const focused = inFocus(task) || task.status === STATUS_PROGRESS;
       area[focused ? "focus" : "later"]++;
       if (bucket) (focused || all ? bucket.tasks : bucket.later).push(task);
       else if (focused || all) area.loose.push(task);
@@ -2080,11 +2084,14 @@ module.exports = class FocusTasks extends Plugin {
     // Notes have no order of their own: a dragged order wins, the rest follows the nearest date and
     // then the name.
     const cmpTask = this.rowOrder();
+    // A task still waiting to come back sits under the ones that are mine today: it is on screen to
+    // be found, not to be done.
+    const cmpRow = (x, y) => (waitingBack(x) ? 1 : 0) - (waitingBack(y) ? 1 : 0) || cmpTask(x, y);
     for (const area of byArea.values()) {
-      area.loose.sort(cmpTask);
+      area.loose.sort(cmpRow);
       area.future.loose.sort(cmpTask);
       for (const b of area.buckets || []) {
-        b.tasks.sort(cmpTask);
+        b.tasks.sort(cmpRow);
         b.later.sort(cmpTask);
       }
       for (const b of area.buckets || []) {
@@ -2096,7 +2103,7 @@ module.exports = class FocusTasks extends Plugin {
         // A project that is on screen owns the rest of itself: its upcoming steps and what it closed
         // today hang off its own row, not in the area's piles. Only a project with nothing due and
         // nothing done today waits whole under «Show upcoming».
-        const here = !!b.tasks.length || !!b.done.length || !!b.waiting.length;
+        const here = !!b.tasks.length || !!b.done.length;
         if (all || here) area.projects.push(b);
         if (!all && !here) area.future.projects.push({ file: b.file, tasks: b.later, later: [], done: [], first: first(b.later) });
       }
@@ -2115,10 +2122,6 @@ module.exports = class FocusTasks extends Plugin {
       a.future.projects.sort(byOrder(a));
       a.done.sort((x, y) => cmp(x.project || "", y.project || "") || cmp(x.text, y.text));
       a.doneLoose.sort((x, y) => cmp(x.text, y.text));
-      const byReview = (x, y) => (x.date || "9999").localeCompare(y.date || "9999") || cmp(x.text, y.text);
-      a.waiting.sort(byReview);
-      a.waitingLoose.sort(byReview);
-      for (const b of a.projects) b.waiting?.sort(byReview);
       for (const b of a.projects) b.done?.sort((x, y) => cmp(x.text, y.text));
     }
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));
@@ -2352,19 +2355,24 @@ module.exports = class FocusTasks extends Plugin {
   // written together with the status — the two can never disagree, and nothing is left running with
   // no way home. Taking it back moves a return day still ahead to today: the task is in my hands as
   // of now, and any other date would only keep it out of the focus I just pulled it into.
-  async setRunning(tasks, running, day = null) {
+  async setRunning(tasks, running, day = null, at = null) {
     const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
     if (!list.length) return;
     await this.track(t("aRunning"), list.map((x) => x.file), async () => {
       for (const task of list) {
         const status = running ? STATUS_PROGRESS : STATUS_OPEN;
         const fields = { status };
-        if (running && day) fields.scheduled = day;
-        if (!running && (!task.date || task.date > today())) fields.scheduled = today();
+        if (running && day) fields.scheduled = at ? `${day}T${at}` : day;
+        // Coming back, the task loses the hour with the status: an hour of the day is the review
+        // moment, and an ordinary task in this list is planned by the day, not by the clock.
+        if (!running) fields.scheduled = !task.date || task.date > today() ? today() : task.date;
         const ok = await this.setFields(task, fields);
         if (ok) {
           task.status = status;
-          if ("scheduled" in fields) task.date = fields.scheduled;
+          if ("scheduled" in fields) {
+            task.date = fields.scheduled ? String(fields.scheduled).slice(0, 10) : null;
+            task.at = timeOf(fields.scheduled);
+          }
         }
       }
       this.refresh();

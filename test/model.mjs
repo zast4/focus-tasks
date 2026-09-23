@@ -87,18 +87,18 @@ test("cancelled and someday tasks stay out of the list", async () => {
   eq(names((await plugin.collect(true))[0].loose), ["Real"]);
 });
 
-test("what is running leaves the focus and waits on its area", async () => {
+test("what is running stays where it lives, under the work that is mine today", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
     taskNote(app, "Running", { area: "Sport", scheduled: DAY(4), status: "in-progress" });
     taskNote(app, "Mine", { area: "Sport", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.loose), ["Mine"], "the focus holds only what is mine to do");
-  eq(names(area.waitingLoose), ["Running"], "and the started one waits on the area's row");
+  eq(names(area.loose), ["Mine", "Running"], "both are on screen, the started one last");
+  eq(area.future.loose, [], "its future date does not move it to the upcoming block");
 });
 
-test("the day it was due to be looked at, a running task comes back to the focus", async () => {
+test("a running task is never out of sight, whatever its day says", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
     taskNote(app, "Ripe today", { area: "Sport", scheduled: TODAY, status: "in-progress" });
@@ -107,17 +107,33 @@ test("the day it was due to be looked at, a running task comes back to the focus
     taskNote(app, "No day at all", { area: "Sport", status: "in-progress" });
   });
   const areas = await plugin.collect(false);
-  eq(areaNames(areas), ["Sport"], "the area is on screen because its review day came");
-  eq(names(areas[0].loose).sort(), ["Overdue", "Ripe today"], "today and overdue are back in the focus");
-  eq(names(areas[0].waitingLoose).sort(), ["No day at all", "Not yet"], "the rest still ticks behind ▷");
+  eq(areaNames(areas), ["Sport"], "the area stays on screen for them");
+  eq(names(areas[0].loose).sort(), ["No day at all", "Not yet", "Overdue", "Ripe today"], "all four are in the list");
+  eq(names(areas[0].loose).slice(2).sort(), ["No day at all", "Not yet"], "the ones not due back yet sit at the bottom");
 });
 
-test("nothing ripe: an area with only running tasks stays off the focus", async () => {
+test("an area whose only work is running still shows it", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Work");
     taskNote(app, "Sent off", { area: "Work", scheduled: DAY(5), status: "in-progress" });
   });
-  eq(areaNames(await plugin.collect(false)), [], "nothing to do and nothing to check");
+  const areas = await plugin.collect(false);
+  eq(areaNames(areas), ["Work"], "the area cannot vanish and take the task with it");
+  eq(names(areas[0].loose), ["Sent off"]);
+});
+
+test("an hour of the day decides when a running task stops being quiet", async () => {
+  const { plugin } = await stand((app) => {
+    areaNote(app, "Work");
+    taskNote(app, "Later today", { area: "Work", scheduled: `${TODAY}T23:59`, status: "in-progress" });
+    taskNote(app, "Earlier today", { area: "Work", scheduled: `${TODAY}T00:00`, status: "in-progress" });
+  });
+  const tasks = plugin.tasks();
+  const at = (name) => tasks.find((x) => x.text === name);
+  eq(at("Later today").date, TODAY, "the day is read as a day");
+  eq(at("Later today").at, "23:59", "and the hour is kept beside it");
+  const area = (await plugin.collect(false))[0];
+  eq(names(area.loose).sort(), ["Earlier today", "Later today"], "both are on screen either way");
 });
 
 test("a task typed under another stays under it, not at the bottom", async () => {
@@ -173,7 +189,8 @@ test("sending a task off names the day it comes back; taking it back puts it in 
   await plugin.setRunning(task(), true, DAY(4));
   eq(task().status, "in-progress");
   eq(task().date, DAY(4), "the status and the day it comes back are written in one change");
-  eq(names((await plugin.collect(false))[0].loose), ["Something of mine"], "и до этого дня её в фокусе нет");
+  eq(names((await plugin.collect(false))[0].loose), ["Something of mine", "Ask the accountant"],
+     "она остаётся на виду, но под сегодняшней работой");
   await plugin.setRunning(task(), false);
   eq(task().status, "open");
   eq(task().date, TODAY, "a return day still ahead would keep it out of the focus it was pulled into");
@@ -191,10 +208,9 @@ test("nothing running left: the project has no block to draw", async () => {
     taskNote(a, "Mine today", { area: "Work", project: "Launch", scheduled: TODAY });
   });
   let area = (await plugin.collect(false))[0];
-  eq(names(area.projects[0].waiting), ["Sent off"]);
+  eq(names(area.projects[0].tasks), ["Mine today", "Sent off"], "the step is in its project, last");
   await plugin.setRunning(plugin.tasks().find((x) => x.text === "Sent off"), false);
   area = (await plugin.collect(false))[0];
-  eq(area.projects[0].waiting, [], "the bucket is empty, so the view has nothing to render");
   eq(names(area.projects[0].tasks).includes("Sent off"), true, "and the task is back among today's steps");
 });
 
@@ -221,10 +237,10 @@ test("a running task with its day taken away comes home instead of being strande
   eq(task().status, "open", "nothing would ever bring it back, so it is mine again");
   eq(task().date, null);
   const area = (await plugin.collect(false))[0];
-  eq(area.waitingLoose, [], "and the ▷ counter has nothing left to hide");
+  eq(names(area.future.loose), ["Sent off"], "an ordinary task with no date: the отложка of its area");
 });
 
-test("a running step waits inside its project, not in the area", async () => {
+test("a running step stays inside its project, not in the area", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
@@ -233,9 +249,8 @@ test("a running step waits inside its project, not in the area", async () => {
     taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.projects[0].waiting), ["Sent to the lawyer"], "the project keeps its own");
-  eq(names(area.waitingLoose), ["Waiting on a reply"], "the area keeps the loose one");
-  eq(names(area.loose), ["Mine today"], "the focus is untouched by either");
+  eq(names(area.projects[0].tasks), ["Sent to the lawyer"], "the step stays inside its project");
+  eq(names(area.loose), ["Mine today", "Waiting on a reply"], "the loose one stays in the area, under today's work");
 });
 
 test("a status nobody knows still counts as open", async () => {
@@ -1482,9 +1497,9 @@ test("fuzz: whatever is in the vault, every open task is somewhere on screen", a
     const all = await plugin.collect(true);
     const shown = new Set();
     for (const area of all) {
-      for (const t of [...area.loose, ...area.future.loose, ...area.done, ...area.waiting]) shown.add(t.file.path);
+      for (const t of [...area.loose, ...area.future.loose, ...area.done]) shown.add(t.file.path);
       for (const pr of [...area.projects, ...area.future.projects])
-        for (const t of [...pr.tasks, ...(pr.later || []), ...(pr.waiting || [])]) shown.add(t.file.path);
+        for (const t of [...pr.tasks, ...(pr.later || [])]) shown.add(t.file.path);
     }
     for (const t of plugin.orphans()) shown.add(t.file.path);
     const open = plugin.tasks().filter((t) => !["done", "cancelled", "someday"].includes(t.status));
@@ -1498,7 +1513,8 @@ test("fuzz: the focus never shows a task that is not due yet", async () => {
     const { plugin } = await stand((app) => junkVault(app, seed));
     const focus = await plugin.collect(false);
     for (const area of focus) {
-      const rows = [...area.loose, ...area.projects.flatMap((p) => p.tasks)];
+      // a running task is the one thing the focus shows with a day ahead: it is quiet, not hidden
+      const rows = [...area.loose, ...area.projects.flatMap((p) => p.tasks)].filter((t) => t.status !== "in-progress");
       const wrong = rows.filter((t) => !(t.date && t.date <= TODAY)).map((t) => `${t.text}: ${t.date}`);
       eq(wrong, [], `seed ${seed}: not due yet but in the focus`);
     }

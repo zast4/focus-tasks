@@ -60,18 +60,20 @@ and do not reopen one that turned done while you were working.
     hint when there are no task notes at all.
   - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
     + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
-  - `waitChip` / `waitingList` + `askReturn` + `setRunning`: `status: in-progress` — started and out of
-    his hands. Sending a task off is a question, not a toggle: `askReturn` opens the picker as a card
-    («Вернуться к задаче», quick chips, `min` = tomorrow, no «clear»), and only an answer writes
-    anything — `setRunning(list, true, day)` puts the status and `scheduled` in one change. Cancel the
-    card and the task is untouched. Its `scheduled` now means «look at it again»: until that day the
-    task waits behind the «▷N» of its project or area (`wait:<path|area>`, closed by default), and on
-    that day it comes back among the rows that are due, marked ▷. The ▷ hands it back into today's
-    focus (`setRunning(list, false)` moves a return day still ahead to today); clicking its date opens
-    the same card again, to put it off further. Taking the day off a running task any other way
-    (`setDate(task, null)`, the hotkey, the menu) hands it back too — a task sent off always has a way
-    home. A dateless running task can still arrive from TaskNotes: it waits behind the counter, and
-    the count is the only thing that shows it. `obsidian_tasks.py` mirrors the rule in `running_ahead()`.
+  - `askReturn` + `setRunning`: `status: in-progress` — started and out of his hands. Sending a task
+    off is a question, not a toggle: `askReturn` opens the picker as a card («Вернуться к задаче»,
+    a plain calendar, an hour beside the day, `min` = today, no «clear»), and only an answer writes
+    anything — `setRunning(list, true, day, at)` puts the status and `scheduled` in one change
+    (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`). Cancel the card and the task is untouched.
+    **The row never leaves the list**: hiding it behind a counter was how a task — and its whole
+    area — went missing, so it stays in its area or project, sorted under today's work (`cmpRow`) and
+    drawn quiet (`is-waiting`). `backDue(task)` is what decides quiet or loud: the day, or the exact
+    moment when an hour was named. Nothing in the vault changes at 16:00, so the renderer keeps a
+    `pending` list of the quiet rows and a one-minute interval redraws when one comes due. ▷ on the
+    row hands it back into today's focus, dropping the hour (`setRunning(list, false)`); clicking its
+    date opens the card again, to put it off further. Clearing the day of a running task any other
+    way (`setDate(task, null)`) hands it back too. `obsidian_tasks.py` keeps such tasks out of the
+    bot's focus reports until the day arrives (`running_ahead()`, day part only).
   - `priorityItems(menu, task|tasks)` + `setPriority`: the levels of TaskNotes' `priority`, and
     `null` to take the mark off; reachable from the dot itself, the row's menu and a selection's.
   - `chip(head, …)`: a counter that folds a part of a row — «⏳N» upcoming (`steps-later:<path>`,
@@ -114,10 +116,12 @@ Other tools read the same notes, so keep these stable:
   - `status`: `open` / `in-progress` / `done` / `cancelled` / `someday`; `in-progress` is TaskNotes'
     own built-in status, so a task sent off reads the same in both plugins, and `obsidian_tasks.py`
     keeps it out of every focus report (`OUT_OF_FOCUS`). The plugin never writes `in-progress` without
-    a `scheduled` day: that day is the one the task comes back on;
+    a `scheduled` day: that day is the one the task comes back on, and it is the only date in this
+    model allowed to carry an hour (`2026-09-24T16:30`); everything else is planned by the day;
   - `area` — the area's name, `projects` — a list with a wikilink to the project's note (absent = a
     loose task; we keep one project per task, the list is TaskNotes' shape);
-  - `scheduled` — the date the focus goes by, `due`, `completedDate` — the day it was checked off;
+  - `scheduled` — the date the focus goes by (`task.date` is its day, `task.at` the hour when one was
+    written), `due`, `completedDate` — the day it was checked off;
   - `priority`: `low` / `normal` / `high`; `title` — the whole text when the file name had to be cut;
   - the body of the note is the task's description;
 - the file name is a readable label only: it follows the text, the `uid` does not;
@@ -172,7 +176,7 @@ touch events on a 390×844 screen.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
 
-It must pass (46/46) before a release, together with the model suite (122) and the phone suite (15). On failure the vault stays open and screenshots go to
+It must pass (46/46) before a release, together with the model suite (123) and the phone suite (15). On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;

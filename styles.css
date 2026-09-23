@@ -135,11 +135,14 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
    answers to it as chips, and the days it will not take drawn but dead — so the month still reads as
    a month. Written heavier than the plain `.ft-picker button` rule above, or that one wins. */
 .ft-picker-caption { margin: 0 0.15rem 0.45rem; font-weight: 600; font-size: 0.95rem; }
-.ft-picker-quick { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.45rem; }
-.ft-picker button.ft-picker-chip { flex: 1 1 auto; min-width: 0; padding: 0.3rem 0.35rem; text-align: center;
-  white-space: nowrap; background: var(--background-modifier-hover); font-size: 0.8rem; }
-.ft-picker button.ft-picker-chip:hover { background: var(--background-modifier-active-hover); color: var(--text-normal); }
-.ft-picker button.ft-picker-chip.is-selected { background: var(--interactive-accent); color: var(--text-on-accent); }
+.ft-picker-field { display: flex; gap: 0.35rem; }
+.ft-picker-field .ft-picker-input { flex: 1 1 auto; min-width: 0; }
+/* `min-width` is the one that decides here: Obsidian gives its inputs one, and a flex basis alone
+   left the hour eating half the card. */
+.ft-picker-time { flex: 0 0 5.2rem; min-width: 0; box-sizing: border-box; height: 2.2rem; padding: 0 0.6rem; border-radius: 8px; font-size: 0.95rem;
+  text-align: center; background: var(--background-modifier-form-field); border: 1px solid var(--background-modifier-border); }
+.ft-picker-time:focus { border-color: var(--interactive-accent); box-shadow: none; }
+.ft-picker-time.is-invalid { border-color: var(--text-error); }
 .ft-picker-day.is-blocked { opacity: 0.3; cursor: default; }
 .ft-picker-day.is-blocked:hover { background: none; }
 .ft-picker-head { display: flex; align-items: center; justify-content: space-between; margin: 0.7rem 0.2rem 0.4rem; }
@@ -208,13 +211,13 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 
 /* What the frontmatter says and the row would otherwise hide: the priority dot right after the text
    (low = «an agent added this, not looked at yet»), and a deadline that falls on another day. */
-/* Running: sent off, delegated, waiting on someone. The ▷ on a header counts what is still ticking;
-   on the day it is due to be looked at the task returns to the focus, marked with a ▷ of its own,
-   which also hands it back. */
-.focus-tasks-view .ft-wait-chip { color: var(--text-muted); }
-.focus-tasks-view .ft-wait-block { margin-top: 0.45em; padding-top: 0.2em;
-  border-top: 1px dashed var(--background-modifier-border); }
-.focus-tasks-view li.ft-task.is-waiting > .ft-text { color: var(--text-muted); }
+/* Running: sent off, delegated, waiting on someone. The row keeps its place in the area or the
+   project — hiding it behind a counter meant losing sight of it — but until the moment it is due
+   back it is drawn quiet: faded text, a faded date, no weight in the list. ▷ hands it back. */
+.focus-tasks-view li.ft-task.is-waiting > .ft-text,
+.focus-tasks-view li.ft-task.is-waiting > .ft-date { color: var(--text-faint); }
+.focus-tasks-view li.ft-task.is-waiting > .ft-date { font-weight: 400; }
+.focus-tasks-view li.ft-task.is-waiting > .ft-box { opacity: 0.45; }
 .focus-tasks-view li.ft-task > .ft-running { flex: none; display: inline-flex; align-items: center; cursor: pointer;
   margin: calc(var(--ft-line) * 0.5em - 0.5rem) 0 0 0.4em; color: var(--text-faint); }
 .focus-tasks-view li.ft-task > .ft-running svg { width: 0.8rem; height: 0.8rem; }
