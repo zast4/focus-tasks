@@ -202,6 +202,9 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view .ft-empty-add { cursor: text; border-radius: 6px; }
 .focus-tasks-view .ft-empty-add:hover { background-color: var(--background-modifier-hover); color: var(--text-normal); }
 .focus-tasks-view .ft-foot { flex-wrap: wrap; }
+/* A test build says so under the list: small, muted, and gone the moment the stable one is back. */
+.focus-tasks-view .ft-foot-badge { align-self: center; padding: 0.05em 0.45em; border-radius: 6px;
+  border: 1px dashed var(--background-modifier-border); color: var(--text-faint); font-size: 0.75em; cursor: default; }
 .focus-tasks-view .ft-foot-gap { flex: 1; }
 
 /* As a pane: room on the left for the grips, a readable width. */

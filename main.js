@@ -107,6 +107,10 @@ const STRINGS = {
     inProgress: "In progress…", backToWork: "Back to the focus",
     waitingSince: "Running; look again {0}", waitingNoDate: "Running; no day set to look again",
     timeHint: "hh:mm",
+    sBuild: "Build", buildStable: "Stable", buildTest: "Test", buildLine: "{0} · {1} · {2}",
+    buildQueue: "test: {0} commits over the stable one", buildOnly: "no test build here",
+    buildUnknown: "installed as usual, not delivered from the workshop", buildSwitched: "Switched to {0}",
+    buildBadge: "test", buildBadgeHelp: "A test build is running. Its stable one is one click away, in the settings.",
     returnWhen: "Look at it again", returnHint: "tomorrow or later",
     returnTooSoon: "The day to come back cannot be in the past",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
@@ -180,6 +184,10 @@ const STRINGS = {
     inProgress: "В работу…", backToWork: "Вернуть в фокус",
     waitingSince: "Запущено; вернуться {0}", waitingNoDate: "Запущено; день возврата не назначен",
     timeHint: "чч:мм",
+    sBuild: "Сборка", buildStable: "Стабильная", buildTest: "Тестовая", buildLine: "{0} · {1} · {2}",
+    buildQueue: "тест: {0} коммитов сверх стабильной", buildOnly: "тестовой сборки нет",
+    buildUnknown: "поставлена обычным способом, не из мастерской", buildSwitched: "Переключил на: {0}",
+    buildBadge: "тест", buildBadgeHelp: "Работает тестовая сборка. Стабильная - в один клик, в настройках.",
     returnWhen: "Вернуться к задаче", returnHint: "завтра или позже",
     returnTooSoon: "День возврата не может быть в прошлом",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
@@ -252,6 +260,13 @@ const day = (value) => {
   if (value === null || value === undefined || value === "") return null;
   const text = value instanceof Date ? moment(value).format("YYYY-MM-DD") : String(value).trim();
   return text.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || text;
+};
+// The line that says which build is running: «Стабильная · 23.09 19:40 · заголовок коммита».
+const buildText = (build) => {
+  if (!build || !build.mode) return null;
+  const name = t(build.mode === "test" ? "buildTest" : "buildStable");
+  const when = build.at ? moment(build.at).format("DD.MM HH:mm") : "";
+  return t("buildLine", name, when, build.subject || build.commit || "").replace(/ · $/, "").replace(/ ·  · /, " · ");
 };
 const isHead = (l) => /^#{1,6}\s/.test(l);
 const headText = (l) => l.replace(/^#+\s*/, "").trim();
@@ -696,6 +711,11 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     foot.createEl("button", { text: t("newArea"), cls: "ft-foot-button ft-new-area" }).onclick = () => p.newArea();
     foot.createEl("button", { text: t("areaFromNote"), cls: "ft-foot-button ft-area-from-note" }).onclick = () => p.areaFromNote();
+    // A test build has to say so where it is used, not only in the settings.
+    if (p.build?.mode === "test") {
+      const badge = foot.createSpan({ cls: "ft-foot-badge", text: t("buildBadge") });
+      badge.setAttr("aria-label", `${t("buildBadgeHelp")}\n${buildText(p.build) || ""}`);
+    }
     foot.createDiv({ cls: "ft-foot-gap" });
     if (!none) {
       for (const [label, icon, open] of [["foldAll", "chevrons-down-up", false], ["unfoldAll", "chevrons-up-down", true]]) {
@@ -1769,6 +1789,8 @@ class FocusSettingTab extends PluginSettingTab {
     const p = this.plugin;
     const s = p.settings;
     containerEl.empty();
+    // Filled in as the folder answers; the div keeps the row at the top meanwhile.
+    this.buildRow(containerEl.createDiv());
     const text = (name, desc, key, placeholder) => new Setting(containerEl).setName(t(name)).setDesc(t(desc))
       .addText((c) => c.setPlaceholder(placeholder || DEFAULTS[key]).setValue(s[key]).onChange(async (v) => {
         s[key] = v.trim() || DEFAULTS[key];
@@ -1806,6 +1828,26 @@ class FocusSettingTab extends PluginSettingTab {
   // TaskNotes on the same notes: one row that says where it stands, one button that moves it on.
   // Installing it by hand is a trip through the plugin browser, and what people miss afterwards is
   // task identification — set to its default, TaskNotes sees none of these notes and looks broken.
+  // «Сборка: Стабильная · 23.09 19:40 · заголовок» and, when a test build is on disk, the two
+  // buttons that swap them. Nothing is shown at all when the plugin was installed the ordinary way.
+  async buildRow(box) {
+    const p = this.plugin;
+    const build = await p.readBuild();
+    const line = buildText(build);
+    if (!line) return;
+    const row = new Setting(box).setName(t("sBuild")).setDesc(line);
+    const modes = await p.buildModes();
+    if (!modes.includes("test")) { row.setDesc(`${line}\n${t("buildOnly")}`); return; }
+    if (build.queue) row.setDesc(`${line}\n${t("buildQueue", build.queue)}`);
+    for (const mode of ["stable", "test"]) {
+      row.addButton((b) => {
+        b.setButtonText(t(mode === "test" ? "buildTest" : "buildStable"));
+        if (build.mode === mode) b.setCta().setDisabled(true);      // already running: nothing to do
+        else b.onClick(() => p.switchBuild(mode));
+      });
+    }
+  }
+
   companion(containerEl) {
     const p = this.plugin;
     const id = COMPANION.id;
@@ -1849,10 +1891,15 @@ class FocusSettingTab extends PluginSettingTab {
 // --- the plugin ------------------------------------------------------------------------------
 
 // The tests reach the small pure helpers through this.
-if (typeof globalThis !== "undefined") globalThis.__ftParseDay = parseDay;
+if (typeof globalThis !== "undefined") { globalThis.__ftParseDay = parseDay; globalThis.__ftBuildText = buildText; }
+
+// The three files that are the plugin, plus the note saying where they came from.
+const BUILD_FILES = ["main.js", "manifest.json", "styles.css"];
+const BUILD_NOTE = "build.json";
 
 module.exports = class FocusTasks extends Plugin {
   async onload() {
+    await this.readBuild();
     const saved = (await this.loadData()) || {};
     this.settings = Object.assign({}, DEFAULTS, saved.settings);
     this.data = { folded: saved.folded || {}, opened: saved.opened || {}, order: Object.assign({ areas: [], projects: {}, tasks: {} }, saved.order) };
@@ -2377,6 +2424,56 @@ module.exports = class FocusTasks extends Plugin {
       }
       this.refresh();
     });
+  }
+
+  // --- which build is running -------------------------------------------------------------------
+
+  // Two builds can live side by side in the plugin's own folder: `builds/stable` — the one that was
+  // merged, `builds/test` — the one handed over for a look. The files next to them are the copy that
+  // actually runs, and `build.json` is the only thing that says which. Installed the ordinary way
+  // (BRAT, the store), none of this exists and the plugin never mentions it.
+  buildPath(...parts) { return [this.manifest.dir, ...parts].join("/"); }
+
+  async readBuild() {
+    this.build = null;
+    try {
+      const raw = await this.app.vault.adapter.read(this.buildPath(BUILD_NOTE));
+      const build = JSON.parse(raw);
+      if (build && typeof build === "object") this.build = build;
+    } catch { /* an ordinary install: no note, no modes, nothing to show */ }
+    return this.build;
+  }
+
+  // Which of the two are on disk. A mode with a missing file is not offered — half a build is worse
+  // than none, and the button would leave the plugin unable to load.
+  async buildModes() {
+    const modes = [];
+    for (const mode of ["stable", "test"]) {
+      const there = await Promise.all(BUILD_FILES.map((f) => this.app.vault.adapter.exists(this.buildPath("builds", mode, f))));
+      if (there.every(Boolean)) modes.push(mode);
+    }
+    return modes;
+  }
+
+  // Copies a build over the running one and restarts the plugin. Obsidian reads main.js and
+  // styles.css only when a plugin is enabled, so nothing short of that swap takes effect.
+  async switchBuild(mode) {
+    const adapter = this.app.vault.adapter;
+    for (const file of BUILD_FILES) {
+      const from = this.buildPath("builds", mode, file);
+      if (!(await adapter.exists(from))) { new Notice(t("changed")); return false; }
+      await adapter.write(this.buildPath(file), await adapter.read(from));
+    }
+    const note = this.buildPath("builds", mode, BUILD_NOTE);
+    if (await adapter.exists(note)) await adapter.write(this.buildPath(BUILD_NOTE), await adapter.read(note));
+    new Notice(t("buildSwitched", t(mode === "test" ? "buildTest" : "buildStable")));
+    // the code being replaced is the code running this line: let the click finish first
+    const app = this.app, id = this.manifest.id;
+    setTimeout(async () => {
+      await app.plugins.disablePlugin(id);
+      await app.plugins.enablePlugin(id);
+    }, 80);
+    return true;
   }
 
   // --- the companion plugin ------------------------------------------------------------------

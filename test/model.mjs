@@ -253,6 +253,14 @@ test("a running step stays inside its project, not in the area", async () => {
   eq(names(area.loose), ["Mine today", "Waiting on a reply"], "the loose one stays in the area, under today's work");
 });
 
+test("the build line says which build is running, in words", async () => {
+  const line = globalThis.__ftBuildText;
+  eq(line(null), null, "an ordinary install has nothing to say");
+  eq(line({ mode: "stable", subject: "Влитое", at: "2026-09-23T19:40:00.000Z" }).includes("Влитое"), true);
+  eq(line({ mode: "test", subject: "На ревью", at: "2026-09-23T19:40:00.000Z" }).includes("На ревью"), true);
+  eq(line({ mode: "stable", commit: "aaaa111" }).includes("aaaa111"), true, "no subject: the commit will do");
+});
+
 test("a status nobody knows still counts as open", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");

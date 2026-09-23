@@ -854,6 +854,43 @@ step("the settings offer TaskNotes, and know when it is not there", async () => 
   if (!want.includes(seen.button)) throw new Error(`the button reads ${J(seen.button)}, expected one of ${J(want)}`);
 });
 
+step("two builds side by side: the settings say which one runs, and swap them", async () => {
+  // the workshop delivers a build by copying it into the folder and leaving a note beside it
+  const dir = path.join(VAULT, ".obsidian/plugins/focus-tasks");
+  const note = (mode, extra = {}) => JSON.stringify({ mode, commit: mode === "test" ? "bbbb222" : "aaaa111",
+    subject: mode === "test" ? "Что-то на ревью" : "Влитое", at: new Date().toISOString(), ...extra });
+  for (const mode of ["stable", "test"]) {
+    fs.mkdirSync(path.join(dir, "builds", mode), { recursive: true });
+    for (const f of ["main.js", "manifest.json", "styles.css"]) fs.copyFileSync(path.join(dir, f), path.join(dir, "builds", mode, f));
+    fs.writeFileSync(path.join(dir, "builds", mode, "build.json"), note(mode, mode === "test" ? { queue: 3 } : {}));
+  }
+  fs.writeFileSync(path.join(dir, "build.json"), note("test", { queue: 3 }));
+  await page.eval(`await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks'); return true;`);
+  await toPane();
+  await until(() => page.eval(`return __ft.view()?.querySelector('.ft-foot-badge')?.textContent`), "the «test» mark under the list");
+  const seen = await page.eval(`app.setting.open(); app.setting.openTabById('focus-tasks'); await new Promise((r) => setTimeout(r, 400));
+    const el = app.setting.activeTab?.containerEl;
+    const row = [...el.querySelectorAll('.setting-item')].find((r) => /Build|Сборка/.test(r.querySelector('.setting-item-name')?.textContent || ''));
+    const out = { desc: row?.querySelector('.setting-item-description')?.textContent || '',
+      buttons: [...(row?.querySelectorAll('button') || [])].map((b) => b.textContent) };
+    app.setting.close();
+    return out;`);
+  if (!/Test|Тестовая/.test(seen.desc) || !seen.desc.includes("Что-то на ревью"))
+    throw new Error(`the row does not say what runs: ${J(seen.desc)}`);
+  if (!/3/.test(seen.desc)) throw new Error(`the row does not say how far ahead the test build is: ${J(seen.desc)}`);
+  if (seen.buttons.length !== 2) throw new Error(`expected both modes as buttons, got ${J(seen.buttons)}`);
+  // back to the stable one, from the settings, without anyone's help
+  await plugin(`return p.switchBuild('stable');`);
+  await until(async () => JSON.parse(fs.readFileSync(path.join(dir, "build.json"), "utf8")).mode === "stable",
+    "the note beside the plugin says stable");
+  await toPane();
+  await until(() => page.eval(`return !__ft.view()?.querySelector('.ft-foot-badge')`), "the mark is gone with the test build");
+  fs.rmSync(path.join(dir, "builds"), { recursive: true, force: true });
+  fs.rmSync(path.join(dir, "build.json"), { force: true });
+  await page.eval(`await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks'); return true;`);
+  await toPane();
+});
+
 step("Russian interface", async () => {
   await plugin(`p.settings.language = 'ru'; p.applyLanguage(); p.refresh(); return true;`);
   await until(() => page.eval(`return !!__ft.text('.ft-foot-button', '+ Область')`), "Russian labels");

@@ -22,10 +22,38 @@ Three words drive it:
   Questions he asked in between are answered again, in full. He reads nothing of the running
   commentary, so the report is the only thing he sees — it always starts at `shipped`, however many
   rounds went into it.
-- **«вливай»** → merge `next` into `notes-model`, copy `main.js`, `manifest.json`,
-  `styles.css` into `~/vaults/Vault/.obsidian/plugins/focus-tasks/`, reload the plugin over
-  CDP, then move the tag: `git tag -f shipped notes-model` and empty the review log down to its
+- **«вливай»** → merge `next` into `notes-model`, deliver it as the stable build, reload the plugin
+  over CDP, then move the tag: `git tag -f shipped notes-model` and empty the review log down to its
   heading. All three suites must be green before the merge.
+- **«покажи» / a test drive** → deliver the current build as `test` without merging. He keeps the
+  stable one a click away and decides afterwards.
+
+## Two builds in his vault
+
+He cannot read git, and the branch checked out here says nothing about what his Obsidian runs — it
+runs the copies in the plugin folder. So the folder itself carries the answer:
+
+```
+.obsidian/plugins/focus-tasks/
+  main.js manifest.json styles.css   ← the copy that runs
+  build.json                         ← which build that copy is: {mode, commit, subject, at, queue}
+  builds/stable/…  builds/test/…     ← the two it can be switched between, each with its own build.json
+```
+
+```sh
+node tools/deliver.mjs --mode test     # hand it over for a look; the stable one stays a click away
+node tools/deliver.mjs --mode stable   # merged: becomes the only build, builds/test is dropped
+```
+
+The plugin reads `build.json` on load (`readBuild`): the first row of its settings says what is
+running («Сборка: Тестовая · 23.09 19:40 · заголовок»), offers both modes as buttons when a test
+build is on disk (`buildModes` / `switchBuild` — copy the files, rewrite `build.json`, restart the
+plugin), and the list carries a small «тест» mark in its footer while a test build runs. Merged means
+one mode: `builds/test` is deleted, the switch has nothing to offer, the mark goes out by itself.
+Installed the ordinary way (BRAT, the store) there is no `build.json` and none of this shows.
+
+**«ревью» starts with the state**: which build he is running, and how many commits are queued over
+the stable one — then the report of everything in the review log.
 
 The branch holds plugin code only. His notes — `Задачи/`, areas and projects — are live data:
 touch them only when he asks, and then write them straight into the vault he is working in, so he
@@ -176,7 +204,7 @@ touch events on a 390×844 screen.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
 
-It must pass (46/46) before a release, together with the model suite (123) and the phone suite (15). On failure the vault stays open and screenshots go to
+It must pass (47/47) before a release, together with the model suite (124) and the phone suite (15). On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;
