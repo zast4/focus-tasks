@@ -619,6 +619,48 @@ step("⌘Z takes back the last change: a tick, a date, a new row", async () => {
   await until(() => !exists(taskPath("Лишняя строка")), "⌘Z removed the note it made");
 });
 
+step("ticking a box does not move the page under the reader", async () => {
+  await toPane();
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (let i = 0; i < 25; i++) await p.createTask('Длинная задача номер ' + i, { area: '💪Sport', project: null }, ${J(TODAY)});
+    p.refresh(); return true;`);
+  await settle();
+  const scroller = `(document.querySelector('.focus-tasks-pane .view-content') || document.querySelector('.focus-tasks-pane'))`;
+  await page.eval(`const s = ${scroller}; s.scrollTop = Math.round(s.scrollHeight / 2); return s.scrollTop;`);
+  await sleep(400);
+  const before = await page.eval(`
+    const s = ${scroller};
+    const top = s.getBoundingClientRect().top;
+    const rows = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')]
+      .filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
+    const name = (r) => r.querySelector('.ft-text').textContent.trim();
+    return { tick: name(rows[1]), mark: name(rows[rows.length - 1]), markY: Math.round(rows[rows.length - 1].getBoundingClientRect().top) };`);
+  // clicking must not be preceded by a scroll of our own: __ft.at() centres the row, which would be
+  // the jump this step is looking for
+  const point = await page.eval(`
+    const row = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(before.tick)});
+    const r = row.querySelector('input').getBoundingClientRect();
+    return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };`);
+  await page.click(point);
+  await taskIs(before.tick, { status: "done" });
+  // the row visibly moves into «Completed»: that is the rebuild this step is about
+  await until(() => page.eval(`return !!__ft.task(${J(before.tick)})?.closest('.ft-done-block')`), "the row moved to Completed");
+  await settle();
+  const after = await page.eval(`
+    const row = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')]
+      .find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(before.mark)});
+    return row ? Math.round(row.getBoundingClientRect().top) : null;`);
+  if (after === null) throw new Error("the row that was on screen is gone: " + J(before));
+  const moved = Math.abs(after - before.markY);
+  if (moved > 30) throw new Error(`the page jumped by ${moved}px when a box was ticked (${J(before)} → ${after})`);
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (const task of p.tasks()) if (task.text.startsWith('Длинная задача номер')) await p.trash(task.file);
+    p.refresh(); return true;`);
+  await settle();
+});
+
 step("the tasks folder setting", async () => {
   await plugin(`p.settings.tasksFolder = 'Задачи 2'; await p.saveAll(); p.refresh(); return true;`);
   await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .ft-onboarding') || __ft.all('li.ft-task', __ft.view()).length === 0`), "no tasks from the new folder");
@@ -651,6 +693,90 @@ step("a ```focus-tasks``` block in a note renders the same list, and its boxes w
   await until(() => page.eval(`return !!(${row("Call coach")})?.closest('.ft-done-block')`), "the row moved to Completed in the block");
   await page.click(await page.eval(`return __ft.at((${row("Call coach")}).querySelector('input'))`));
   await taskIs("Call coach", { status: "open" });
+
+  // the same list inside a note must not throw the page around when a box is ticked
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (let i = 0; i < 25; i++) await p.createTask('Строка в блоке ' + i, { area: '💪Sport', project: null }, ${J(TODAY)});
+    p.refresh(); return true;`);
+  await settle();
+  const place = await page.eval(`
+    const view = ${block};
+    const p = app.plugins.plugins['focus-tasks'];
+    const s = [...p.views].find((v) => v.containerEl.closest('.focus-tasks-view') === view || v.containerEl === view || view.contains(v.containerEl))?.scroller
+      || view.closest('.markdown-preview-view, .view-content');
+    if (!s) return { error: 'no scroller' };
+    s.scrollTop = Math.round(s.scrollHeight / 2);
+    await new Promise((r) => setTimeout(r, 400));
+    const top = s.getBoundingClientRect().top;
+    const name = (r) => r.querySelector('.ft-text').textContent.trim();
+    const rows = [...view.querySelectorAll('li.ft-task')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
+    if (rows.length < 3) return { error: 'only ' + rows.length + ' rows on screen in the block' };
+    const box = rows[1].querySelector('input');
+    const b = box.getBoundingClientRect();
+    return { tick: name(rows[1]), mark: name(rows[rows.length - 1]), markY: Math.round(rows[rows.length - 1].getBoundingClientRect().top),
+      point: { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } };`);
+  if (place.error) throw new Error("the block could not be measured: " + place.error);
+  await page.click(place.point);
+  await taskIs(place.tick, { status: "done" });
+  await until(() => page.eval(`return !!(${block}).querySelector('.ft-done-block')`), "Completed appeared in the block");
+  await settle();
+  const moved = await page.eval(`
+    const view = ${block};
+    const row = [...view.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(place.mark)});
+    return row ? Math.round(row.getBoundingClientRect().top) : null;`);
+  if (moved === null) throw new Error("the row that was on screen is gone from the block");
+  if (Math.abs(moved - place.markY) > 40) throw new Error(`the note jumped by ${Math.abs(moved - place.markY)}px when a box was ticked in the block`);
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (const task of p.tasks()) if (task.text.startsWith('Строка в блоке')) await p.trash(task.file);
+    p.refresh(); return true;`);
+  await settle();
+});
+
+step("in Live Preview the note holds its place when a box is ticked", async () => {
+  // Live Preview scrolls in the editor's own scroller, not the one reading mode uses: the list has to
+  // hold on to that one, or the note jumps on every tick.
+  await page.eval(`
+    const leaf = app.workspace.getLeavesOfType('markdown').find((l) => l.view.file?.path === 'Dashboard.md');
+    app.workspace.setActiveLeaf(leaf, { focus: true });
+    await leaf.setViewState({ type: 'markdown', state: { file: 'Dashboard.md', mode: 'source', source: false } });
+    const p = app.plugins.plugins['focus-tasks'];
+    for (let i = 0; i < 25; i++) await p.createTask('Живая строка ' + i, { area: '💪Sport', project: null }, ${J(TODAY)});
+    p.refresh();
+    return true;`);
+  await settle();
+  const place = await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    const view = [...p.views].find((v) => !v.leaf && v.containerEl.getClientRects().length);
+    if (!view) return { error: 'no block on screen' };
+    const s = view.scroller;
+    if (!s) return { error: 'no scroller' };
+    s.scrollTop = Math.round(s.scrollHeight / 2);
+    await new Promise((r) => setTimeout(r, 400));
+    const top = s.getBoundingClientRect().top;
+    const name = (r) => r.querySelector('.ft-text').textContent.trim();
+    const rows = [...view.containerEl.querySelectorAll('li.ft-task')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
+    if (rows.length < 3) return { error: 'only ' + rows.length + ' rows on screen' };
+    const b = rows[1].querySelector('input').getBoundingClientRect();
+    return { scroller: s.className.slice(0, 30), tick: name(rows[1]), mark: name(rows[rows.length - 1]),
+      markY: Math.round(rows[rows.length - 1].getBoundingClientRect().top), point: { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } };`);
+  if (place.error) throw new Error("Live Preview could not be measured: " + place.error);
+  await page.click(place.point);
+  await taskIs(place.tick, { status: "done" });
+  await settle();
+  const moved = await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    const view = [...p.views].find((v) => !v.leaf && v.containerEl.getClientRects().length);
+    const row = [...view.containerEl.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(place.mark)});
+    return row ? Math.round(row.getBoundingClientRect().top) : null;`);
+  if (moved === null) throw new Error("the row that was on screen is gone: " + J(place));
+  if (Math.abs(moved - place.markY) > 40) throw new Error(`the note jumped by ${Math.abs(moved - place.markY)}px in Live Preview (scroller ${place.scroller})`);
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (const task of p.tasks()) if (task.text.startsWith('Живая строка')) await p.trash(task.file);
+    p.refresh(); return true;`);
+  await settle();
 });
 
 step("closing the pane takes the editor, the picker and the hotkeys with it", async () => {

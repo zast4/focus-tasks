@@ -452,7 +452,19 @@ class FocusRenderer extends MarkdownRenderChild {
     this.fresh.set(el, item);
   }
 
-  get scroller() { return this.containerEl.closest(".markdown-preview-view, .view-content"); }
+  // The element that actually scrolls around the list: the pane's own content, a note's preview, or
+  // the editor's scroller in Live Preview. Picking the wrong one means the page jumps on every
+  // rebuild, because the scroll is kept on something that does not scroll.
+  get scroller() {
+    for (let el = this.containerEl.parentElement; el; el = el.parentElement) {
+      if (el.scrollHeight > el.clientHeight + 1) {
+        const how = getComputedStyle(el).overflowY;
+        if (how === "auto" || how === "scroll" || el.matches(".markdown-preview-view, .view-content, .cm-scroller")) return el;
+      }
+      if (el.classList?.contains("workspace-leaf")) break;
+    }
+    return this.containerEl.closest(".cm-scroller, .markdown-preview-view, .view-content");
+  }
 
   onload() {
     // The list takes keyboard focus when it is worked with: otherwise the keys go to whatever was
@@ -590,11 +602,46 @@ class FocusRenderer extends MarkdownRenderChild {
       return;
     }
     if (old) this.removeChild(old);
+    // Ticking a box moves its row to «Completed» at the bottom, so everything below it shifts up. The
+    // page must not move under the reader: a row that stays on screen is remembered, and after the
+    // swap the scroll is nudged so that row keeps the same place in the window.
+    const anchor = this.anchorRow();
     this.containerEl.addClass("focus-tasks-view");
     this.containerEl.replaceChildren(...el.childNodes);
     this.items = this.fresh;
+    this.keepPlace(anchor);
     this.paint();
     this.hold();
+  }
+
+  // The row to steer by when the list is rebuilt: the first one that is fully on screen and is not
+  // the row being ticked (that one is about to move), plus where it sits in the window.
+  anchorRow() {
+    const scroller = this.scroller;
+    if (!scroller) return null;
+    const top = scroller.getBoundingClientRect().top;
+    for (const [el, task] of this.rows()) {
+      if (el.hasClass("is-toggling")) continue;
+      const y = el.getBoundingClientRect().top;
+      if (y >= top - 1 && y <= top + scroller.clientHeight) return { uid: task.uid, offset: y - top, scrollTop: scroller.scrollTop };
+    }
+    return { uid: null, offset: 0, scrollTop: scroller.scrollTop };
+  }
+
+  // Puts the remembered row back where it was; with nothing to steer by, at least the raw position
+  // is kept (emptying the container alone would clamp it to the top).
+  keepPlace(anchor) {
+    const scroller = this.scroller;
+    if (!anchor || !scroller) return;
+    if (anchor.uid) {
+      const row = this.rows().find(([, task]) => task.uid === anchor.uid);
+      if (row) {
+        const drift = row[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.offset;
+        if (Math.abs(drift) > 1) scroller.scrollTop += drift;
+        return;
+      }
+    }
+    if (Math.abs(scroller.scrollTop - anchor.scrollTop) > 1) scroller.scrollTop = anchor.scrollTop;
   }
 
   // The task rows on screen, top down: [row, task].

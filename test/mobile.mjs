@@ -219,6 +219,43 @@ step("the bottom buttons are reachable and readable", async () => {
   if (small.length) throw new Error("too small to tap: " + J(small));
 });
 
+step("ticking a box does not throw the phone screen around", async () => {
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (let i = 0; i < 20; i++) await p.createTask('Строка ' + i, { area: '🧤Рутина', project: null }, ${J(TODAY)});
+    p.refresh(); return true;`);
+  await sleep(900);
+  const place = await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    const view = [...p.views][0];
+    const s = view.scroller;
+    s.scrollTop = Math.round(s.scrollHeight / 2);
+    await new Promise((r) => setTimeout(r, 400));
+    const top = s.getBoundingClientRect().top;
+    const name = (r) => r.querySelector('.ft-text').textContent.trim();
+    const rows = [...view.containerEl.querySelectorAll('li.ft-task')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 80; });
+    if (rows.length < 3) return { error: 'only ' + rows.length + ' rows on screen' };
+    const b = rows[1].querySelector('input').getBoundingClientRect();
+    return { tick: name(rows[1]), mark: name(rows[rows.length - 1]), markY: Math.round(rows[rows.length - 1].getBoundingClientRect().top),
+      point: { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) } };`);
+  if (place.error) throw new Error("the phone list could not be measured: " + place.error);
+  await page.tap(place.point);
+  await taskIs(place.tick, { status: "done" });
+  await sleep(1200);
+  const moved = await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    const view = [...p.views][0];
+    const row = [...view.containerEl.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(place.mark)});
+    return row ? Math.round(row.getBoundingClientRect().top) : null;`);
+  if (moved === null) throw new Error("the row that was on screen is gone: " + J(place));
+  if (Math.abs(moved - place.markY) > 40) throw new Error(`the screen jumped by ${Math.abs(moved - place.markY)}px when a box was tapped`);
+  await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    for (const task of p.tasks()) if (task.text.startsWith('Строка ')) await p.trash(task.file);
+    p.refresh(); return true;`);
+  await sleep(600);
+});
+
 step("a picture of the list on a phone, for the record", async () => {
   await page.eval(`app.plugins.plugins['focus-tasks'].refresh(); return true;`);
   await sleep(600);
