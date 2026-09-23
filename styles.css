@@ -117,6 +117,9 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 .focus-tasks-view .ft-date.is-today { color: var(--color-green); }
 .focus-tasks-view .ft-date.is-past { color: var(--text-error); }
 .focus-tasks-view .ft-date.is-future { color: var(--interactive-accent); }
+/* The day a running task comes back is not a deadline and not today's work: it is quiet, whatever
+   day it names. Green «Сегодня 20:00» in the «not today» group read as work for today. */
+.focus-tasks-view .ft-date.is-ahead { color: var(--text-muted); }
 .focus-tasks-view .ft-date.is-empty { color: var(--text-faint); opacity: 0; }
 .focus-tasks-view li.ft-task:hover > .ft-date.is-empty { opacity: 0.8; }
 body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }

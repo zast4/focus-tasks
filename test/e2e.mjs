@@ -513,6 +513,11 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
     return JSON.stringify({ first: !!rows[0]?.querySelector('.ft-running'),
       split: !!split, before: split ? [...block.children].indexOf(rows[0].closest('ul')) < [...block.children].indexOf(split) : null });`));
   if (!grouped.first) throw new Error("a started task is not at the top of what is not today");
+  // its date is a moment to come back, not a deadline: never painted as today's work
+  const painted = await page.eval(`
+    const d = __ft.task('Ask the lawyer').querySelector('.ft-date');
+    return d.className + " | " + getComputedStyle(d).color;`);
+  if (/is-today|is-past/.test(painted)) throw new Error(`the return moment is painted like a due date: ${J(painted)}`);
   // the group must be told apart from today's work: without a line of its own it read as the focus
   const edge = await page.eval(`
     const b = __ft.task('Ask the lawyer').closest('.ft-future-block');

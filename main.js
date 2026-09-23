@@ -1414,7 +1414,10 @@ class FocusRenderer extends MarkdownRenderChild {
     const now = today(), yesterday = moment().subtract(1, "day").format("YYYY-MM-DD");
     const named = task.date === now ? t("today") : task.date === yesterday ? t("yesterday") : moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY");
     el.setText(task.at ? `${named} ${task.at}` : named);
-    el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
+    // A task still waiting to come back has a moment, not a due date: «Сегодня 20:00» in the green
+    // of today's work read as work for today, in a group that is explicitly not today.
+    if (waitingBack(task)) el.addClass("is-ahead");
+    else el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
     // Late is said in words as well as in red: colour alone is not something everyone can read, and
     // the number of days is the ZFG signal that a task is stuck.
     const late = task.date < now ? moment(now).diff(moment(task.date), "days") : 0;
