@@ -901,8 +901,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // unchecks its task. Not selectable, not draggable.
   async completed(box, done, key, inProject = false) {
     const p = this.plugin;
-    const open = p.isShown(key, false);
-    if (!open) return;
+    if (!done.length || !p.isShown(key, false)) return;   // an empty block still draws its hairline
     // No heading of its own — the ✓ in the area's title counts them and folds them. A hairline is
     // enough to say «this part of the day is over».
     const block = box.createDiv({ cls: "ft-done-block" });  // not a direct list of the area: «+» adds after the loose tasks
@@ -1044,7 +1043,9 @@ class FocusRenderer extends MarkdownRenderChild {
     this.more(head, (menu) => this.projectMenu(menu, area, project, head));
     this.grip(head, { type: "project", area, project });
     if (!open) return;
-    if (!project.tasks.length && !laterOpen && !doneOpen && !waitOpen) return;
+    const shows = project.tasks.length || (waitOpen && project.waiting?.length)
+      || (laterOpen && project.later?.length) || (doneOpen && project.done?.length);
+    if (!shows) return;   // an empty body still draws the line under the project's caret
     const body = box.createDiv({ cls: "ft-project-body" });
     if (project.tasks.length) await this.list(body, project.tasks, all);
     if (waitOpen) await this.waitingList(body, project.waiting, waitKey);
@@ -1064,7 +1065,9 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // The rows themselves: the date reads as «look again then», and ▷ on a row hands it back to me.
   async waitingList(box, waiting, key) {
-    if (!this.plugin.isShown(key, true)) return;
+    // Nothing left in it: the block would still draw its dashed line, and a fold left open would
+    // keep that line under the list long after the last task came back.
+    if (!waiting.length || !this.plugin.isShown(key, true)) return;
     const block = box.createDiv({ cls: "ft-wait-block" });
     await this.list(block, waiting);
     for (const li of block.querySelectorAll("li.ft-task")) li.addClass("is-waiting");

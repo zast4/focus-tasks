@@ -478,6 +478,10 @@ step("«In progress» takes a task out of the focus and the area's ▷ brings it
   await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-running'))`, "the ▷ on the row");
   await taskIs("Ask the lawyer", { status: "open" }, "the row's ▷ hands it back");
   await until(() => page.eval(`return !!__ft.task('Ask the lawyer') && !__ft.task('Ask the lawyer').closest('.ft-wait-block')`), "back in the focus");
+  // the fold stays open, but with nothing in it the block must not leave its dashed line behind
+  await settle();
+  if (await page.eval(`return !!__ft.view().querySelector('.ft-wait-block')`))
+    throw new Error("an empty «running» block is still on screen");
   fs.unlinkSync(path.join(VAULT, taskPath("Ask the lawyer")));
   await settle();
 });

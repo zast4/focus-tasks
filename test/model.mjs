@@ -168,6 +168,20 @@ test("sending a task off and taking it back is one flag, and ⌘Z undoes it", as
   eq(task().status, "in-progress", "⌘Z puts it back where it was");
 });
 
+test("nothing running left: the project has no block to draw", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Sent off", { area: "Work", project: "Launch", scheduled: TODAY, status: "in-progress" });
+  });
+  let area = (await plugin.collect(false))[0];
+  eq(names(area.projects[0].waiting), ["Sent off"]);
+  await plugin.setRunning(plugin.tasks()[0], false);
+  area = (await plugin.collect(false))[0];
+  eq(area.projects[0].waiting, [], "the bucket is empty, so the view has nothing to render");
+  eq(names(area.projects[0].tasks), ["Sent off"], "and the task is back among the steps");
+});
+
 test("a running step waits inside its project, not in the area", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
