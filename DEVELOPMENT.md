@@ -60,6 +60,8 @@ and do not reopen one that turned done while you were working.
     hint when there are no task notes at all.
   - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
     + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
+  - `priorityItems(menu, task|tasks)` + `setPriority`: the levels of TaskNotes' `priority`, and
+    `null` to take the mark off; reachable from the dot itself, the row's menu and a selection's.
   - `chip(head, …)`: a counter that folds a part of a row — «⏳N» upcoming (`steps-later:<path>`,
     closed by default) and «✓N» closed today (`done:<path>` / `done:<area>`, open by default). On a
     project it also unfolds the project, or the rows it opens would stay hidden.

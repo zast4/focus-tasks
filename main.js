@@ -95,11 +95,11 @@ const STRINGS = {
     repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
     undoKept: "Put back {0} of {1}: the rest changed in the meantime",
     allDone: "done {0}", undone: "Undone: {0}", nothingToUndo: "Nothing to undo", cmdUndo: "Undo the last change",
-    aDate: "the date", aMove: "the move", aRename: "the new text", aDone: "completing the task", aNew: "the new task", aProject: "making it a project", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
+    aDate: "the date", aPriority: "the priority", aMove: "the move", aRename: "the new text", aDone: "completing the task", aNew: "the new task", aProject: "making it a project", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
     orphans: "Without an area", orphansHelp: "These tasks are in no area, so the focus cannot show them. Pick a place for each.",
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
-    dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Priority", priorityHigh: "High priority",
+    dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -163,11 +163,11 @@ const STRINGS = {
     repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
     undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
     allDone: "сделано {0}", undone: "Отменено: {0}", nothingToUndo: "Нечего отменять", cmdUndo: "Отменить последнее действие",
-    aDate: "дата", aMove: "перенос", aRename: "текст задачи", aDone: "выполнение задачи", aNew: "новая задача", aProject: "превращение в проект", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
+    aDate: "дата", aPriority: "приоритет", aMove: "перенос", aRename: "текст задачи", aDone: "выполнение задачи", aNew: "новая задача", aProject: "превращение в проект", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
     orphans: "Без области", orphansHelp: "Эти задачи ни в одной области, поэтому фокус их не показывает. Разложи их по местам.",
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
-    dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Приоритет", priorityHigh: "Высокий приоритет",
+    dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
@@ -1202,6 +1202,12 @@ class FocusRenderer extends MarkdownRenderChild {
       const rank = ["high", "highest"].includes(level) ? "high" : ["low", "lowest"].includes(level) ? "low" : "normal";
       const dot = li.createSpan({ cls: `ft-priority is-${rank}` });
       dot.setAttr("aria-label", t(rank === "high" ? "priorityHigh" : rank === "low" ? "priorityLow" : "priorityNormal"));
+      dot.onclick = (e) => {
+        e.stopPropagation();
+        const menu = new Menu();
+        this.priorityItems(menu, this.selected.has(task) && this.selected.size > 1 ? this.chosen() : task);
+        showMenu(menu, e);
+      };
     }
     if (task.due && task.due !== task.date) {
       const due = li.createSpan({ cls: "ft-due" });
@@ -1485,6 +1491,8 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem((i) => i.setTitle(t("moveUp")).setIcon("arrow-up").onClick(() => this.shift(task, -1)));
     menu.addItem((i) => i.setTitle(t("moveDown")).setIcon("arrow-down").onClick(() => this.shift(task, 1)));
     menu.addSeparator();
+    this.priorityItems(menu, task);
+    menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("place")).setIcon("folder-input").onClick(() => p.placeTask(task)));
     menu.addItem((i) => i.setTitle(t("toProject")).setIcon("folder-plus").onClick(() => p.toProject(task)));
     menu.addSeparator();
@@ -1494,6 +1502,21 @@ class FocusRenderer extends MarkdownRenderChild {
       if (i.setWarning) i.setWarning(true);
     });
     showMenu(menu, e);
+  }
+
+  // The dot on a row is a mark, and a mark you cannot take off is a nuisance: every level, and
+  // «no priority», are one click away — in the row's menu and on the dot itself.
+  priorityItems(menu, tasks) {
+    const list = Array.isArray(tasks) ? tasks : [tasks];
+    const now = new Set(list.map((x) => String(x.priority || "").toLowerCase()));
+    const item = (title, icon, value) => menu.addItem((i) => {
+      i.setTitle(title).setIcon(icon).onClick(() => this.plugin.setPriority(list, value));
+      if (now.size === 1 && now.has(String(value || "")) && i.setChecked) i.setChecked(true);
+    });
+    item(t("priorityHigh"), "flame", "high");
+    item(t("priorityNormal"), "circle", "normal");
+    item(t("priorityLow"), "circle-dot", "low");
+    item(t("priorityNone"), "circle-slash", null);
   }
 
   // The menu of a selected row when there are several: one date for all of them.
@@ -1506,6 +1529,8 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => this.dateSelection(day(1))));
     menu.addItem((i) => i.setTitle(t("pickDate")).setIcon("calendar-days").onClick(() => this.pickDates(task)));
     menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => this.dateSelection(null)));
+    menu.addSeparator();
+    this.priorityItems(menu, this.chosen());
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
     showMenu(menu, e);
@@ -2155,6 +2180,20 @@ module.exports = class FocusTasks extends Plugin {
       if (n > 200) break;
     }
     return n;
+  }
+
+  // One level for one task or for a whole selection. `null` takes the mark off — the dot on a row
+  // usually means «an agent put this here», and after a look it should be possible to drop it.
+  async setPriority(tasks, value) {
+    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
+    if (!list.length) return;
+    await this.track(t("aPriority"), list.map((x) => x.file), async () => {
+      for (const task of list) {
+        const ok = await this.setFields(task, { priority: value });
+        if (ok) task.priority = value;
+      }
+      this.refresh();
+    });
   }
 
   // --- the companion plugin ------------------------------------------------------------------

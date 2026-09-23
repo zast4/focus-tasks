@@ -448,6 +448,21 @@ step("the row shows what the note says: a priority dot and a deadline on another
   await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the badges are gone again");
 });
 
+step("the dot a robot leaves can be taken off from the row itself", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Added by a script")),
+    `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: low\n---\n`);
+  await until(() => page.eval(`return !!__ft.task('Added by a script')?.querySelector('.ft-priority.is-low')`), "the low dot is on the row");
+  await click(`__ft.at(__ft.task('Added by a script').querySelector('.ft-priority'))`, "the dot");
+  await menu("No priority");
+  await taskIs("Added by a script", { priority: null }, "the mark came off");
+  await until(() => page.eval(`return !__ft.task('Added by a script')?.querySelector('.ft-priority')`), "and the dot is gone");
+  await click(`__ft.grip(__ft.task('Added by a script'))`);
+  await menu("High priority");
+  await taskIs("Added by a script", { priority: "high" }, "and the menu can set one");
+  fs.unlinkSync(path.join(VAULT, taskPath("Added by a script")));
+  await settle();
+});
+
 step("a task with no area is not lost: «Without an area» places it", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Nowhere")), `---\ntype: задача\nstatus: open\nscheduled: ${TODAY}\n---\n`);
   await until(() => page.eval(`return !!__ft.text('.ft-orphans-title', 'Without an area · 1')`), "the block of lost tasks");

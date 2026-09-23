@@ -227,6 +227,22 @@ test("a text with characters a file name cannot hold still works", async () => {
   ok(!/[\\/:"]/.test(task.file.basename), "the file name is safe: " + task.file.basename);
 });
 
+test("the priority mark can be taken off, and put back", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    taskNote(a, "Agent added this", { area: "Work", scheduled: TODAY, priority: "low" });
+  });
+  const task = () => plugin.tasks().find((x) => x.text === "Agent added this");
+  eq(task().priority, "low", "the dot is there to start with");
+  await plugin.setPriority(task(), null);
+  eq(task().priority, null, "and it comes off");
+  eq("priority" in frontmatter(app, task().file.path), false, "the key is gone from the note");
+  await plugin.setPriority(task(), "high");
+  eq(task().priority, "high", "a level can be set just as easily");
+  await plugin.undo();
+  eq(task().priority, null, "⌘Z takes the level back");
+});
+
 test("a project on screen keeps its own upcoming steps, out of the area's pile", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");

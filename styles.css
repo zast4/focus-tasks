@@ -197,7 +197,8 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 
 /* What the frontmatter says and the row would otherwise hide: the priority dot right after the text
    (low = «an agent added this, not looked at yet»), and a deadline that falls on another day. */
-.focus-tasks-view li.ft-task > .ft-priority { flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
+/* The dot is a button: its menu sets the level or takes the mark off. */
+.focus-tasks-view li.ft-task > .ft-priority { cursor: pointer; flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
   border-radius: 50%; background: var(--text-faint); }
 .focus-tasks-view .ft-priority.is-low { background: none; box-shadow: inset 0 0 0 1px var(--text-faint); }
 .focus-tasks-view .ft-priority.is-normal { background: var(--color-orange); }

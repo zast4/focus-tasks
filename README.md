@@ -42,6 +42,7 @@ What you can do in the view:
 |---|---|
 | Complete a task | click its checkbox; for the rest of the day it stays where it lives — a step inside its project, a loose task at the bottom of its area — under a hairline, and the green ✓N on that row folds it away (its box brings it back) |
 | See what is ahead in a project | the ⏳N on the project's row opens its upcoming and undated steps, in the project itself |
+| Priority | the dot on a row opens the levels — high, normal, low, or none at all; the same is in the row's menu, and in the menu of a selection it sets them all |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** cancels |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date |
@@ -199,6 +200,10 @@ passes (`--keep` leaves it).
 проекта или области считает сделанное и сворачивает его одним кликом. Будущие и бессрочные шаги
 проекта лежат за его же ⏳N, а не в общем «Показать будущее» области: видно, что осталось именно
 в этом проекте.
+
+Точка на строке - приоритет задачи (`priority` в заметке). Клик по ней открывает уровни:
+высокий, обычный, низкий и «без приоритета» - последний убирает метку совсем. То же есть в меню
+строки и в меню выделения, где уровень ставится сразу всем выбранным.
 
 Проект, в котором сегодня закрыли последнюю задачу, тоже не исчезает: до конца дня он стоит
 на своём месте, вместо счётчика — зелёное «сделано N», а «+» рядом заводит следующий шаг.
