@@ -854,6 +854,16 @@ step("the settings offer TaskNotes, and know when it is not there", async () => 
   if (!want.includes(seen.button)) throw new Error(`the button reads ${J(seen.button)}, expected one of ${J(want)}`);
 });
 
+step("an ordinary install is told the plugin is unfinished, and where to ask", async () => {
+  await toPane();
+  const strip = await page.eval(`
+    const s = __ft.view()?.querySelector('.ft-wip');
+    return JSON.stringify({ text: s?.textContent || '', href: s?.querySelector('a')?.getAttribute('href') || '' });`);
+  const seen = JSON.parse(strip);
+  if (!seen.text.includes("@zastashkov") || seen.href !== "https://t.me/zastashkov")
+    throw new Error(`the notice does not point at Telegram: ${strip}`);
+});
+
 step("two builds side by side: the settings say which one runs, and swap them", async () => {
   // the workshop delivers a build by copying it into the folder and leaving a note beside it
   const dir = path.join(VAULT, ".obsidian/plugins/focus-tasks");
@@ -868,6 +878,8 @@ step("two builds side by side: the settings say which one runs, and swap them", 
   await page.eval(`await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks'); return true;`);
   await toPane();
   await until(() => page.eval(`return __ft.view()?.querySelector('.ft-foot-badge')?.textContent`), "the «test» mark under the list");
+  if (await page.eval(`return !!__ft.view()?.querySelector('.ft-wip')`))
+    throw new Error("a delivered build still shows the «work in progress» notice");
   const seen = await page.eval(`app.setting.open(); app.setting.openTabById('focus-tasks'); await new Promise((r) => setTimeout(r, 400));
     const el = app.setting.activeTab?.containerEl;
     const row = [...el.querySelectorAll('.setting-item')].find((r) => /Build|Сборка/.test(r.querySelector('.setting-item-name')?.textContent || ''));

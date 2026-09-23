@@ -202,6 +202,12 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view .ft-empty-add { cursor: text; border-radius: 6px; }
 .focus-tasks-view .ft-empty-add:hover { background-color: var(--background-modifier-hover); color: var(--text-normal); }
 .focus-tasks-view .ft-foot { flex-wrap: wrap; }
+/* For people who installed this from GitHub: the plugin is unfinished, and the line says so with a
+   way to ask when it will not be. The author's own builds carry a build.json and never show it. */
+.focus-tasks-view .ft-wip { margin: 0 0 0.6em; padding: 0.5em 0.7em; border-radius: 8px;
+  background: var(--background-modifier-hover); color: var(--text-muted); font-size: 0.85em; line-height: 1.45; }
+.focus-tasks-view .ft-wip a { color: var(--text-accent); }
+
 /* A test build says so under the list: small, muted, and gone the moment the stable one is back. */
 .focus-tasks-view .ft-foot-badge { align-self: center; padding: 0.05em 0.45em; border-radius: 6px;
   border: 1px dashed var(--background-modifier-border); color: var(--text-faint); font-size: 0.75em; cursor: default; }

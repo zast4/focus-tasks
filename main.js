@@ -107,6 +107,8 @@ const STRINGS = {
     inProgress: "In progress…", backToWork: "Back to the focus",
     waitingSince: "Running; look again {0}", waitingNoDate: "Running; no day set to look again",
     timeHint: "hh:mm",
+    wip: "Focus Tasks is still being built. A stable version is on the way — write to me on Telegram to hear when it lands:",
+    wipWho: "@zastashkov", sWip: "Work in progress",
     sBuild: "Build", buildStable: "Stable", buildTest: "Test", buildLine: "{0} · {1} · {2}",
     buildQueue: "test: {0} commits over the stable one", buildOnly: "no test build here",
     buildUnknown: "installed as usual, not delivered from the workshop", buildSwitched: "Switched to {0}",
@@ -184,6 +186,8 @@ const STRINGS = {
     inProgress: "В работу…", backToWork: "Вернуть в фокус",
     waitingSince: "Запущено; вернуться {0}", waitingNoDate: "Запущено; день возврата не назначен",
     timeHint: "чч:мм",
+    wip: "Focus Tasks ещё в работе. Стабильная версия готовится - напишите мне в Telegram, и я скажу, когда она выйдет:",
+    wipWho: "@zastashkov", sWip: "Плагин в работе",
     sBuild: "Сборка", buildStable: "Стабильная", buildTest: "Тестовая", buildLine: "{0} · {1} · {2}",
     buildQueue: "тест: {0} коммитов сверх стабильной", buildOnly: "тестовой сборки нет",
     buildUnknown: "поставлена обычным способом, не из мастерской", buildSwitched: "Переключил на: {0}",
@@ -671,6 +675,14 @@ class FocusRenderer extends MarkdownRenderChild {
     this.inner = this.addChild(new Component());
     const el = createDiv();
     const none = !p.notes().length;
+    // Anyone who installed this from GitHub is looking at unfinished work, and has no way of knowing
+    // it. The builds delivered into the author's own vault carry a `build.json`; nobody else's does,
+    // and that is exactly who this line is for.
+    if (!p.build) {
+      const strip = el.createDiv({ cls: "ft-wip" });
+      strip.createSpan({ text: t("wip") + " " });
+      strip.createEl("a", { text: t("wipWho"), href: "https://t.me/zastashkov" });
+    }
     // Coming from 0.1.0 the areas are still there but every task is a checkbox line, which this
     // version does not read: without a word the list just looks broken.
     const old010 = !p.tasks().length ? await p.checkboxLeftovers() : 0;
@@ -1834,7 +1846,12 @@ class FocusSettingTab extends PluginSettingTab {
     const p = this.plugin;
     const build = await p.readBuild();
     const line = buildText(build);
-    if (!line) return;
+    if (!line) {
+      const row = new Setting(box).setName(t("sWip"));
+      row.descEl.createSpan({ text: t("wip") + " " });
+      row.descEl.createEl("a", { text: t("wipWho"), href: "https://t.me/zastashkov" });
+      return;
+    }
     const row = new Setting(box).setName(t("sBuild")).setDesc(line);
     const modes = await p.buildModes();
     if (!modes.includes("test")) { row.setDesc(`${line}\n${t("buildOnly")}`); return; }
