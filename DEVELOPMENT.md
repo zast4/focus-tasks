@@ -14,14 +14,18 @@ He uses this plugin every day, so new work must never land in his vault on its o
 Three words drive it:
 
 - he says nothing → keep committing to `next`; his vault stays exactly as it is.
+- every exchange, code or not, is appended to `~/ai-hub/data/focus-tasks/review-log.md` — a commit,
+  an answer to a question, an edit of his data. Written as he would need to read it, having read
+  nothing else. Without that file the rule below depends on my remembering the conversation.
 - **«ревью»** → report everything that happened since the last merge, not only the code: the commits
-  in `git log shipped..next`, grouped by what changed for him, **and the answers to every question he
-  asked in between**, repeated in full. He reads nothing of the running commentary, so the report is
-  the only thing he sees — it always starts at `shipped`, however many rounds went into it.
+  in `git log shipped..next` **and every entry of the review log**, grouped by what changed for him.
+  Questions he asked in between are answered again, in full. He reads nothing of the running
+  commentary, so the report is the only thing he sees — it always starts at `shipped`, however many
+  rounds went into it.
 - **«вливай»** → merge `next` into `notes-model`, copy `main.js`, `manifest.json`,
   `styles.css` into `~/vaults/Vault/.obsidian/plugins/focus-tasks/`, reload the plugin over
-  CDP, then move the tag: `git tag -f shipped notes-model`. All three suites must be green
-  before the merge.
+  CDP, then move the tag: `git tag -f shipped notes-model` and empty the review log down to its
+  heading. All three suites must be green before the merge.
 
 The branch holds plugin code only. His notes — `Задачи/`, areas and projects — are live data:
 touch them only when he asks, and then write them straight into the vault he is working in, so he
