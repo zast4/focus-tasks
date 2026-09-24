@@ -1533,8 +1533,11 @@ class FocusRenderer extends MarkdownRenderChild {
     const shown = el.textContent;
     if (offset !== null && shown !== task.text) offset = Math.round((offset * task.text.length) / Math.max(1, shown.length));
     el.textContent = task.text;
+    // Wiped and left — a click elsewhere, Enter, ⌘⌫ then away — the task is deleted, with the same
+    // «Undo» a delete from the menu gets. Esc still brings the text back untouched.
     const saveText = async (value) => {
-      if (value && value !== task.text) await this.plugin.rename(task, value);
+      if (!value) { await this.plugin.remove(task); return null; }
+      if (value !== task.text) await this.plugin.rename(task, value);
       return task;
     };
     // The date changes at once and the label on the right follows; the text stays in edit.

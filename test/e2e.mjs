@@ -437,6 +437,30 @@ step("delete a task from its menu, then undo", async () => {
   await taskIs("Stretch", { area: "💪Sport" });
 });
 
+step("a task whose text is wiped in place and left is deleted, and Undo brings it back", async () => {
+  await until(() => page.eval(`return !!__ft.task('Stretch')`), "Stretch on screen");
+  await click(`__ft.at(__ft.task('Stretch').querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.selectAll()`);
+  await page.key("Backspace");
+  // leaving the emptied row: a click on another task's text opens that one and lets this one go
+  await click(`__ft.at(__ft.task('Run 5k').querySelector('.ft-text'))`);
+  await noTask("Stretch");
+  await until(() => !exists(taskPath("Stretch")), "the note is gone");
+  await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
+  await taskIs("Stretch", { area: "💪Sport" });
+  await idle();
+  // Esc on an emptied row is not a delete: the text comes back as it was
+  await click(`__ft.at(__ft.task('Stretch').querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.selectAll()`);
+  await page.key("Backspace");
+  await page.key("Escape");
+  await idle();
+  await until(() => page.eval(`return !!__ft.task('Stretch')`), "Stretch still there after Esc");
+  if (!exists(taskPath("Stretch"))) throw new Error("Esc on an emptied row deleted the task");
+});
+
 step("«Hide» / «All» at the bottom", async () => {
   await click(`__ft.at(__ft.text('.ft-all-toggle', 'Hide'))`);
   await until(() => page.eval(`return !__ft.text('.ft-rest-title', 'Other areas') && !__ft.area('Reading')`), "only the focus");
@@ -1084,8 +1108,19 @@ step("a project is one row: its name and its first step; +N opens the rest; the 
   await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "−");
   await until(() => page.eval(`return !__ft.task('Flat two') && !__ft.project('Flatland').hasClass('is-open')`), "folded again");
   // the box ticks the shown step and the next one takes its place
+  await settle();
   await click(`__ft.at(__ft.project('Flatland').querySelector('input'))`);
-  await taskIs("Flat one", { status: "done" });
+  try {
+    await taskIs("Flat one", { status: "done" });
+  } catch (e) {
+    const seen = await page.eval(`
+      const row = __ft.project('Flatland'); const box = row?.querySelector('input');
+      const p = app.plugins.plugins['focus-tasks'];
+      return { text: row?.querySelector('.ft-text')?.textContent.trim(), checked: box?.checked, disabled: box?.disabled, toggling: row?.hasClass('is-toggling'),
+        inFlight: [...p.toggling], notices: [...document.querySelectorAll('.notice')].map((n) => n.textContent.trim()),
+        editing: [...p.views].some((v) => v.editing) };`);
+    throw new Error(e.message + " — the row after the click: " + J(seen));
+  }
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
     return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat two' && !row.querySelector('.ft-steps-more');`),
