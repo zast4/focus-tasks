@@ -505,13 +505,16 @@ step("the row shows what the note says: a priority dot and a deadline on another
   await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the badges are gone again");
 });
 
-step("▷ on a row sends the task off: a day, an hour typed in two segments, and it waits behind ▷N", async () => {
+step("«In progress…» sends the task off: a day, an hour typed in two segments, and it waits with a ▷", async () => {
   const later = ymd(new Date(Date.now() + 5 * 864e5));
   fs.writeFileSync(path.join(VAULT, taskPath("Ask the lawyer")),
     `---\nuid: ft-run-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
   await toPane();
-  // the button is on every row, one click deep — no menu on the way
-  await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-running'))`, "the ▷ on the row");
+  await until(() => page.eval(`return !!__ft.task('Ask the lawyer')`), "Ask the lawyer on screen");
+  // no ▷ on a row that is not running: sending off lives in the row's menu
+  if (await page.eval(`return !!__ft.task('Ask the lawyer').querySelector('.ft-running')`)) throw new Error("a row not sent off carries a ▷");
+  await click(`__ft.grip(__ft.task('Ask the lawyer'))`);
+  await menu("In progress…");
   await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption')`), "the «look at it again» card");
   const card = JSON.parse(await page.eval(`
     const p = document.querySelector('.ft-picker');
@@ -644,6 +647,13 @@ step("«Make it a project»: the task becomes a project and stays in the focus a
   fs.writeFileSync(path.join(VAULT, taskPath("Plan the season")),
     `---\nuid: ft-season\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n\nНужно расписать на 16 недель.\n`);
   await until(() => page.eval(`return !!__ft.task('Plan the season')`), "the task is on screen");
+  // a task with a description reads as a link, and the link opens its note
+  if (!(await page.eval(`return __ft.task('Plan the season').querySelector('.ft-text').hasClass('ft-text-note')`)))
+    throw new Error("a task with a description is not drawn as a link");
+  if (await page.eval(`return !!__ft.view().querySelector('.ft-described')`)) throw new Error("the description icon is still drawn");
+  await click(`__ft.at(__ft.task('Plan the season').querySelector('.ft-text'))`);
+  await until(async () => (await activePath()) === taskPath("Plan the season"), "the task's note open");
+  await toPane();
   await click(`__ft.grip(__ft.task('Plan the season'))`);
   await menu("Make it a project");
   await until(() => exists("Tasks/Plan the season.md"), "the project note was made", 8000);

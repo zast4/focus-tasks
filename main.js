@@ -1150,10 +1150,22 @@ class FocusRenderer extends MarkdownRenderChild {
     if (note) tag.onclick = (e) => { if (picking(e)) return; e.stopPropagation(); this.open(note.file, e); };
   }
 
+  // A click on a row's text: a link inside it is left to itself, a task with a description opens as
+  // a note, any other text goes into edit in place.
+  textClick(task, text, e) {
+    if (e.target.closest("a") || picking(e)) return;
+    e.stopPropagation();
+    if (task.described) this.open(task.file, e);
+    else this.editInline(task, text, e);
+  }
+
   // The task's text as markdown (links work), without the paragraph around it.
   async text(li, task) {
     const text = li.createSpan({ cls: "ft-text" });
     if (task.text.length > 120) text.setAttr("aria-label", task.text);  // the row clamps long names
+    // A task with a description reads as a link, the way any note does in Obsidian: a click on the
+    // text opens it. The text is still edited in place — from the row beside it, or the menu.
+    if (task.described) text.addClass("ft-text-note");
     await MarkdownRenderer.render(this.plugin.app, task.text, text, task.file.path, this.inner);
     const para = text.querySelector("p");
     if (para) para.replaceWith(...para.childNodes);
@@ -1345,24 +1357,17 @@ class FocusRenderer extends MarkdownRenderChild {
   // mark of a task an agent added and the user has not looked at yet) and its deadline, when that is
   // a different day from the one the focus goes by.
   marks(li, task) {
-    // ▷ is on every row, not only on the ones already sent off: on an ordinary row it waits for the
-    // pointer and sends the task off, on a running one it stands there and hands it back. Sending
-    // something off is the most common thing done to a row here, and it was two clicks deep.
-    const running = task.status === STATUS_PROGRESS;
-    const run = li.createSpan({ cls: running ? "ft-running" : "ft-running is-offer" });
-    const when = task.date ? this.dateText(task.date) + (task.at ? ` ${task.at}` : "") : null;
-    run.setAttr("aria-label", running ? (when ? t("waitingSince", when) : t("waitingNoDate")) : t("sendOff"));
-    setIcon(run, "play");
-    run.onclick = (e) => {
-      e.stopPropagation();
-      const many = this.selected.has(task) && this.selected.size > 1 ? this.chosen() : task;
-      if (running) this.plugin.setRunning(many, false);
-      else this.askReturn(many, run);
-    };
-    if (task.described) {
-      const note = li.createSpan({ cls: "ft-described" });
-      note.setAttr("aria-label", t("described"));
-      setIcon(note, "text");
+    // ▷ only on a row already sent off: it says so and hands the task back. Sending one off is in the
+    // row's menu — an offer on every row, even one shown under the pointer, was one icon too many.
+    if (task.status === STATUS_PROGRESS) {
+      const run = li.createSpan({ cls: "ft-running" });
+      const when = task.date ? this.dateText(task.date) + (task.at ? ` ${task.at}` : "") : null;
+      run.setAttr("aria-label", when ? t("waitingSince", when) : t("waitingNoDate"));
+      setIcon(run, "play");
+      run.onclick = (e) => {
+        e.stopPropagation();
+        this.plugin.setRunning(this.selected.has(task) && this.selected.size > 1 ? this.chosen() : task, false);
+      };
     }
     const level = String(task.priority || "").toLowerCase();
     // Only a high priority is marked: a dot on every row said «normal» a hundred times and nothing
@@ -1895,11 +1900,7 @@ class FocusRenderer extends MarkdownRenderChild {
       e.stopPropagation();
       this.editDate(task, date);
     };
-    text.onclick = (e) => {
-      if (e.target.closest("a") || picking(e)) return;
-      e.stopPropagation();
-      this.editInline(task, text, e);
-    };
+    text.onclick = (e) => this.textClick(task, text, e);
     li.onclick = (e) => {
       if (e.target.closest("a, input, .ft-box, .ft-grip, .ft-date, .ft-place") || picking(e)) return;
       this.editInline(task, text, null);
@@ -1983,11 +1984,7 @@ class FocusRenderer extends MarkdownRenderChild {
         e.stopPropagation();
         this.editDate(step, date);
       };
-      text.onclick = (e) => {
-        if (e.target.closest("a") || picking(e)) return;
-        e.stopPropagation();
-        this.editInline(step, text, e);
-      };
+      text.onclick = (e) => this.textClick(step, text, e);
       li.onclick = (e) => {
         if (e.target.closest("a, input, .ft-box, .ft-grip, .ft-date, .ft-project-name, .ft-steps-more, .ft-plus") || picking(e)) return;
         this.editInline(step, text, null);
