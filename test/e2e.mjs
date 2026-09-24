@@ -465,6 +465,15 @@ step("«Hide» / «All» at the bottom", async () => {
   await until(() => page.eval(`return !__ft.text('.ft-rest-title', 'Other areas') && !__ft.area('Reading')`), "only the focus");
   await click(`__ft.at(__ft.text('.ft-all-toggle', 'All'))`);
   await until(() => page.eval(`return !!__ft.text('.ft-rest-title', 'Other areas') && !!__ft.area('Reading')`), "everything again");
+  // among the other areas, one with nothing open goes last — behind an area with a task, whatever the order says
+  fs.writeFileSync(path.join(VAULT, "Tasks/Craft.md"), '---\narea: "🎨Craft"\n---\n');
+  fs.writeFileSync(path.join(VAULT, taskPath("Glue the model")), `---\nuid: ft-craft-1\ntype: задача\nstatus: open\narea: "🎨Craft"\n---\n`);
+  await until(() => page.eval(`
+    const names = [...__ft.view().querySelectorAll('.ft-rest-title ~ .ft-area > .ft-area-title')].map((e) => e.textContent);
+    const at = (n) => names.findIndex((x) => x.includes(n));
+    return at('Craft') >= 0 && at('Reading') >= 0 && at('Craft') < at('Reading');`), "Craft (open 1) before Reading (open 0)");
+  for (const f of [taskPath("Glue the model"), "Tasks/Craft.md"]) fs.unlinkSync(path.join(VAULT, f));
+  await settle();
 });
 
 step("Collapse all / Expand all", async () => {

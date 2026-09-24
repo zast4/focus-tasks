@@ -721,6 +721,9 @@ class FocusRenderer extends MarkdownRenderChild {
     const everything = p.everything();
     const areas = await p.collect(false);
     const rest = everything ? (await p.collect(true)).filter((a) => !areas.some((x) => x.name === a.name)) : [];
+    // Among the other areas, the ones with nothing open at all go last: a row that says «open 0» is
+    // not a place to look for work. The order set by hand holds within each group.
+    rest.sort((a, b) => (a.focus + a.later ? 0 : 1) - (b.focus + b.later ? 0 : 1));
     const shownAreas = [...areas, ...rest];
     this.fresh = new WeakMap();
     // Every task still waiting to come back — from the model, not from the rows on screen: the group
