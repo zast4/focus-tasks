@@ -116,10 +116,11 @@ step("the grip is visible without hovering", async () => {
   if (shown < 0.3) throw new Error("the grip is invisible on a phone: opacity " + shown);
 });
 
-step("a tap on the box completes the task and the area's «Выполненные» takes it", async () => {
+step("a tap on the box completes the task and the day's closed block takes it", async () => {
+  await page.eval(`const p = app.plugins.plugins['focus-tasks']; if (!p.doneShown()) p.setDoneShown(true); return true;`);
   await tapOn(`__m.task('Купить сметану').querySelector('input')`, "the box of Купить сметану");
   await taskIs("Купить сметану", { status: "done", completedDate: TODAY });
-  await until(() => page.eval(`return !!__m.task('Купить сметану')?.closest('.ft-done-block')`), "the row moved to Completed");
+  await until(() => page.eval(`return !!__m.task('Купить сметану')?.closest('.ft-done-today')`), "the row moved to the closed block");
   await tapOn(`__m.task('Купить сметану').querySelector('input')`, "the box again");
   await taskIs("Купить сметану", { status: "open" });
 });
@@ -300,7 +301,7 @@ window.__m = {
   all(sel) { return [...this.view().querySelectorAll(sel)].filter((e) => e.getClientRects().length); },
   rows() { return this.all('li.ft-task'); },
   task(n) { return this.rows().find((e) => e.querySelector('.ft-text')?.textContent.trim() === n); },
-  project(n) { return this.all('.ft-project').find((e) => e.textContent.includes(n)); },
+  project(n) { return this.all('li.ft-project-row').find((e) => e.querySelector('.ft-link')?.textContent.includes(n)); },
   areaTitle(n) { return this.all('.ft-area-title').find((e) => e.textContent.includes(n.replace(/^[^\\p{L}]+/u, '')) || e.textContent.includes(n)); },
   text(sel, t) { return [...document.querySelectorAll(sel)].find((e) => e.textContent.trim() === t); },
 };`;

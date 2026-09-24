@@ -35,8 +35,8 @@ new MutationObserver(() => { window.__ftLast = Date.now(); })
 window.__ft = {
   view() { return [...document.querySelectorAll('.focus-tasks-pane .focus-tasks-view')].find((e) => e.getClientRects().length); },
   all(sel, root) { return [...(root || document).querySelectorAll(sel)].filter((e) => e.getClientRects().length); },
-  task(n) { return this.all('li.ft-task', this.view()).find((e) => e.querySelector('.ft-text')?.textContent.trim() === n); },
-  project(n) { return this.all('.ft-project', this.view()).find((e) => e.querySelector('.ft-link')?.textContent.trim() === n); },
+  task(n) { return n ? this.all('li.ft-task', this.view()).find((e) => e.querySelector('.ft-text')?.textContent.trim() === n) : undefined; },
+  project(n) { return this.all('li.ft-project-row', this.view()).find((e) => e.querySelector('.ft-link')?.textContent.trim() === n); },
   area(n) { return this.all('.ft-area-title', this.view()).find((e) => e.textContent.includes(n)); },
   text(sel, n) { return this.all(sel).find((e) => e.textContent.trim() === n); },
   at(el, dy = 0.5) {
@@ -138,6 +138,18 @@ const taskIs = (name, fields, what) => until(() => {
 }, what || `${name}: ${J(fields)}` , 6000);
 const noTask = (name) => until(() => fm(name) === null, `note of «${name}» gone`);
 const taskOrder = (key) => (data().order?.tasks?.[key] || []);
+// A project's steps as rows of their own under its row (per device: the fold lives in localStorage).
+const openSteps = async (name, open = true) => {
+  await plugin(`
+    const n = p.notes().find((x) => x.project && x.file.basename === ${J(name)});
+    if (!n) return false;
+    const key = 'steps:' + n.file.path;
+    if (!!p.data.opened[key] !== ${open}) await p.toggleShown(key, true);
+    p.refresh(); return true;`);
+  await settle();
+};
+// The block of the day's closed work at the bottom (per device too).
+const showDone = async (on = true) => { await plugin(`if (p.doneShown() !== ${on}) p.setDoneShown(${on}); return true;`); await settle(); };
 const uidOf = (name) => fm(name)?.uid;
 
 const steps = [];
@@ -213,6 +225,7 @@ step("+ on a project makes steps that point at it, and ⌘1–4 date them while 
 });
 
 step("inline edit: ⌘1 dates today, Enter renames the note and opens the next row with the same date", async () => {
+  await openSteps("Marathon");   // from here on Marathon's steps are rows of their own on screen
   await until(() => page.eval(`return !!__ft.task('Buy shoes')`), "Buy shoes on screen");
   await click(`__ft.at(__ft.task('Buy shoes').querySelector('.ft-text'))`);
   await editing();
@@ -232,20 +245,16 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
   // and it stays where it was typed: right under the row that opened it, not at the bottom
   await settle();
   const steps = await page.eval(`
-    const head = __ft.project('Marathon');
-    const body = head?.nextElementSibling;
-    return body ? [...body.querySelectorAll('li.ft-task')].filter((r) => !r.closest('.ft-later-block'))
-      .map((r) => r.querySelector('.ft-text').textContent.trim()) : null;`);
-  if (J(steps) !== J(["Buy shoes fast", "Lace them"]))
+    const body = __ft.project('Marathon')?.nextElementSibling;
+    return body?.hasClass('ft-steps') ? [...body.querySelectorAll('li.ft-task')].map((r) => r.querySelector('.ft-text').textContent.trim()) : null;`);
+  if (!steps || steps.indexOf("Lace them") !== steps.indexOf("Buy shoes fast") + 1)
     throw new Error("the new row did not stay under the one it was typed from: " + J(steps));
   await idle();
   await until(() => page.eval(`return __ft.task('Lace them')?.querySelector('.ft-date.is-today.is-bare')?.textContent === ''`), "today says nothing on the right");
 });
 
 step("⌘2 tomorrow, ⌘4 no date", async () => {
-  // an undated step lives behind its project's ⏳ now
-  if (!(await page.eval(`return !!__ft.task('Plan route')`)))
-    await click(`__ft.at(__ft.project('Marathon').querySelector('.ft-later-chip'))`, "the project's ⏳");
+  await openSteps("Marathon");
   await until(() => page.eval(`return !!__ft.task('Plan route')`), "Plan route on screen");
   await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-text'))`);
   await editing();
@@ -290,53 +299,47 @@ step("the date on the right: a typed date, a day of the month, Clear date", asyn
   await idle();
 });
 
-step("the box completes a step: it stays inside its project, under the project's ✓", async () => {
-  const done = `(() => { const r = __ft.task('Lace them'); return !!r && !!r.closest('.ft-done-block') && r.querySelector('input').checked; })()`;
+step("the box completes a step: the row leaves the list; the day's closed block at the bottom takes it", async () => {
+  await showDone(false);
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await taskIs("Lace them", { status: "done", completedDate: TODAY });
-  await until(() => page.eval(`return ${done}`), "Lace them among the done");
-  // it belongs to Marathon, so it stays in Marathon — not in a pile at the bottom of the area
-  if (!(await page.eval(`return !!__ft.task('Lace them').closest('.ft-project-body')`)))
-    throw new Error("a done step left its project for the area's block");
-  if (await page.eval(`return !!__ft.task('Lace them').querySelector('.ft-done-project')`))
-    throw new Error("inside its own project the row still names the project");
-  if (await page.eval(`return !!__ft.view().querySelector('.ft-done-title')`)) throw new Error("the Completed block grew a heading again");
-  const chip = `__ft.at(__ft.project('Marathon').querySelector('.ft-done-chip'))`;
-  const reads = await page.eval(`return __ft.project('Marathon').querySelector('.ft-done-chip')?.textContent.trim() || null`);
-  if (reads !== "1") throw new Error("the project's ✓ does not count its done step: " + J(reads));
-  await click(chip, "the project's ✓");
-  await until(() => page.eval(`return !__ft.task('Lace them')`), "folded away");
-  await click(chip, "the project's ✓");
-  await until(() => page.eval(`return ${done}`), "open again");
+  await until(() => page.eval(`return !__ft.task('Lace them')`), "the row is gone from the list");
+  // the ✓ button at the bottom opens the block of what was closed today, by area, each row naming its project
+  await showDone(true);
+  const done = `(() => { const r = __ft.task('Lace them'); return !!r && !!r.closest('.ft-done-today') && r.querySelector('input').checked; })()`;
+  await until(() => page.eval(`return ${done}`), "Lace them in the closed block");
+  const tag = await page.eval(`return __ft.task('Lace them').querySelector('.ft-project-tag')?.textContent.trim() || null`);
+  if (tag !== "📁Marathon") throw new Error("the closed row does not name its project: " + J(tag));
+  const label = await page.eval(`return document.querySelector('.ft-done-toggle')?.textContent.trim() || null`);
+  if (!/^Done · \d+$/.test(label || "")) throw new Error("the ✓ button does not count the closed work: " + J(label));
+  if (await page.eval(`return !!__ft.view().querySelector('.ft-area .ft-done-chip, .ft-area .ft-done-block')`))
+    throw new Error("an area still carries its own closed block or ✓");
+  // the box in the closed block brings it back to its project
   await click(`__ft.at(__ft.task('Lace them').querySelector('input'))`);
   await taskIs("Lace them", { status: "open", completedDate: null });
-  await until(() => page.eval(`const r = __ft.task('Lace them'); return !!r && !r.closest('.ft-done-block')`), "Lace them open again");
+  await until(() => page.eval(`const r = __ft.task('Lace them'); return !!r && !r.closest('.ft-done-today') && !!r.closest('.ft-steps')`), "Lace them open again, among Marathon's steps");
 });
 
-step("a project shows its own upcoming steps, not the area's pile", async () => {
+step("a step dated later: in the plain focus its project has a row in the area's ⏳ pile too, showing that step", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Book the hotel")),
     `---\nuid: ft-later-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${ymd(new Date(Date.now() + 30 * 864e5))}\nprojects:\n  - "[[Marathon]]"\n---\n`);
   await toPane();
-  await until(() => page.eval(`
-    const c = __ft.project('Marathon')?.querySelector('.ft-later-chip');
-    return !!c && Number(c.textContent) >= 1;`), "Marathon counts its upcoming steps on its own row");
-  const key = await plugin(`
-    const m = (await p.collect(false)).flatMap((a) => a.projects).find((x) => x.file.basename === 'Marathon');
-    return 'steps-later:' + m.file.path;`);
-  const set = async (open) => plugin(`
-    const key = ${J(key)};
-    if (!!p.data.opened[key] !== ${open}) await p.toggleShown(key, true);
-    if (!p.isShown('project:' + key.slice('steps-later:'.length), false)) await p.toggleShown('project:' + key.slice('steps-later:'.length), false);
+  const wasAll = await plugin(`return p.everything()`);
+  await plugin(`
+    if (p.everything()) p.setEverything(false);
+    if (!p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true);
     p.refresh(); return true;`);
-  await set(false);
-  await until(() => page.eval(`return !__ft.task('Book the hotel')`), "an upcoming step waits behind the ⏳");
-  await set(true);
+  // Marathon's steps are open (since the inline-edit step), so its row in the pile is the name alone
+  // and the later steps are rows under it
   await until(() => page.eval(`
-    const r = __ft.task('Book the hotel');
-    return !!r && !!r.closest('.ft-project-body') && r.hasClass('is-later');`),
-    "and opens inside the project, not in the area's block");
-  if (await page.eval(`return !!__ft.task('Book the hotel').closest('.ft-future-block')`))
-    throw new Error("the upcoming step is still in the area's upcoming block");
+    const pile = __ft.area('Sport')?.closest('.ft-area')?.querySelector('.ft-future-block');
+    const row = pile && __ft.all('li.ft-project-row', pile).find((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Marathon');
+    const step = __ft.task('Book the hotel');
+    return !!row && row.hasClass('is-open') && !!step && step.hasClass('is-later') && step.closest('li.ft-steps')?.previousElementSibling === row;`),
+    "Marathon's row in the area's ⏳ pile, with the later step under it");
+  if (!(await page.eval(`return __ft.all('li.ft-task', __ft.view()).filter((r) => r.querySelector('.ft-text')?.textContent.trim() === 'Book the hotel').every((r) => r.closest('.ft-future-block'))`)))
+    throw new Error("the later step is among today's rows");
+  await plugin(`if (p.everything() !== ${wasAll}) p.setEverything(${wasAll}); return true;`);
   fs.unlinkSync(path.join(VAULT, taskPath("Book the hotel")));
   await settle();
 });
@@ -369,7 +372,7 @@ step("the note renamed by another device: the box still completes the task", asy
   await until(() => page.eval(`return !!__ft.task('Lace them tight')`), "the row shows the new name");
   await click(`__ft.at(__ft.task('Lace them tight').querySelector('input'))`);
   await taskIs("Lace them tight", { status: "done", completedDate: TODAY });
-  await until(() => page.eval(`return !!__ft.task('Lace them tight')?.closest('.ft-done-block')`), "the row moved to Completed");
+  await until(() => page.eval(`return !!__ft.task('Lace them tight')?.closest('.ft-done-today')`), "the row moved to Completed");
   await click(`__ft.at(__ft.task('Lace them tight').querySelector('input'))`);
   await taskIs("Lace them tight", { status: "open" });
 });
@@ -382,7 +385,7 @@ step("drag a task onto an area header moves it out of its project", async () => 
 });
 
 step("drag a task below another keeps the order the plugin remembers", async () => {
-  await until(() => page.eval(`return __ft.task('Plan route') && !__ft.task('Plan route').closest('.ft-project-body')`), "Plan route among the area's tasks");
+  await until(() => page.eval(`return __ft.task('Plan route') && !__ft.task('Plan route').closest('.ft-steps')`), "Plan route among the area's tasks");
   const from = await pos(`__ft.grip(__ft.task('Run 5k'))`, "grip of Run 5k");
   const to = await pos(`__ft.at(__ft.task('Plan route'), 0.85)`, "lower half of Plan route");
   await page.drag(from, to);
@@ -391,23 +394,26 @@ step("drag a task below another keeps the order the plugin remembers", async () 
     const a = list.indexOf(uidOf("Plan route")), b = list.indexOf(uidOf("Run 5k"));
     return a >= 0 && b === a + 1;
   }, "Run 5k right after Plan route in the saved order");
-  await until(() => page.eval(`const rows = __ft.all('li.ft-task', __ft.view()).map((e) => e.querySelector('.ft-text').textContent.trim());
+  await until(() => page.eval(`const rows = __ft.all('li.ft-task', __ft.view()).map((e) => e.querySelector('.ft-text')?.textContent.trim() || '');
     return rows.indexOf('Run 5k') === rows.indexOf('Plan route') + 1;`), "and on screen");
 });
 
 step("«Move up» / «Move down» reorder a task without dragging", async () => {
   await toPane();
-  const order = () => page.eval(`return __ft.all('li.ft-task', __ft.view()).map((e) => e.querySelector('.ft-text').textContent.trim())`);
+  // the area's own tasks, in both piles, not the steps of its projects
+  const order = () => page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.all('.ft-area', __ft.view())[0])
+    .filter((e) => !e.closest('li.ft-steps')).map((e) => e.querySelector('.ft-text').textContent.trim())`);
   const before = await order();
   const first = before[0];
   await click(`__ft.grip(__ft.task(${J(first)}))`);
   await menu("Move down");
-  await until(async () => (await order())[0] !== first, `${first} moved down`);
+  const at = before.indexOf(first);
+  await until(async () => (await order()).indexOf(first) !== at, `${first} moved down`);
   const after = await order();
-  if (after[1] !== first) throw new Error("it did not land one row lower: " + J(after));
+  if (after.indexOf(first) <= at) throw new Error("it did not land lower: " + J(after));
   await click(`__ft.grip(__ft.task(${J(first)}))`);
   await menu("Move up");
-  await until(async () => (await order())[0] === first, `${first} moved back up`);
+  await until(async () => (await order()).indexOf(first) === at, `${first} moved back up`);
 });
 
 step("drag an area above another saves the order", async () => {
@@ -455,7 +461,7 @@ step("a note written by another plugin: no uid, no area — the project gives bo
   const f = fm("Written by TaskNotes");
   if (!/^ft-/.test(f.uid || "")) throw new Error("no uid was written: " + J(f.uid));
   if (!f.body.includes("startTime") && !JSON.stringify(f).includes("startTime")) throw new Error("the time entries were lost");
-  await until(() => page.eval(`return !!__ft.task('Written by TaskNotes')?.closest('.ft-done-block')`), "the row moved to Completed");
+  await until(() => page.eval(`return !!__ft.task('Written by TaskNotes')?.closest('.ft-done-today')`), "the row moved to Completed");
   await click(`__ft.at(__ft.task('Written by TaskNotes').querySelector('input'))`);
   await taskIs("Written by TaskNotes", { status: "open" });
   fs.rmSync(path.join(VAULT, taskPath("Written by TaskNotes")));   // the rest of the run counts rows
@@ -506,7 +512,8 @@ step("▷ on a row sends the task off: a day, an hour typed in two segments, and
     p.querySelector('.ft-picker-part.is-hh').value = '07';
     p.querySelector('.ft-picker-part.is-mm').value = '30';
     return true;`);
-  await click(`__ft.at(__ft.view().querySelector('.ft-foot-gap'))`, "somewhere outside the card");
+  // the «Other areas» title: plain text, and never under the card
+  await click(`__ft.at(__ft.view().querySelector('.ft-rest-title') || __ft.view().querySelector('.ft-done-today .ft-empty'))`, "somewhere outside the card");
   await until(() => page.eval(`return !document.querySelector('.ft-picker')`), "the card closed");
   await taskIs("Ask the lawyer", { scheduled: `${TOMORROW}T07:30` }, "what stood in the fields was kept");
   // out of the focus, behind the counter of its area, and reachable from there
@@ -617,14 +624,14 @@ step("«Make it a project»: the task becomes a project and stays in the focus a
   await click(`__ft.grip(__ft.task('Plan the season'))`);
   await menu("Make it a project");
   await until(() => exists("Tasks/Plan the season.md"), "the project note was made", 8000);
-  await until(() => page.eval(`return !!__ft.project('Plan the season')`), "the project is in the list");
-  await until(() => page.eval(`const r = __ft.task('Plan the season'); return !!r && !!r.closest('.ft-project-body')`), "the task became its first step");
+  await until(() => page.eval(`const r = __ft.project('Plan the season'); return !!r && r.querySelector('.ft-text')?.textContent.trim() === 'Plan the season'`),
+    "the project's row shows the task as its first step");
   const note = read("Tasks/Plan the season.md") || "";
   if (!note.includes("16 недель")) throw new Error("the description did not move into the project note");
   if ((fm("Plan the season")?.body || "").includes("16 недель")) throw new Error("the description is still in the task note");
 });
 
-step("the last step of a project checked off: the project stays, marked done, and takes a new step", async () => {
+step("the last step of a project checked off: the project stays as an empty row, takes a new step, and closes only by hand", async () => {
   fs.writeFileSync(path.join(VAULT, "Tasks/Cleanup.md"),
     `---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n`);
   fs.writeFileSync(path.join(VAULT, taskPath("Throw out the old shoes")),
@@ -632,14 +639,8 @@ step("the last step of a project checked off: the project stays, marked done, an
   await until(() => page.eval(`return !!__ft.task('Throw out the old shoes')`), "the step is on screen");
   await click(`__ft.at(__ft.task('Throw out the old shoes').querySelector('input'))`);
   await taskIs("Throw out the old shoes", { status: "done" });
-  await until(() => page.eval(`
-    const head = __ft.project('Cleanup');
-    return !!head && head.hasClass('is-done') && head.querySelector('.ft-done-chip')?.textContent.trim() === '1';`),
-    "the project kept its place and its ✓ counts the step");
-  await until(() => page.eval(`
-    const r = __ft.task('Throw out the old shoes');
-    return !!r && !!r.closest('.ft-done-block') && !!r.closest('.ft-project-body');`),
-    "its step stayed inside the project");
+  await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && r.hasClass('is-empty') && !!r.querySelector('.ft-no-step');`),
+    "the project kept its row, empty");
   // …and the next step goes straight into it
   await click(`__ft.at(__ft.project('Cleanup').querySelector('.ft-plus'))`);
   await editing();
@@ -648,11 +649,22 @@ step("the last step of a project checked off: the project stays, marked done, an
   await taskIs("Order new ones", { area: "💪Sport", projects: "[[Cleanup]]", scheduled: TODAY });
   await editing();
   await page.key("Escape");
-  await until(() => page.eval(`
-    const head = __ft.project('Cleanup');
-    return !!head && !head.hasClass('is-done') && !!__ft.task('Order new ones')?.closest('.ft-project-body');`),
-    "the project is an ordinary one again, with the new step inside");
+  await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && !r.hasClass('is-empty') && r.querySelector('.ft-text')?.textContent.trim() === 'Order new ones';`),
+    "the project's row shows the new step");
   await idle();
+  // closing the project is a menu item, offered once nothing in it is open; the box in the closed block undoes it
+  await click(`__ft.at(__ft.project('Cleanup').querySelector('input'))`);
+  await taskIs("Order new ones", { status: "done" });
+  await until(() => page.eval(`return !!__ft.project('Cleanup')?.hasClass('is-empty')`), "empty again");
+  await click(`__ft.grip(__ft.project('Cleanup'))`);
+  await menu("Project done");
+  await until(() => (read("Tasks/Cleanup.md") || "").includes("status: done"), "the project note says done");
+  await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && !!r.closest('.ft-done-today')`), "the project is in the closed block");
+  if (await page.eval(`return __ft.all('li.ft-project-row', __ft.view()).filter((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Cleanup').some((e) => !e.closest('.ft-done-today'))`))
+    throw new Error("a closed project still has a row in the list");
+  await click(`__ft.at(__ft.project('Cleanup').querySelector('input'))`);
+  await until(() => !(read("Tasks/Cleanup.md") || "").includes("status: done"), "the box in the closed block reopened it");
+  await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && !r.closest('.ft-done-today')`), "and it is back in the list");
 });
 
 step("rename a project in place; its tasks follow it", async () => {
@@ -763,16 +775,29 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
   // Both ends are read in one go and WITHOUT scrolling: __ft.at() centres what it is asked about, so
   // taking the grip and then the header moves the grip out from under the point already measured.
   await settle();
+  // The project's row is brought to the middle of the screen first: a drop near the top edge makes the
+  // list auto-scroll under the pointer, and the row's middle («into») slides away from it.
   const ends = await page.eval(`
     const row = __ft.task(${J(names[0])}), head = __ft.project('Marathon 2027');
     if (!row || !head) return null;
+    head.scrollIntoView({ block: 'center' });
     const g = row.querySelector(':scope > .ft-grip')?.getBoundingClientRect(), h = head.getBoundingClientRect();
+    if (g && (g.top < 0 || g.bottom > innerHeight - 70)) return null;
     if (!g || !g.height || !h.height) return null;
     return { from: { x: Math.round(g.left + g.width / 2), y: Math.round(g.top + g.height / 2) },
              to: { x: Math.round(h.left + h.width / 2), y: Math.round(h.top + h.height / 2) } };`);
   if (!ends) throw new Error("the row and the project header are not both on screen");
+  // what the drag saw, for the day it does not land
+  await page.eval(`window.__drop = []; const p = app.plugins.plugins['focus-tasks'];
+    if (!p.__dropSpy) { p.__dropSpy = true; const o = p.drop.bind(p); p.drop = (i, d, s) => { window.__drop.push({ type: i.type, n: (i.tasks || []).length, to: d?.target?.type, into: d?.into }); return o(i, d, s); }; }
+    return true;`);
   await page.drag(ends.from, ends.to);
-  for (const name of names) await taskIs(name, { projects: "[[Marathon 2027]]" });
+  try {
+    for (const name of names) await taskIs(name, { projects: "[[Marathon 2027]]" });
+  } catch (e) {
+    const seen = await page.eval(`return { drops: window.__drop, at: (() => { const el = document.elementFromPoint(${ends.to.x}, ${ends.to.y}); return el && (el.className || el.tagName); })(), ends: ${J(ends)} }`);
+    throw new Error(e.message + " — the drag saw: " + J(seen));
+  }
   await toPane();             // keys only reach the list while its own tab is in front
   await page.key("Escape");   // Esc is the way out of a selection; a finished drop usually clears it too
   await selectedAre([]);
@@ -807,7 +832,7 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
 
 step("⌘Z takes back the last change: a tick, a date, a new row", async () => {
   await toPane();
-  const name = await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view())[0]?.querySelector('.ft-text')?.textContent.trim() || null`), "a row to work with");
+  const name = await until(() => page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.view())[0]?.querySelector('.ft-text')?.textContent.trim() || null`), "a row to work with");
   const was = fm(name);
   // a tick, then ⌘Z
   await toPane();
@@ -854,7 +879,7 @@ step("ticking a box does not move the page under the reader", async () => {
   const before = await page.eval(`
     const s = ${scroller};
     const top = s.getBoundingClientRect().top;
-    const rows = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')]
+    const rows = [...document.querySelectorAll('.focus-tasks-pane li.ft-task:not(.ft-project-row)')]
       .filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
     const name = (r) => r.querySelector('.ft-text').textContent.trim();
     // the mark is the FIRST row on screen and the tick is below it: the list holds its place by
@@ -863,17 +888,17 @@ step("ticking a box does not move the page under the reader", async () => {
   // clicking must not be preceded by a scroll of our own: __ft.at() centres the row, which would be
   // the jump this step is looking for
   const point = await page.eval(`
-    const row = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(before.tick)});
+    const row = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')].find((r) => r.querySelector('.ft-text')?.textContent.trim() === ${J(before.tick)});
     const r = row.querySelector('input').getBoundingClientRect();
     return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) };`);
   await page.click(point);
   await taskIs(before.tick, { status: "done" });
   // the row visibly moves into «Completed»: that is the rebuild this step is about
-  await until(() => page.eval(`return !!__ft.task(${J(before.tick)})?.closest('.ft-done-block')`), "the row moved to Completed");
+  await until(() => page.eval(`return !!__ft.task(${J(before.tick)})?.closest('.ft-done-today')`), "the row moved to Completed");
   await settle();
   const after = await page.eval(`
     const row = [...document.querySelectorAll('.focus-tasks-pane li.ft-task')]
-      .find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(before.mark)});
+      .find((r) => r.querySelector('.ft-text')?.textContent.trim() === ${J(before.mark)});
     return row ? Math.round(row.getBoundingClientRect().top) : null;`);
   if (after === null) throw new Error("the row that was on screen is gone: " + J(before));
   const moved = Math.abs(after - before.markY);
@@ -887,9 +912,10 @@ step("ticking a box does not move the page under the reader", async () => {
 
 step("the tasks folder setting", async () => {
   await plugin(`p.settings.tasksFolder = 'Задачи 2'; await p.saveAll(); p.refresh(); return true;`);
-  await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .ft-onboarding') || __ft.all('li.ft-task', __ft.view()).length === 0`), "no tasks from the new folder");
+  // the projects keep their rows (empty ones); it is the tasks that must be gone
+  await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .ft-onboarding') || __ft.all('li.ft-task:not(.ft-project-row)', __ft.view()).length === 0`), "no tasks from the new folder");
   await plugin(`p.settings.tasksFolder = 'Задачи'; await p.saveAll(); p.refresh(); return true;`);
-  await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view()).length > 0`), "tasks back");
+  await until(() => page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.view()).length > 0`), "tasks back");
 });
 
 step("the settings tab renders", async () => {
@@ -995,7 +1021,8 @@ step("the ⏳ of an area folds its upcoming work — in «All» too, where the f
     `---\nuid: ft-chip-2\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TOMORROW}\n---\n`);
   await until(async () => JSON.parse(await plugin(`
     const a = (await p.collect(false)).find((x) => x.name.includes('Sport'));
-    return JSON.stringify(!!a && a.loose.some((t) => t.text === 'Chip today') && a.future.loose.some((t) => t.text === 'Chip tomorrow'));`)),
+    const has = (rows, name) => rows.some((r) => r.kind === 'task' && r.task.text === name);
+    return JSON.stringify(!!a && has(a.rows, 'Chip today') && has(a.ahead, 'Chip tomorrow'));`)),
     "both fixtures are in the model");
   const shown = () => page.eval(`
     const a = __ft.area('Sport')?.closest('.ft-area');
@@ -1027,44 +1054,62 @@ step("the ⏳ of an area folds its upcoming work — in «All» too, where the f
   await settle();
 });
 
-step("the plain focus is flat: a project's step is a row with its project's name, the tree is in «All»", async () => {
+step("a project is one row: its name and its first step; +N opens the rest; the box takes the next one", async () => {
   const saved = await plugin(`return JSON.stringify({ all: p.everything(), folded: { ...p.data.folded }, opened: { ...p.data.opened } });`);
   fs.writeFileSync(path.join(VAULT, "Tasks/Flatland.md"), '---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n');
-  fs.writeFileSync(path.join(VAULT, taskPath("Flat step")),
-    `---\nuid: ft-flat-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\nprojects:\n  - "[[Flatland]]"\n---\n`);
-  fs.writeFileSync(path.join(VAULT, taskPath("Flat later")),
-    `---\nuid: ft-flat-2\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TOMORROW}\nprojects:\n  - "[[Flatland]]"\n---\n`);
+  const step = (name, uid, day) => fs.writeFileSync(path.join(VAULT, taskPath(name)),
+    `---\nuid: ${uid}\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${day}\nprojects:\n  - "[[Flatland]]"\n---\n`);
+  step("Flat one", "ft-flat-1", TODAY);
+  step("Flat two", "ft-flat-2", TODAY);
+  step("Flat later", "ft-flat-3", TOMORROW);
   await plugin(`
     if (p.everything()) p.setEverything(false);
     const a = (await p.collect(false)).find((x) => x.name.includes('Sport'));
     if (a && !p.isShown('area:' + a.name, false)) await p.toggleShown('area:' + a.name, false);
-    p.refresh(); return true;`);
-  await until(() => page.eval(`return !!__ft.task('Flat step')`), "the step is on screen");
-  const look = await page.eval(`
-    const area = __ft.area('Sport').closest('.ft-area');
-    const row = __ft.task('Flat step');
-    return { header: !!__ft.project('Flatland'), tag: row.querySelector('.ft-project-tag')?.textContent.trim() || null,
-      inArea: row.parentElement.parentElement === area,
-      numbers: [...area.querySelectorAll(':scope > .ft-area-title .ft-chip')].map((c) => c.textContent.trim()) };`);
-  if (look.header) throw new Error("the plain focus still draws a project header: " + J(look));
-  if (look.tag !== "📁Flatland") throw new Error("the step does not name its project: " + J(look));
-  if (!look.inArea) throw new Error("the step is not a row of the area's own list: " + J(look));
-  if (look.numbers.some(Boolean)) throw new Error("the area's switches still carry numbers: " + J(look));
-  // the project's step for tomorrow is in the area's own ⏳ pile, with the same tag
-  if (!(await page.eval(`return !!__ft.area('Sport').closest('.ft-area').querySelector('.ft-future-block')`)))
-    await click(`__ft.at(__ft.area('Sport').querySelector('.ft-later-chip'))`, "the ⏳ of the area");
-  await until(() => page.eval(`return !!__ft.task('Flat later')?.closest('.ft-future-block')?.parentElement.isSameNode(__ft.area('Sport').closest('.ft-area'))
-    && !!__ft.task('Flat later').querySelector('.ft-project-tag')`), "the step ahead in the area's pile");
-  // «All» brings the tree back
+    const n = p.notes().find((x) => x.project && x.file.basename === 'Flatland');
+    if (n) delete p.data.opened['steps:' + n.file.path];
+    p.saveFolds(); p.refresh(); return true;`);
+  await until(() => page.eval(`
+    const row = __ft.project('Flatland');
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && row.querySelector('.ft-steps-more')?.textContent.trim() === '+1';`),
+    "one row: the project, its first step, +1");
+  if (await page.eval(`return !!__ft.task('Flat two')`)) throw new Error("the second step is on screen while the row is folded");
+  if (await page.eval(`return !!__ft.view().querySelector('.ft-project')`)) throw new Error("a project header is still drawn somewhere");
+  // +1 opens the steps under the row, and the row is then the name alone
+  await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "+1");
+  await until(() => page.eval(`
+    const row = __ft.project('Flatland');
+    return !!row && row.hasClass('is-open') && !!row.nextElementSibling?.hasClass('ft-steps') && !!__ft.task('Flat two') && !row.querySelector('.ft-text');`),
+    "both steps as rows of their own, the row without a step");
+  await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "−");
+  await until(() => page.eval(`return !__ft.task('Flat two') && !__ft.project('Flatland').hasClass('is-open')`), "folded again");
+  // the box ticks the shown step and the next one takes its place
+  await click(`__ft.at(__ft.project('Flatland').querySelector('input'))`);
+  await taskIs("Flat one", { status: "done" });
+  await until(() => page.eval(`
+    const row = __ft.project('Flatland');
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat two' && !row.querySelector('.ft-steps-more');`),
+    "the next step took the row");
+  // the later step: the project's row in the area's ⏳ pile
+  await plugin(`if (!p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true); p.refresh(); return true;`);
+  await until(() => page.eval(`
+    const pile = __ft.area('Sport').closest('.ft-area').querySelector('.ft-future-block');
+    const row = pile && __ft.all('li.ft-project-row', pile).find((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Flatland');
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat later';`), "the project's row in the ⏳ pile shows the later step");
+  // «All»: the same rows, no tree
   await plugin(`p.setEverything(true); return true;`);
-  await until(() => page.eval(`return !!__ft.project('Flatland')`), "the project header in «All»");
+  // an area of the focus keeps its two piles in «All», the ⏳ one open: the project has a row in each
+  await until(() => page.eval(`
+    const rows = __ft.all('li.ft-project-row', __ft.view()).filter((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Flatland' && !e.closest('.ft-done-today'));
+    return rows.length === 2 && rows.map((r) => r.querySelector('.ft-text')?.textContent.trim()).join('|') === 'Flat two|Flat later' && !__ft.view().querySelector('.ft-project');`),
+    "the same rows in «All», one per pile, and no project headers anywhere");
   await plugin(`
     const was = JSON.parse(${J(saved)});
     p.data.folded = was.folded; p.data.opened = was.opened;
     p.saveFolds();
     if (p.everything() !== was.all) p.setEverything(was.all);
     p.refresh(); return true;`);
-  for (const f of [taskPath("Flat step"), taskPath("Flat later"), "Tasks/Flatland.md"]) fs.unlinkSync(path.join(VAULT, f));
+  for (const f of [taskPath("Flat one"), taskPath("Flat two"), taskPath("Flat later"), "Tasks/Flatland.md"]) fs.unlinkSync(path.join(VAULT, f));
   await settle();
 });
 
@@ -1083,7 +1128,7 @@ step("a ```focus-tasks``` block in a note renders the same list, and its boxes w
   await until(() => page.eval(`return !!(${row("Call coach")})`), "Call coach in the block");
   await page.click(await page.eval(`return __ft.at((${row("Call coach")}).querySelector('input'))`));
   await taskIs("Call coach", { status: "done", completedDate: TODAY });
-  await until(() => page.eval(`return !!(${row("Call coach")})?.closest('.ft-done-block')`), "the row moved to Completed in the block");
+  await until(() => page.eval(`return !!(${row("Call coach")})?.closest('.ft-done-today')`), "the row moved to Completed in the block");
   await page.click(await page.eval(`return __ft.at((${row("Call coach")}).querySelector('input'))`));
   await taskIs("Call coach", { status: "open" });
 
@@ -1103,7 +1148,7 @@ step("a ```focus-tasks``` block in a note renders the same list, and its boxes w
     await new Promise((r) => setTimeout(r, 400));
     const top = s.getBoundingClientRect().top;
     const name = (r) => r.querySelector('.ft-text').textContent.trim();
-    const rows = [...view.querySelectorAll('li.ft-task')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
+    const rows = [...view.querySelectorAll('li.ft-task:not(.ft-project-row)')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
     if (rows.length < 3) return { error: 'only ' + rows.length + ' rows on screen in the block' };
     const box = rows[1].querySelector('input');
     const b = box.getBoundingClientRect();
@@ -1112,11 +1157,11 @@ step("a ```focus-tasks``` block in a note renders the same list, and its boxes w
   if (place.error) throw new Error("the block could not be measured: " + place.error);
   await page.click(place.point);
   await taskIs(place.tick, { status: "done" });
-  await until(() => page.eval(`return !!(${block}).querySelector('.ft-done-block')`), "Completed appeared in the block");
+  await until(() => page.eval(`return !!(${block}).querySelector('.ft-done-today')`), "Completed appeared in the block");
   await settle();
   const moved = await page.eval(`
     const view = ${block};
-    const row = [...view.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(place.mark)});
+    const row = [...view.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text')?.textContent.trim() === ${J(place.mark)});
     return row ? Math.round(row.getBoundingClientRect().top) : null;`);
   if (moved === null) throw new Error("the row that was on screen is gone from the block");
   if (Math.abs(moved - place.markY) > 40) throw new Error(`the note jumped by ${Math.abs(moved - place.markY)}px when a box was ticked in the block`);
@@ -1149,7 +1194,7 @@ step("in Live Preview the note holds its place when a box is ticked", async () =
     await new Promise((r) => setTimeout(r, 400));
     const top = s.getBoundingClientRect().top;
     const name = (r) => r.querySelector('.ft-text').textContent.trim();
-    const rows = [...view.containerEl.querySelectorAll('li.ft-task')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
+    const rows = [...view.containerEl.querySelectorAll('li.ft-task:not(.ft-project-row)')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
     if (rows.length < 3) return { error: 'only ' + rows.length + ' rows on screen' };
     const b = rows[1].querySelector('input').getBoundingClientRect();
     return { scroller: s.className.slice(0, 30), tick: name(rows[1]), mark: name(rows[rows.length - 1]),
@@ -1161,7 +1206,7 @@ step("in Live Preview the note holds its place when a box is ticked", async () =
   const moved = await page.eval(`
     const p = app.plugins.plugins['focus-tasks'];
     const view = [...p.views].find((v) => !v.leaf && v.containerEl.getClientRects().length);
-    const row = [...view.containerEl.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(place.mark)});
+    const row = [...view.containerEl.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text')?.textContent.trim() === ${J(place.mark)});
     return row ? Math.round(row.getBoundingClientRect().top) : null;`);
   if (moved === null) throw new Error("the row that was on screen is gone: " + J(place));
   if (Math.abs(moved - place.markY) > 40) throw new Error(`the note jumped by ${Math.abs(moved - place.markY)}px in Live Preview (scroller ${place.scroller})`);
@@ -1174,7 +1219,7 @@ step("in Live Preview the note holds its place when a box is ticked", async () =
 
 step("closing the pane takes the editor, the picker and the hotkeys with it", async () => {
   await toPane();
-  const row = await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view())[0]?.querySelector('.ft-text')?.textContent.trim() || null`), "a row to edit");
+  const row = await until(() => page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.view())[0]?.querySelector('.ft-text')?.textContent.trim() || null`), "a row to edit");
   await click(`__ft.at(__ft.task(${J(row)}).querySelector('.ft-text'))`);
   await editing();
   const leaks = await page.eval(`

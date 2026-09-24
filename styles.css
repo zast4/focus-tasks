@@ -31,11 +31,6 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
   padding: 0.1em var(--ft-pad); margin: 0 var(--ft-pad) 0.25em calc(var(--ft-pad) * -1); }
 .focus-tasks-view .ft-area-title > .ft-emoji + span { margin-left: 0.2rem; }
 
-.focus-tasks-view .ft-project { display: flex; align-items: flex-start; font-weight: 600; color: var(--text-muted); line-height: 1.5;
-  padding: 0.1em var(--ft-pad); margin: 0.55em var(--ft-pad) 0.1em calc(var(--ft-col) - var(--ft-pad)); }
-.focus-tasks-view .ft-project > .ft-caret { height: 1.5em; align-items: center; }
-.focus-tasks-view .ft-project > .ft-link { flex: 0 1 auto; min-width: 0; margin-left: 0.2rem; }
-.focus-tasks-view .ft-project > .ft-count { flex: none; }
 
 .focus-tasks-view .ft-link { cursor: pointer; }
 .focus-tasks-view .ft-link:hover { color: var(--text-accent); }
@@ -48,7 +43,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view .ft-caret:hover, .focus-tasks-view .ft-more:hover { color: var(--text-normal); }
 /* ⋯ shows on hover on the desktop, always on the phone */
 .focus-tasks-view .ft-more { opacity: 0; transition: opacity 0.1s; }
-.focus-tasks-view .ft-area-title:hover .ft-more, .focus-tasks-view .ft-project:hover .ft-more, body.is-mobile .focus-tasks-view .ft-more { opacity: 1; }
+.focus-tasks-view .ft-area-title:hover .ft-more, body.is-mobile .focus-tasks-view .ft-more { opacity: 1; }
 
 /* Tasks: two columns in; nested steps («All») one more column per level. The theme pulls the checkbox
    into the list indent with a negative margin — reset it and centre the box in its column. */
@@ -63,10 +58,34 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-task > .ft-box > .task-list-item-checkbox { position: static; top: auto; margin: 0 !important; }
 .focus-tasks-view li.ft-task > .ft-text { flex: 1 1 auto; min-width: 0; margin-left: 0.2rem; line-height: var(--ft-line); }
 
-/* A project's steps: a line under the project's caret, left of the checkbox column. */
-.focus-tasks-view .ft-project-body { position: relative; }
-.focus-tasks-view .ft-project-body::before { content: ""; position: absolute; top: 0.1em; bottom: 0.3em;
-  left: calc(var(--ft-col) * 1.5); border-left: 1px solid var(--background-modifier-border); }
+/* A project's open steps under its row: a list of their own, one level in, with a hairline under the
+   project's box column. */
+.focus-tasks-view li.ft-steps { list-style: none; display: block; position: relative; margin: 0; padding: 0; }
+.focus-tasks-view li.ft-steps::before { content: ""; position: absolute; top: 0.1em; bottom: 0.3em;
+  left: calc(var(--ft-col) * 2.5); border-left: 1px solid var(--background-modifier-border); }
+.focus-tasks-view li.ft-steps > ul.ft-list { margin: 0; }
+
+/* A project as one row: its name, then «›», then its first step; the name gives way to the text. */
+.focus-tasks-view li.ft-project-row > .ft-project-name { flex: 0 1 auto; min-width: 3em; max-width: 45%; margin-left: 0.2rem;
+  display: inline-flex; align-items: baseline; gap: 0.25em; line-height: var(--ft-line); color: var(--text-muted); font-weight: 500;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link { overflow: hidden; text-overflow: ellipsis; }
+.focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link:hover { color: var(--text-accent); }
+.focus-tasks-view li.ft-project-row.is-open > .ft-project-name { flex: 1 1 auto; max-width: none; color: var(--text-normal); }
+/* No step on the row — the steps are open under it, or there is none: no box to tick, the column stays. */
+.focus-tasks-view li.ft-project-row.is-open > .ft-box, .focus-tasks-view li.ft-project-row.is-empty > .ft-box { visibility: hidden; }
+.focus-tasks-view li.ft-project-row > .ft-sep { flex: none; margin: 0 0.35em; line-height: var(--ft-line); color: var(--text-faint); }
+.focus-tasks-view li.ft-project-row > .ft-no-step { color: var(--text-faint); font-style: italic; }
+/* +N: the steps behind the row; red when one of them is late. Open, it is the «−» that folds them. */
+.focus-tasks-view li.ft-project-row > .ft-steps-more { flex: none; display: inline-flex; align-items: center; margin-left: 0.5em; padding: 0 0.35em;
+  height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; border-radius: 4px; color: var(--text-muted); cursor: pointer;
+  font-variant-numeric: tabular-nums; }
+.focus-tasks-view li.ft-project-row > .ft-steps-more:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.focus-tasks-view li.ft-project-row > .ft-steps-more.is-late { color: var(--text-error); }
+.focus-tasks-view li.ft-project-row > .ft-steps-more.is-open { color: var(--interactive-accent); }
+.focus-tasks-view li.ft-project-row > .ft-plus { margin-left: 0.3em; }
+.focus-tasks-view li.ft-project-row:hover > .ft-plus { opacity: 1; }
+.focus-tasks-view li.ft-project-row.ft-draft-row > .ft-project-name { max-width: none; flex: 1 1 auto; }
 
 .focus-tasks-view .ft-area > .ft-empty { margin-left: calc(var(--ft-col) * 2); }
 .focus-tasks-view .ft-empty { color: var(--text-muted); }
@@ -74,14 +93,13 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 
 /* Drag and drop: a grip just left of every row, as in TickTick — in the free column before the
    checkbox / caret, out of the flow so it moves nothing (hover on the desktop, always on the phone). */
-.focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title { position: relative; }
+.focus-tasks-view li.ft-task, .focus-tasks-view .ft-area-title { position: relative; }
 .focus-tasks-view .ft-grip { position: absolute; left: calc(-1.3rem + var(--ft-pad)); top: 0.3em; display: inline-flex; padding: 0.1rem; cursor: grab;
   color: var(--text-faint); touch-action: none; opacity: 0; transition: opacity 0.1s; }
 .focus-tasks-view .ft-area-title > .ft-grip { top: 50%; transform: translateY(-50%); }
 .focus-tasks-view .ft-grip svg { width: 1rem; height: 1rem; }
 .focus-tasks-view .ft-grip:hover { color: var(--text-normal); }
-.focus-tasks-view .ft-area-title:hover > .ft-grip, .focus-tasks-view .ft-project:hover > .ft-grip,
-.focus-tasks-view li.ft-task:hover > .ft-grip { opacity: 1; }
+.focus-tasks-view .ft-area-title:hover > .ft-grip, .focus-tasks-view li.ft-task:hover > .ft-grip { opacity: 1; }
 /* On a phone the grip is always there, and big enough to hit: the icon stays the same size, the
    target around it grows. */
 body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.5; left: calc(-1.7rem + var(--ft-pad)); top: 0; padding: 0.45rem 0.35rem;
@@ -89,10 +107,9 @@ body.is-mobile .focus-tasks-view .ft-grip { opacity: 0.5; left: calc(-1.7rem + v
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-grip { top: 50%; }
 
 /* Hover: a light grey band under the row, as in task trackers. */
-.focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title { border-radius: 6px; transition: background-color 0.08s; }
-.focus-tasks-view li.ft-task:hover, .focus-tasks-view .ft-project:hover, .focus-tasks-view .ft-area-title:hover { background-color: var(--background-modifier-hover); }
-body.is-mobile .focus-tasks-view li.ft-task:hover, body.is-mobile .focus-tasks-view .ft-project:hover,
-body.is-mobile .focus-tasks-view .ft-area-title:hover { background-color: transparent; }
+.focus-tasks-view li.ft-task, .focus-tasks-view .ft-area-title { border-radius: 6px; transition: background-color 0.08s; }
+.focus-tasks-view li.ft-task:hover, .focus-tasks-view .ft-area-title:hover { background-color: var(--background-modifier-hover); }
+body.is-mobile .focus-tasks-view li.ft-task:hover, body.is-mobile .focus-tasks-view .ft-area-title:hover { background-color: transparent; }
 /* Selected rows (Shift / Cmd-click): a grey band, a step above hover, also under the pointer.
    Not `--text-selection`: themes tint that one, and a green selection reads as «done». */
 .focus-tasks-view li.ft-task.is-selected, body.is-mobile .focus-tasks-view li.ft-task.is-selected {
@@ -318,7 +335,7 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-text { margin-left: 0; }
 
 /* A row on a phone is a finger tall, not a mouse tall. */
 body.is-mobile .focus-tasks-view li.ft-task { padding: 0.3em 0; }
-body.is-mobile .focus-tasks-view .ft-area-title, body.is-mobile .focus-tasks-view .ft-project { padding: 0.15em 0; }
+body.is-mobile .focus-tasks-view .ft-area-title{ padding: 0.15em 0; }
 
 /* Keyboard users see where they are. */
 .focus-tasks-view .ft-caret:focus-visible, .focus-tasks-view .ft-plus:focus-visible,
@@ -328,7 +345,7 @@ body.is-mobile .focus-tasks-view .ft-area-title, body.is-mobile .focus-tasks-vie
 
 /* Someone who asked the system for less motion gets none of ours. */
 @media (prefers-reduced-motion: reduce) {
-  .focus-tasks-view li.ft-task, .focus-tasks-view .ft-project, .focus-tasks-view .ft-area-title,
+  .focus-tasks-view li.ft-task, .focus-tasks-view .ft-area-title,
   .focus-tasks-view .ft-grip, .focus-tasks-view .ft-more { transition: none !important; }
 }
 
@@ -338,7 +355,6 @@ body.is-mobile .focus-tasks-view .ft-area-title, body.is-mobile .focus-tasks-vie
    otherwise; on a phone, where there is no pointer, they are always there. */
 .focus-tasks-view .ft-plus { opacity: 0; transition: opacity 0.1s; }
 .focus-tasks-view .ft-area-title:hover .ft-plus,
-.focus-tasks-view .ft-project:hover .ft-plus,
 body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 .focus-tasks-view .ft-plus:focus-visible { opacity: 1; }
 
@@ -348,11 +364,15 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 .focus-tasks-view .ft-area > ul.ft-list:first-of-type { margin-top: 0; }
 
 /* A project reads as a container: the same weight as the area's name, a step down in size. */
-.focus-tasks-view .ft-project > .ft-link { color: var(--text-normal); }
-.focus-tasks-view .ft-project.is-later > .ft-link { color: var(--text-muted); }
 /* Finished today: the name steps back, «сделано N» in green says why it is still here. */
-.focus-tasks-view .ft-project.is-done > .ft-link { color: var(--text-muted); }
-.focus-tasks-view .ft-project.is-done > .ft-icon { opacity: 0.6; }
+
+/* The day's closed work, under the areas: by area, each row with its project, the boxes undo. */
+.focus-tasks-view .ft-done-today { margin-top: 1.2em; padding-top: 0.6em; border-top: 1px solid var(--background-modifier-border); }
+.focus-tasks-view .ft-done-area { display: flex; align-items: center; gap: 0.2rem; margin: 0.5em var(--ft-pad) 0.1em calc(var(--ft-col) - var(--ft-pad));
+  font-weight: 600; color: var(--text-muted); }
+.focus-tasks-view .ft-done-area > .ft-emoji { font-size: 1em; }
+.focus-tasks-view li.ft-done.ft-project-row > .ft-project-name { text-decoration: line-through; color: var(--text-faint); }
+.focus-tasks-view .ft-done-toggle.is-on { color: var(--text-normal); background: var(--background-modifier-hover); }
 
 /* The date column has room for «25.09 20:00» without pushing the text around. */
 .focus-tasks-view li.ft-task > .ft-date { min-width: 4.8em; }

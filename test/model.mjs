@@ -34,6 +34,13 @@ const names = (tasks) => tasks.map((t) => t.text);
 const areaNames = (areas) => areas.map((a) => a.name);
 const areaOf = (areas, name) => areas.find((a) => a.name === name);
 const projectOf = (area, name) => area.projects.find((p) => p.file.basename === name);
+// The piles of an area, as the old tests read them: the focus rows are tasks and projects mixed,
+// these pull one kind out.
+const loose = (a) => a.rows.filter((r) => r.kind === "task").map((r) => r.task);
+const ahead = (a) => a.ahead.filter((r) => r.kind === "task").map((r) => r.task);
+const focusProjects = (a) => a.rows.filter((r) => r.kind === "project").map((r) => r.project);
+const aheadProjects = (a) => a.ahead.filter((r) => r.kind === "project").map((r) => ({ file: r.project.file, tasks: r.steps }));
+const doneLoose = (a) => a.done.filter((t) => !t.project);
 
 // --- what belongs where ------------------------------------------------------------------------
 
@@ -45,8 +52,8 @@ test("a dated task of an area is in the focus, an undated one is not", async () 
     taskNote(app, "Race", { area: "Sport", scheduled: DAY(5) });
   });
   const areas = await plugin.collect(false);
-  eq(names(areaOf(areas, "Sport").loose), ["Run 5k"], "focus");
-  eq(names(areaOf(areas, "Sport").future.loose), ["Race", "Buy shoes"], "upcoming: the nearest date first, undated last");
+  eq(names(loose(areaOf(areas, "Sport"))), ["Run 5k"], "focus");
+  eq(names(ahead(areaOf(areas, "Sport"))), ["Race", "Buy shoes"], "upcoming: the nearest date first, undated last");
 });
 
 test("a task dated in the past is in the focus", async () => {
@@ -54,7 +61,7 @@ test("a task dated in the past is in the focus", async () => {
     areaNote(app, "Sport");
     taskNote(app, "Old", { area: "Sport", scheduled: DAY(-30) });
   });
-  eq(names((await plugin.collect(false))[0].loose), ["Old"]);
+  eq(names(loose((await plugin.collect(false))[0])), ["Old"]);
 });
 
 test("a task takes its area from its project when it has none of its own", async () => {
@@ -84,7 +91,7 @@ test("cancelled and someday tasks stay out of the list", async () => {
     taskNote(app, "Maybe", { area: "Sport", scheduled: TODAY, status: "someday" });
     taskNote(app, "Real", { area: "Sport", scheduled: TODAY });
   });
-  eq(names((await plugin.collect(true))[0].loose), ["Real"]);
+  eq(names(loose((await plugin.collect(true))[0])), ["Real"]);
 });
 
 test("what is running waits with everything else that is not today", async () => {
@@ -94,8 +101,8 @@ test("what is running waits with everything else that is not today", async () =>
     taskNote(app, "Mine", { area: "Sport", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.loose), ["Mine"], "the focus holds only what is mine to do today");
-  eq(names(area.future.loose), ["Running"], "and the started one waits in the upcoming list");
+  eq(names(loose(area)), ["Mine"], "the focus holds only what is mine to do today");
+  eq(names(ahead(area)), ["Running"], "and the started one waits in the upcoming list");
   eq(area.running, 1, "counted apart only to keep the area on screen and to say so on the chip");
 });
 
@@ -109,8 +116,8 @@ test("the moment it is due back, a running task returns to the focus", async () 
   });
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Sport"], "the area is on screen: its day came");
-  eq(names(areas[0].loose).sort(), ["Overdue", "Ripe today"], "today and overdue are back among the rows");
-  eq(names(areas[0].future.loose).sort(), ["No day at all", "Not yet"], "the rest waits with the upcoming work");
+  eq(names(loose(areas[0])).sort(), ["Overdue", "Ripe today"], "today and overdue are back among the rows");
+  eq(names(ahead(areas[0])).sort(), ["No day at all", "Not yet"], "the rest waits with the upcoming work");
 });
 
 test("an area whose only work is running keeps its place", async () => {
@@ -119,11 +126,11 @@ test("an area whose only work is running keeps its place", async () => {
     taskNote(app, "Sent off", { area: "Work", scheduled: DAY(5), status: "in-progress" });
   });
   const areas = await plugin.collect(false);
-  // the ⏳ on its header is the only way back to that task: an area that vanished would take it away
-  eq(areaNames(areas), ["Work"], "the area cannot vanish and take the counter with it");
-  eq(names(areas[0].future.loose), ["Sent off"]);
-  eq(areas[0].loose, [], "but there is nothing to do in it today");
-  eq(areas[0].running, 1);
+  // nothing open today: the area is out of the focus; the task waits in «All» and comes back on its day
+  eq(areaNames(areas), [], "an area with nothing to do today is not in the focus");
+  const all = areaOf(await plugin.collect(true), "Work");
+  eq(names(loose(all)), ["Sent off"], "«All» shows it");
+  eq(all.running, 1);
 });
 
 test("an hour of the day decides when a running task comes back", async () => {
@@ -137,8 +144,8 @@ test("an hour of the day decides when a running task comes back", async () => {
   eq(at("Later today").date, TODAY, "the day is read as a day");
   eq(at("Later today").at, "23:59", "and the hour is kept beside it");
   const area = (await plugin.collect(false))[0];
-  eq(names(area.loose), ["Earlier today"], "its hour has passed: back among the rows");
-  eq(names(area.future.loose), ["Later today"], "this one's hour is still ahead: it waits");
+  eq(names(loose(area)), ["Earlier today"], "its hour has passed: back among the rows");
+  eq(names(ahead(area)), ["Later today"], "this one's hour is still ahead: it waits");
 });
 
 test("a task typed under another stays under it, not at the bottom", async () => {
@@ -151,7 +158,7 @@ test("a task typed under another stays under it, not at the bottom", async () =>
   const second = plugin.tasks().find((x) => x.text === "Bbb second");
   // the text sorts last by name and by date it ties with the rest: only the seat can hold it
   await plugin.insertAfter(second, "Zzz typed here", TODAY);
-  eq(names((await plugin.collect(false))[0].loose),
+  eq(names(loose((await plugin.collect(false))[0])),
     ["Aaa first", "Bbb second", "Zzz typed here", "Ccc third"]);
 });
 
@@ -167,7 +174,7 @@ test("a row keeps its seat through a tick and an untick", async () => {
   await plugin.toggle(typed());
   await plugin.insertAfter(first, "Yyy another", TODAY);   // перестраивает порядок списка
   await plugin.toggle(typed());
-  eq(names((await plugin.collect(false))[0].loose),
+  eq(names(loose((await plugin.collect(false))[0])),
     ["Aaa first", "Yyy another", "Zzz typed here", "Ccc third"], "the ticked row came back to its place");
 });
 
@@ -194,11 +201,11 @@ test("sending a task off names the day it comes back; taking it back puts it in 
   await plugin.setRunning(task(), true, DAY(4));
   eq(task().status, "in-progress");
   eq(task().date, DAY(4), "the status and the day it comes back are written in one change");
-  eq(names((await plugin.collect(false))[0].loose), ["Something of mine"], "и до этого дня её в фокусе нет");
+  eq(names(loose((await plugin.collect(false))[0])), ["Something of mine"], "и до этого дня её в фокусе нет");
   await plugin.setRunning(task(), false);
   eq(task().status, "open");
   eq(task().date, TODAY, "a return day still ahead would keep it out of the focus it was pulled into");
-  eq(names((await plugin.collect(false))[0].loose).includes("Ask the accountant"), true, "снова в фокусе");
+  eq(names(loose((await plugin.collect(false))[0])).includes("Ask the accountant"), true, "снова в фокусе");
   await plugin.undo();
   eq(task().status, "in-progress", "⌘Z puts it back where it was");
   eq(task().date, DAY(4), "with the day it was waiting for");
@@ -241,7 +248,7 @@ test("a running task with its day taken away comes home instead of being strande
   eq(task().status, "open", "nothing would ever bring it back, so it is mine again");
   eq(task().date, null);
   const area = (await plugin.collect(false))[0];
-  eq(names(area.future.loose), ["Sent off"], "an ordinary task with no date: the отложка of its area");
+  eq(names(ahead(area)), ["Sent off"], "an ordinary task with no date: the отложка of its area");
 });
 
 test("among what is not today, the started ones come first", async () => {
@@ -254,8 +261,8 @@ test("among what is not today, the started ones come first", async () => {
   });
   const area = (await plugin.collect(false))[0];
   // a promise already made stands above a plan, even when its day is further out
-  eq(names(area.future.loose)[0], "Sent to the lawyer");
-  eq(names(area.future.loose).slice(1), ["Planned for Friday", "Someday, no date"]);
+  eq(names(ahead(area))[0], "Sent to the lawyer");
+  eq(names(ahead(area)).slice(1), ["Planned for Friday", "Someday, no date"]);
 });
 
 test("a running step stays inside its project, not in the area", async () => {
@@ -268,8 +275,8 @@ test("a running step stays inside its project, not in the area", async () => {
   });
   const area = (await plugin.collect(false))[0];
   eq(names(area.projects[0].later), ["Sent to the lawyer"], "the project keeps its own");
-  eq(names(area.future.loose), ["Waiting on a reply"], "the area keeps the loose one");
-  eq(names(area.loose), ["Mine today"], "the focus is untouched by either");
+  eq(names(ahead(area)), ["Waiting on a reply"], "the area keeps the loose one");
+  eq(names(loose(area)), ["Mine today"], "the focus is untouched by either");
 });
 
 test("the build line says which build is running, in words", async () => {
@@ -307,7 +314,7 @@ test("a status nobody knows still counts as open", async () => {
     areaNote(app, "Sport");
     taskNote(app, "Odd", { area: "Sport", scheduled: TODAY, status: "выдумка" });
   });
-  eq(names((await plugin.collect(false))[0].loose), ["Odd"]);
+  eq(names(loose((await plugin.collect(false))[0])), ["Odd"]);
 });
 
 test("what was checked off today stays in its area, what was checked off before is gone", async () => {
@@ -319,7 +326,7 @@ test("what was checked off today stays in its area, what was checked off before 
   });
   const area = (await plugin.collect(false))[0];
   eq(names(area.done), ["Done today"]);
-  eq(names(area.loose), ["Open"]);
+  eq(names(loose(area)), ["Open"]);
 });
 
 test("a step of a project checked off today keeps its area in the focus", async () => {
@@ -377,8 +384,8 @@ test("a project with only future steps goes to the upcoming block", async () => 
     taskNote(app, "Today", { area: "Sport", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(area.projects.length, 0, "no project in the focus");
-  eq(area.future.projects.map((p) => p.file.basename), ["Marathon"], "in upcoming");
+  eq(focusProjects(area).length, 0, "no project in the focus");
+  eq(aheadProjects(area).map((p) => p.file.basename), ["Marathon"], "in upcoming");
 });
 
 // --- identity and writes -------------------------------------------------------------------------
@@ -485,8 +492,10 @@ test("a project on screen keeps its own upcoming steps, out of the area's pile",
   const area = (await plugin.collect(false))[0];
   eq(names(area.projects[0].tasks), ["Today's step"], "the focus keeps only what is due");
   eq(names(area.projects[0].later).sort(), ["Next month", "Someday step"], "the rest hangs off the project");
-  eq(area.future.projects.length, 0, "and the project is not copied into the area's upcoming block");
-  eq(names(area.future.loose), ["Loose later"], "which now holds only the area's own tasks");
+  // the not-today pile is one list of rows: the project is there once more, with its first later step
+  eq(aheadProjects(area).map((x) => x.file.basename), ["Launch"], "the project has a row in the area's upcoming pile too");
+  eq(names(aheadProjects(area)[0].tasks), ["Next month", "Someday step"], "with its own later steps behind it");
+  eq(names(ahead(area)), ["Loose later"], "beside the area's own tasks");
 });
 
 test("a project with nothing due and nothing done today still waits under «upcoming»", async () => {
@@ -497,9 +506,9 @@ test("a project with nothing due and nothing done today still waits under «upco
     taskNote(a, "Due now", { area: "Work", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(area.projects.length, 0, "nothing of it is due");
-  eq(area.future.projects.map((x) => x.file.basename), ["Later on"]);
-  eq(names(area.future.projects[0].tasks), ["Some day"]);
+  eq(focusProjects(area).length, 0, "nothing of it is due");
+  eq(aheadProjects(area).map((x) => x.file.basename), ["Later on"]);
+  eq(names(aheadProjects(area)[0].tasks), ["Some day"]);
 });
 
 test("what a project closed today belongs to the project, not to the area", async () => {
@@ -512,7 +521,7 @@ test("what a project closed today belongs to the project, not to the area", asyn
   });
   const area = (await plugin.collect(false))[0];
   eq(names(area.projects[0].done), ["Step done"], "the project counts its own");
-  eq(names(area.doneLoose), ["Loose done"], "the area's block holds only what has no project");
+  eq(names(doneLoose(area)), ["Loose done"], "the area's block holds only what has no project");
   eq(names(area.done).sort(), ["Loose done", "Step done"], "and the area still knows the whole day");
 });
 
@@ -709,7 +718,7 @@ test("a task without an area can be placed into one", async () => {
   eq(names(plugin.orphans()), ["Foreign"]);
   await plugin.setFields(plugin.orphans()[0], { area: "Sport" });
   eq(plugin.orphans().length, 0, "not an orphan any more");
-  eq(names((await plugin.collect(false))[0].loose), ["Foreign"]);
+  eq(names(loose((await plugin.collect(false))[0])), ["Foreign"]);
 });
 
 test("a task pointing at a project that does not exist is treated as lost, not hidden", async () => {
@@ -736,7 +745,7 @@ test("a note with broken frontmatter is skipped, not fatal", async () => {
     taskNote(a, "Fine", { area: "Sport", scheduled: TODAY });
   });
   const areas = await plugin.collect(true);
-  eq(names(areaOf(areas, "Sport").loose), ["Fine"]);
+  eq(names(loose(areaOf(areas, "Sport"))), ["Fine"]);
 });
 
 test("a project written as a plain link instead of a list still binds", async () => {
@@ -785,8 +794,8 @@ test("two tasks sharing a uid do not shadow each other", async () => {
     writeNote(a, "Tasks/Two.md", { uid: "ft-same", type: "задача", status: "open", area: "Sport", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.loose).sort(), ["One", "Two"], "both are on screen");
-  await plugin.toggle(area.loose.find((t) => t.text === "One"));
+  eq(names(loose(area)).sort(), ["One", "Two"], "both are on screen");
+  await plugin.toggle(loose(area).find((t) => t.text === "One"));
   eq(frontmatter(app, "Tasks/One.md").status, "done");
   eq(frontmatter(app, "Tasks/Two.md").status, "open", "the twin is untouched");
 });
@@ -797,7 +806,7 @@ test("an area whose note is missing still shows its tasks", async () => {
   });
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Ghost"]);
-  eq(names(areas[0].loose), ["Orphan work"]);
+  eq(names(loose(areas[0])), ["Orphan work"]);
 });
 
 test("areas differing only by emoji are different areas", async () => {
@@ -831,7 +840,7 @@ test("moving a task to tomorrow takes it out of today", async () => {
   await plugin.setDate(plugin.tasks()[0], DAY(1));
   eq(areaNames(await plugin.collect(false)), [], "nothing is due today any more");
   const area = areaOf(await plugin.collect(true), "Work");
-  eq(names(area.future.loose.concat(area.loose)), ["Ship it"], "it is in the upcoming work");
+  eq(names(ahead(area).concat(loose(area))), ["Ship it"], "it is in the upcoming work");
 });
 
 test("sending a task to someday clears its date and keeps it in the area", async () => {
@@ -841,7 +850,7 @@ test("sending a task to someday clears its date and keeps it in the area", async
   });
   await plugin.setDate(plugin.tasks()[0], null);
   eq(frontmatter(app, "Tasks/Later thing.md").scheduled, undefined, "no date");
-  eq(names(areaOf(await plugin.collect(true), "Work").loose), ["Later thing"], "«All» shows it in the area");
+  eq(names(loose(areaOf(await plugin.collect(true), "Work"))), ["Later thing"], "«All» shows it in the area");
 });
 
 test("a task stuck for two weeks is still in the focus, dated in the past", async () => {
@@ -850,8 +859,8 @@ test("a task stuck for two weeks is still in the focus, dated in the past", asyn
     taskNote(a, "Stuck", { area: "Work", scheduled: DAY(-14) });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.loose), ["Stuck"]);
-  ok(area.loose[0].date < TODAY, "the view paints it red by this");
+  eq(names(loose(area)), ["Stuck"]);
+  ok(loose(area)[0].date < TODAY, "the view paints it red by this");
 });
 
 test("evening: everything checked off today is counted in its area, and gone tomorrow", async () => {
@@ -878,7 +887,7 @@ test("a project whose steps are all done today keeps its place, marked done", as
   eq(areas[0].projects.map((x) => x.file.basename), ["Launch"], "the project is still on screen");
   ok(areas[0].projects[0].finished, "and it reads as finished");
   eq(names(areas[0].projects[0].done), ["Last step"], "it counts what was done in it");
-  eq(areas[0].future.projects.length, 0, "and it is not doubled in the upcoming block");
+  eq(aheadProjects(areas[0]).length, 0, "and it is not doubled in the upcoming block");
   eq(names(areas[0].done), ["Last step"]);
 });
 
@@ -890,8 +899,8 @@ test("a project finished on an earlier day is gone from the focus", async () => 
     taskNote(a, "Something else", { area: "Work", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(area.projects.length, 0, "yesterday's win does not follow me into today");
-  eq(area.future.projects.map((x) => x.file.basename), ["Launch"], "it waits under «upcoming»");
+  eq(focusProjects(area).length, 0, "yesterday's win does not follow me into today");
+  eq(aheadProjects(area).map((x) => x.file.basename), ["Launch"], "it waits under «upcoming», empty");
 });
 
 test("a project with a step left open is not finished, however much was done today", async () => {
@@ -927,7 +936,7 @@ test("a date written with a time still counts as that day", async () => {
     taskNote(a, "Timed done", { area: "Work", status: "done", completedDate: TODAY + "T18:30:00+03:00" });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.loose), ["Timed"], "in the focus, not in some far future");
+  eq(names(loose(area)), ["Timed"], "in the focus, not in some far future");
   eq(names(area.done), ["Timed done"], "counted as done today");
 });
 
@@ -936,9 +945,10 @@ test("a status in capitals is still a status", async () => {
     areaNote(a, "Work");
     taskNote(a, "Shouted", { area: "Work", scheduled: TODAY, status: "DONE", completedDate: TODAY });
   });
-  const area = (await plugin.collect(false))[0];
+  const area = areaOf(await plugin.collect(true), "Work");
   eq(names(area.done), ["Shouted"]);
-  eq(area.loose.length, 0, "not open at the same time");
+  eq(loose(area).length, 0, "not open at the same time");
+  eq(plugin.closedToday().map((g) => names(g.tasks)), [["Shouted"]], "and it is among the day's closed work");
 });
 
 test("a nonsense date does not throw the task out of sight", async () => {
@@ -947,7 +957,7 @@ test("a nonsense date does not throw the task out of sight", async () => {
     taskNote(a, "Broken date", { area: "Work", scheduled: "не дата" });
   });
   const area = areaOf(await plugin.collect(true), "Work");
-  eq(names(area.loose.concat(area.future.loose)), ["Broken date"]);
+  eq(names(loose(area).concat(ahead(area))), ["Broken date"]);
 });
 
 test("a number or a date object in a field does not break the row", async () => {
@@ -957,7 +967,7 @@ test("a number or a date object in a field does not break the row", async () => 
   });
   const area = (await plugin.collect(false))[0];
   eq(area.name, "42");
-  eq(names(area.loose), ["7"]);
+  eq(names(loose(area)), ["7"]);
 });
 
 // --- the note changes under the plugin ----------------------------------------------------------
@@ -1029,9 +1039,9 @@ test("a dragged order is kept by uid and survives a rename", async () => {
   });
   const tasks = Object.fromEntries(plugin.tasks().map((t) => [t.text, t]));
   await plugin.reorder([tasks.C], { into: false, after: false, target: { type: "task", task: tasks.A } }, {});
-  eq(names((await plugin.collect(false))[0].loose), ["C", "A", "B"], "C went first");
+  eq(names(loose((await plugin.collect(false))[0])), ["C", "A", "B"], "C went first");
   await plugin.rename(plugin.tasks().find((t) => t.text === "C"), "C renamed");
-  eq(names((await plugin.collect(false))[0].loose), ["C renamed", "A", "B"], "the order held through the rename");
+  eq(names(loose((await plugin.collect(false))[0])), ["C renamed", "A", "B"], "the order held through the rename");
 });
 
 test("the saved order does not grow duplicates", async () => {
@@ -1302,9 +1312,9 @@ test("a task that gains a uid keeps the place it was dragged to", async () => {
   const foreign = plugin.tasks().find((x) => x.text === "Foreign");
   const mine = plugin.tasks().find((x) => x.text === "Mine");
   await plugin.reorder([foreign], { into: false, after: false, target: { type: "task", task: mine } }, {});
-  eq(names((await plugin.collect(false))[0].loose), ["Foreign", "Mine"], "dragged to the top");
+  eq(names(loose((await plugin.collect(false))[0])), ["Foreign", "Mine"], "dragged to the top");
   await plugin.setDate(plugin.tasks().find((x) => x.text === "Foreign"), TODAY);   // this writes the uid
-  eq(names((await plugin.collect(false))[0].loose), ["Foreign", "Mine"], "still at the top after it got its uid");
+  eq(names(loose((await plugin.collect(false))[0])), ["Foreign", "Mine"], "still at the top after it got its uid");
 });
 
 test("the guard on a task that had no uid lets the next tick through", async () => {
@@ -1561,8 +1571,8 @@ test("fuzz: whatever is in the vault, every open task is somewhere on screen", a
     const all = await plugin.collect(true);
     const shown = new Set();
     for (const area of all) {
-      for (const t of [...area.loose, ...area.future.loose, ...area.done]) shown.add(t.file.path);
-      for (const pr of [...area.projects, ...area.future.projects])
+      for (const t of [...loose(area), ...ahead(area), ...area.done]) shown.add(t.file.path);
+      for (const pr of [...area.projects, ...aheadProjects(area)])
         for (const t of [...pr.tasks, ...(pr.later || [])]) shown.add(t.file.path);
     }
     for (const t of plugin.orphans()) shown.add(t.file.path);
@@ -1577,7 +1587,7 @@ test("fuzz: the focus never shows a task that is not due yet", async () => {
     const { plugin } = await stand((app) => junkVault(app, seed));
     const focus = await plugin.collect(false);
     for (const area of focus) {
-      const rows = [...area.loose, ...area.projects.flatMap((p) => p.tasks)];
+      const rows = [...loose(area), ...area.projects.flatMap((p) => p.tasks)];
       const wrong = rows.filter((t) => !(t.date && t.date <= TODAY)).map((t) => `${t.text}: ${t.date}`);
       eq(wrong, [], `seed ${seed}: not due yet but in the focus`);
     }
@@ -1587,8 +1597,8 @@ test("fuzz: the focus never shows a task that is not due yet", async () => {
 test("fuzz: reading the same vault twice gives the same answer", async () => {
   for (let seed = 200; seed <= 210; seed++) {
     const { plugin } = await stand((app) => junkVault(app, seed));
-    const once = JSON.stringify((await plugin.collect(false)).map((a) => [a.name, names(a.loose), a.projects.map((p) => names(p.tasks))]));
-    const twice = JSON.stringify((await plugin.collect(false)).map((a) => [a.name, names(a.loose), a.projects.map((p) => names(p.tasks))]));
+    const once = JSON.stringify((await plugin.collect(false)).map((a) => [a.name, names(loose(a)), a.projects.map((p) => names(p.tasks))]));
+    const twice = JSON.stringify((await plugin.collect(false)).map((a) => [a.name, names(loose(a)), a.projects.map((p) => names(p.tasks))]));
     eq(once, twice, `seed ${seed}: the list is not stable`);
   }
 });
@@ -1621,15 +1631,15 @@ test("a week of ordinary use leaves the vault consistent", async () => {
   await plugin.createTask("Написать письмо", { area: "Work", project: null }, TODAY);
   await plugin.createTask("Собрать вещи", { area: "Home", project: null }, TODAY);
   await plugin.createTask("Первый шаг запуска", { area: "Work", project: "Launch" }, TODAY);
-  eq(names((await plugin.collect(false)).flatMap((x) => [...x.loose, ...x.projects.flatMap((p) => p.tasks)])).sort(),
+  eq(names((await plugin.collect(false)).flatMap((x) => [...loose(x), ...x.projects.flatMap((p) => p.tasks)])).sort(),
      ["Written".replace("Written", "Написать письмо"), "Первый шаг запуска", "Собрать вещи"].sort(), "all three are in the focus");
   // one is finished, one goes to tomorrow, one to the someday list
   await plugin.toggle(pick("Написать письмо"));
   await plugin.setDate(pick("Собрать вещи"), DAY(1));
   await plugin.setDate(pick("Первый шаг запуска"), null);
   let areas = await plugin.collect(false);
-  eq(names(areaOf(areas, "Work").done), ["Написать письмо"], "what was finished is under Completed");
-  eq(areaNames(areas), ["Work"], "the other areas have nothing due");
+  eq(plugin.closedToday().map((g) => [g.name, names(g.tasks)]), [["Work", ["Написать письмо"]]], "what was finished is in the day's closed block");
+  eq(areaNames(areas), [], "nothing is due anywhere now: the focus is empty");
   // a task grows a plan and becomes a project
   await plugin.createTask("Ремонт кухни", { area: "Home", project: null }, TODAY);
   await plugin.update(pick("Ремонт кухни"), () => {});
@@ -1644,7 +1654,7 @@ test("a week of ordinary use leaves the vault consistent", async () => {
   await plugin.setDate(pick("Собрать вещи"), TODAY);
   areas = await plugin.collect(false);
   eq(areaOf(areas, "Work"), undefined, "nothing is left in Work today");
-  eq(names(areaOf(areas, "Home").loose), ["Собрать вещи"], "and Home has the task that was moved");
+  eq(names(loose(areaOf(areas, "Home"))), ["Собрать вещи"], "and Home has the task that was moved");
   // nothing was lost on the way
   eq(plugin.orphans().length, 0, "no task without a home");
   eq(plugin.tasks().length, 5, "four tasks and the two steps, minus the one that became a project");
@@ -1685,8 +1695,8 @@ test("someone writing the same notes underneath does not break the list", async 
   const open = plugin.tasks().filter((t) => !["done", "cancelled", "someday"].includes(t.status));
   const shown = new Set();
   for (const area of await plugin.collect(true)) {
-    for (const t of [...area.loose, ...area.future.loose]) shown.add(t.file.path);
-    for (const pr of [...area.projects, ...area.future.projects]) for (const t of pr.tasks) shown.add(t.file.path);
+    for (const t of [...loose(area), ...ahead(area)]) shown.add(t.file.path);
+    for (const pr of [...area.projects, ...aheadProjects(area)]) for (const t of pr.tasks) shown.add(t.file.path);
   }
   for (const t of plugin.orphans()) shown.add(t.file.path);
   eq(open.filter((t) => !shown.has(t.file.path)).map((t) => t.file.path), [], "every open task is still visible");
