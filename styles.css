@@ -374,8 +374,8 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 .focus-tasks-view li.ft-done.ft-project-row > .ft-project-name { text-decoration: line-through; color: var(--text-faint); }
 .focus-tasks-view .ft-done-toggle.is-on { color: var(--text-normal); background: var(--background-modifier-hover); }
 
-/* The date column has room for «25.09 20:00» without pushing the text around. */
-.focus-tasks-view li.ft-task > .ft-date { min-width: 4.8em; }
+/* The date column has room for «25.09.26 20:00» without pushing the text around. */
+.focus-tasks-view li.ft-task > .ft-date { min-width: 5.2em; }
 
 /* A task that carries a description: the rule says a plan belongs in a project, and the row says it
    quietly — the choice stays with the user. */

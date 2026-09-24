@@ -1407,7 +1407,7 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     // One way of writing a date everywhere. Today says nothing — a row in the focus is today's by
     // being there — unless it has an hour; a day gone by says how many days late, in red; a day ahead
-    // is «25.09» (with the year only when it is another year). The full date is in the tooltip.
+    // is the full date, «25.09.26», year always: one width, one habit. The full date is in the tooltip.
     const now = today();
     const full = moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY");
     el.setAttr("aria-label", task.at ? `${full} ${task.at}` : full);
@@ -1432,8 +1432,7 @@ class FocusRenderer extends MarkdownRenderChild {
       el.setAttr("aria-label", `${full} · ${t("overdueBy", late)}`);
       return;
     }
-    const day = moment(task.date).format(task.date.slice(0, 4) === now.slice(0, 4) ? "DD.MM" : "DD.MM.YY");
-    el.setText(task.at ? `${day} ${task.at}` : day);
+    el.setText(task.at ? `${full} ${task.at}` : full);
   }
 
   // Redraw as soon as one of the waiting tasks is due, and not a moment later.

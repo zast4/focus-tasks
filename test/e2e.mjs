@@ -22,8 +22,7 @@ const SHOTS = path.join(ROOT, "test", "shots");
 const TODAY = ymd(new Date());
 // the picker's own field format: «2026-09-30» → «30.09.26»
 const ddmmyy = (iso) => `${iso.slice(8, 10)}.${iso.slice(5, 7)}.${iso.slice(2, 4)}`;
-// How a row writes a day ahead: «25.09», the year only when it is another one.
-const ddmm = (iso) => (iso.slice(0, 4) === TODAY.slice(0, 4) ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : ddmmyy(iso));
+
 const TOMORROW = ymd(new Date(Date.now() + 864e5));
 const YESTERDAY = ymd(new Date(Date.now() - 864e5));
 
@@ -210,7 +209,7 @@ step("+ on a project makes steps that point at it, and ⌘1–4 date them while 
   await page.key("Meta+2");
   await until(() => page.eval(`
     const row = document.querySelector('.focus-tasks-view .is-editing')?.closest('li');
-    return row?.querySelector('.ft-date')?.textContent.trim();`).then((d) => d === ddmm(TOMORROW)),
+    return row?.querySelector('.ft-date')?.textContent.trim();`).then((d) => d === ddmmyy(TOMORROW)),
     "the draft shows the day it will get");
   await page.key("Enter");
   await taskIs("Plan route", { projects: "[[Marathon]]", scheduled: TOMORROW }, "the key set the date of a task that did not exist yet");
