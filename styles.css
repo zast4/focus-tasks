@@ -442,3 +442,26 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
    rest is one click (or one hover) away — editing always shows the full text. */
 .focus-tasks-view li.ft-task > .ft-text { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .focus-tasks-view li.ft-task > .ft-text.is-editing { display: block; -webkit-line-clamp: none; overflow: visible; }
+
+/* Nothing invisible takes room. A control that shows only under the pointer is not in the row at all
+   until then (not merely transparent): a transparent one still held its width, and left a gap between
+   the things that were visible — a ▷ stood apart from its date for no visible reason. On a phone,
+   with no pointer, they are always there. */
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-plus,
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-chip.is-quiet.is-off,
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-date.is-empty:not(.is-active),
+body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more,
+body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-plus,
+body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-chip.is-quiet.is-off,
+body:not(.is-mobile) .focus-tasks-view .ft-page-head > .ft-plus,
+body:not(.is-mobile) .focus-tasks-view .ft-page-head > .ft-chip.is-quiet.is-off { display: none; }
+body:not(.is-mobile) .focus-tasks-view li.ft-task:hover > .ft-plus,
+body:not(.is-mobile) .focus-tasks-view li.ft-task:hover > .ft-chip.is-quiet.is-off,
+body:not(.is-mobile) .focus-tasks-view li.ft-task:hover > .ft-date.is-empty,
+body:not(.is-mobile) .focus-tasks-view .ft-area-title:hover > .ft-more,
+body:not(.is-mobile) .focus-tasks-view .ft-area-title:hover > .ft-plus,
+body:not(.is-mobile) .focus-tasks-view .ft-area-title:hover > .ft-chip.is-quiet.is-off,
+body:not(.is-mobile) .focus-tasks-view .ft-page-head:hover > .ft-plus,
+body:not(.is-mobile) .focus-tasks-view .ft-page-head:hover > .ft-chip.is-quiet.is-off { display: inline-flex; opacity: 1; }
+/* the area's «+» is pushed to the right edge; hidden, the ⋯ after it would not be: keep them together */
+body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 0; }

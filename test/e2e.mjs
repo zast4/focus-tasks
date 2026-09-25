@@ -41,6 +41,15 @@ window.__ft = {
   text(sel, n) { return this.all(sel).find((e) => e.textContent.trim() === n); },
   at(el, dy = 0.5) {
     if (!el) return null;
+    // a hover-only control is out of the layout until the pointer is over its row; the mouse is about
+    // to be there, so it is shown where the hover would show it
+    // — and with it every other hover-only control of that row, so the layout is the hovered one
+    if (!el.getClientRects().length && el.closest('.focus-tasks-view')) {
+      const row = el.closest('li.ft-task, .ft-area-title, .ft-page-head') || el.parentElement;
+      for (const c of row.querySelectorAll(':scope > .ft-plus, :scope > .ft-chip.is-quiet, :scope > .ft-date.is-empty, :scope > .ft-more'))
+        if (!c.getClientRects().length) c.style.display = 'inline-flex';
+      el.style.display = 'inline-flex';
+    }
     el.scrollIntoView({ block: 'center' });
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height * dy };
