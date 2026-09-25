@@ -614,6 +614,23 @@ test("a deleted task comes back with the same uid", async () => {
   eq(plugin.tasks()[0].uid, uid, "same identity");
 });
 
+test("several selected tasks are deleted together and come back together", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Swim", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Stretch", { area: "Sport", scheduled: TODAY });
+  });
+  const [run, swim] = plugin.tasks().filter((x) => x.text !== "Stretch");
+  const uids = [run.uid, swim.uid];
+  await plugin.removeTasks([run, swim]);
+  eq(plugin.tasks().map((x) => x.text), ["Stretch"], "both gone, the third stays");
+  eq(plugin.history.length, 1, "one step of history for the pair");
+  await plugin.undo();
+  eq(plugin.tasks().map((x) => x.uid).filter((u) => uids.includes(u)).length, 2, "both back with their uids");
+  eq(await plugin.removeTasks([]), null, "nothing to delete is not a step");
+});
+
 test("deleting a project frees its tasks into the area", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Sport");

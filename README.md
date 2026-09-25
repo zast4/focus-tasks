@@ -45,13 +45,15 @@ What you can do in the view:
 | Hand a task off | «In progress» in the row's menu: it leaves the focus and waits behind the ▷N of its project or area. Its date now means «look at it again»: on that day the task comes back among the rows that are due, marked ▷, and that ▷ hands it back to you |
 | Priority | the dot on a row opens the levels — high, normal, low, or none at all; the same is in the row's menu, and in the menu of a selection it sets them all |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
-| Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** cancels |
-| Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date |
+| Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** saves and leaves the row selected (a wiped row keeps its text) |
+| Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date; a day that takes the row out of its list sends it off at once and moves the editor to the next row |
+| Undo | **⌘/Ctrl+Z** in the list takes back the last change (a tick, a date, a move, a delete) and selects the rows it touched; while editing, with nothing typed yet, it does the same — typed text keeps the editor's own undo |
 | Date picker | click the date on the right (type `25.12`, `tomorrow`, or pick a day) |
 | Add a task | **+** on an area or a project header; «Empty» in an empty area |
-| Menu | click the grip on the left, or right-click a row |
+| Menu | right-click a row (on a phone: tap the grip) |
 | Reorder / move | drag the grip: areas among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
-| Select several | **Shift**-click selects every task from the last clicked one, **⌘/Ctrl**-click adds or drops one, **Esc** clears; the grip of a selected row drags them all; its date, its menu or **⌘/Ctrl+1…4** (as while editing) set the date of all of them |
+| Select a row | click the grip on the left (again: drops it), or **Esc** while editing. A selected row is a block picked up as a whole, as in Notion: **↑/↓** walk the list, **Shift+↑/↓** extend, **Enter** edits it, **⌫** deletes (Undo in the notice), **⌘/Ctrl+1…4** date it, **⌘/Ctrl+Z** takes back the last change, **Esc** drops the selection |
+| Select several | **Shift**-click selects every task from the last clicked one, **⌘/Ctrl**-click adds or drops one; the grip of a selected row drags them all; its date, its menu, the keys above or **⌘/Ctrl+1…4** work on all of them |
 | Upcoming | the ⏳N on an area's header opens its undated and future tasks, next to ▷N running and ✓N done |
 | Everything | «All» at the bottom shows every area (also those with nothing due); «Hide» goes back |
 | Fold | carets on headers; «Collapse all» / «Expand all» at the bottom |
@@ -148,7 +150,7 @@ Try these in a new vault (or a copy of yours):
 6. Check a task: it moves to the bottom of its area, and the area's title grows a green ✓1;
    its box there brings it back.
 7. Drag a task onto an area header; drag a task between two others; drag an area above another.
-8. Click a task, Shift-click another two rows down: three rows selected; the grip menu → «Tomorrow»
+8. Click a task's grip, Shift-click another two rows down: three rows selected; right-click → «Tomorrow»
    dates all three; ⌘4 / ⌘1 do the same from the keyboard; drag one of them by the grip onto a
    project: all three move, in order.
 9. Delete a task from its menu → «Undo» in the notice brings it back.
@@ -240,10 +242,14 @@ passes (`--keep` leaves it).
 
 Открыть: иконка на ленте или команда **Focus Tasks: Открыть Фокус**, либо блок ` ```focus-tasks``` `
 в любой заметке. Клик по тексту — правка на месте (Enter — сохранить и новая строка ниже, Esc —
-отмена; ⌘1 сегодня, ⌘2 завтра, ⌘3 календарь, ⌘4 без даты). Ручка слева — перетаскивание, клик по ней
-или правый клик — меню. Shift+клик выделяет все задачи от последней кликнутой до этой, ⌘/Ctrl+клик
-добавляет или убирает одну, Esc снимает выделение; ручка выделенной строки тащит их все, а её дата,
-меню или ⌘1–4 (как при правке) ставят дату всем сразу. Внизу — «Все» / «Скрыть», «+ Область», «+ Область из заметки»,
+сохранить и выделить строку; ⌘1 сегодня, ⌘2 завтра, ⌘3 календарь, ⌘4 без даты; ⌘Z, пока ничего не
+набрано, отменяет последнее действие списка). Ручка слева — перетаскивание, клик по ней — выделить
+строку (на телефоне — меню), правый клик — меню. Выделенная строка — блок целиком, как в Notion:
+↑/↓ ходят по списку, Shift+↑/↓ расширяют, Enter — правка, ⌫ — удалить (с «Вернуть»), ⌘1–4 — дата,
+⌘Z — отменить последнее действие (строки, которых оно касалось, выделяются), Esc — снять выделение.
+Shift+клик выделяет все задачи от последней кликнутой до этой, ⌘/Ctrl+клик добавляет или убирает
+одну; ручка выделенных строк тащит их все, а дата, меню и клавиши работают на всех сразу.
+Внизу — «Все» / «Скрыть», «+ Область», «+ Область из заметки»,
 «Свернуть всё» / «Развернуть всё». Язык интерфейса — в настройках (Auto / English / Русский).
 
 **Обновление с 0.1.0.** В 0.1.0 задача была строкой-чекбоксом внутри заметки области, теперь каждая

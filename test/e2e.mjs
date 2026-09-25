@@ -36,6 +36,7 @@ window.__ft = {
   all(sel, root) { return [...(root || document).querySelectorAll(sel)].filter((e) => e.getClientRects().length); },
   task(n) { return n ? this.all('li.ft-task', this.view()).find((e) => e.querySelector('.ft-text')?.textContent.trim() === n) : undefined; },
   project(n) { return this.all('li.ft-project-row', this.view()).find((e) => e.querySelector('.ft-link')?.textContent.trim() === n); },
+  name(n) { return this.project(n)?.querySelector('.ft-project-name'); },
   area(n) { return this.all('.ft-area-title', this.view()).find((e) => e.textContent.includes(n)); },
   text(sel, n) { return this.all(sel).find((e) => e.textContent.trim() === n); },
   at(el, dy = 0.5) {
@@ -73,6 +74,8 @@ const pos = async (expr, what) => {
   return p;
 };
 const click = async (expr, what, modifiers = 0) => page.click(await pos(expr, what), modifiers);
+// a row's menu is a right click (a plain click on the grip selects the row)
+const menuOn = async (expr, what) => page.rightClick(await pos(expr, what));
 const SHIFT = 8, CMD = process.platform === "darwin" ? 4 : 2;
 const selected = async () => {
   if (!(await page.eval(`return !!__ft.view()`))) await toPane();  // a key may bring a note tab to the front
@@ -426,13 +429,13 @@ step("«Move up» / «Move down» reorder a task without dragging", async () => 
     .filter((e) => !e.closest('li.ft-steps')).map((e) => e.querySelector('.ft-text').textContent.trim())`);
   const before = await order();
   const first = before[0];
-  await click(`__ft.grip(__ft.task(${J(first)}))`);
+  await menuOn(`__ft.at(__ft.task(${J(first)}))`);
   await menu("Move down");
   const at = before.indexOf(first);
   await until(async () => (await order()).indexOf(first) !== at, `${first} moved down`);
   const after = await order();
   if (after.indexOf(first) <= at) throw new Error("it did not land lower: " + J(after));
-  await click(`__ft.grip(__ft.task(${J(first)}))`);
+  await menuOn(`__ft.at(__ft.task(${J(first)}))`);
   await menu("Move up");
   await until(async () => (await order()).indexOf(first) === at, `${first} moved back up`);
 });
@@ -451,7 +454,7 @@ step("drag an area above another saves the order", async () => {
 });
 
 step("delete a task from its menu, then undo", async () => {
-  await click(`__ft.grip(__ft.task('Stretch'))`);
+  await menuOn(`__ft.at(__ft.task('Stretch'))`);
   await menu("Delete");
   await noTask("Stretch");
   await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
@@ -544,7 +547,7 @@ step("«In progress…» sends the task off: a day, an hour typed in two segment
   await until(() => page.eval(`return !!__ft.task('Ask the lawyer')`), "Ask the lawyer on screen");
   // no ▷ on a row that is not running: sending off lives in the row's menu
   if (await page.eval(`return !!__ft.task('Ask the lawyer').querySelector('.ft-running')`)) throw new Error("a row not sent off carries a ▷");
-  await click(`__ft.grip(__ft.task('Ask the lawyer'))`);
+  await menuOn(`__ft.at(__ft.task('Ask the lawyer'))`);
   await menu("In progress…");
   await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption')`), "the «look at it again» card");
   const card = JSON.parse(await page.eval(`
@@ -643,7 +646,7 @@ step("the dot a robot leaves can be taken off from the row itself", async () => 
   await menu("No priority");
   await taskIs("Added by a script", { priority: null }, "the mark came off");
   await until(() => page.eval(`return !__ft.task('Added by a script')?.querySelector('.ft-priority')`), "and the dot is gone");
-  await click(`__ft.grip(__ft.task('Added by a script'))`);
+  await menuOn(`__ft.at(__ft.task('Added by a script'))`);
   await menu("High priority");
   await taskIs("Added by a script", { priority: "high" }, "and the menu can set one");
   // the levels must look different — a rule that loses on specificity paints them all the same grey
@@ -693,7 +696,7 @@ step("«Make it a project»: the task becomes a project and stays in the focus a
   await click(`__ft.at(__ft.task('Plan the season').querySelector('.ft-text-link'))`);
   await until(async () => (await activePath()) === taskPath("Plan the season"), "the task's note open");
   await toPane();
-  await click(`__ft.grip(__ft.task('Plan the season'))`);
+  await menuOn(`__ft.at(__ft.task('Plan the season'))`);
   await menu("Make it a project");
   await until(() => exists("Tasks/Plan the season.md"), "the project note was made", 8000);
   await until(() => page.eval(`const r = __ft.project('Plan the season'); return !!r && r.querySelector('.ft-text')?.textContent.trim() === 'Plan the season'`),
@@ -704,7 +707,7 @@ step("«Make it a project»: the task becomes a project and stays in the focus a
   // the step is named like its project: its link must say which of the two notes it means
   await taskIs("Plan the season", { projects: "[[Tasks/Plan the season]]" }, "the step's link names the project by path");
   // …and a rename of the project takes the step along, whatever Obsidian did with the link
-  await click(`__ft.grip(__ft.project('Plan the season'))`);
+  await menuOn(`__ft.at(__ft.name('Plan the season'))`);
   await menu("Rename");
   await editing();
   await page.eval(`__ft.selectAll()`);
@@ -744,7 +747,7 @@ step("the last step of a project checked off: the project stays as an empty row,
   await click(`__ft.at(__ft.project('Cleanup').querySelector('input'))`);
   await taskIs("Order new ones", { status: "done" });
   await until(() => page.eval(`return !!__ft.project('Cleanup')?.hasClass('is-empty')`), "empty again");
-  await click(`__ft.grip(__ft.project('Cleanup'))`);
+  await menuOn(`__ft.at(__ft.name('Cleanup'))`);
   await menu("Project done");
   await until(() => (read("Tasks/Cleanup.md") || "").includes("status: done"), "the project note says done");
   await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && !!r.closest('.ft-done-today')`), "the project is in the closed block");
@@ -756,7 +759,7 @@ step("the last step of a project checked off: the project stays as an empty row,
 });
 
 step("rename a project in place; its tasks follow it", async () => {
-  await click(`__ft.grip(__ft.project('Marathon'))`);
+  await menuOn(`__ft.at(__ft.name('Marathon'))`);
   await menu("Rename");
   await editing();
   await page.eval(`__ft.selectAll()`);
@@ -772,7 +775,7 @@ step("rename a project in place; its tasks follow it", async () => {
 
 step("link a note to a project: the name opens the note, the menu opens the project note", async () => {
   const before = read("Notes/Running log.md");
-  await click(`__ft.grip(__ft.project('Marathon 2027'))`);
+  await menuOn(`__ft.at(__ft.name('Marathon 2027'))`);
   await menu("Link a note…");
   await modalInput(".prompt-input");
   await page.type("Running log");
@@ -783,7 +786,7 @@ step("link a note to a project: the name opens the note, the menu opens the proj
   await click(`__ft.at(__ft.project('Marathon 2027').querySelector('.ft-link'))`);
   await until(async () => (await activePath()) === "Notes/Running log.md", "the linked note open");
   await toPane();
-  await click(`__ft.grip(__ft.project('Marathon 2027'))`);
+  await menuOn(`__ft.at(__ft.name('Marathon 2027'))`);
   await menu("Open task file");
   await until(async () => (await activePath()) === "Tasks/Marathon 2027.md", "the project note open");
   await toPane();
@@ -834,7 +837,7 @@ step("click, then Shift-click selects the rows between; Cmd-click drops one; the
   await click(`__ft.at(__ft.task('Stretch').querySelector('.ft-text'))`, "Stretch", CMD);
   await click(`__ft.at(__ft.task('Run 5k').querySelector('.ft-text'))`, "Run 5k", SHIFT);
   await until(async () => (await selected()).length === three.length, "the same rows selected again");
-  await click(`__ft.grip(__ft.task('Run 5k'))`);
+  await menuOn(`__ft.at(__ft.task('Run 5k'))`);
   await until(() => page.eval(`return !!__ft.text('.menu .menu-item-title', 'Selected: ' + ${three.length})`), "the selection menu");
   await menu("Tomorrow");
   for (const name of three) await taskIs(name, { scheduled: TOMORROW });
@@ -930,7 +933,7 @@ step("⌘Z takes back the last change: a tick, a date, a new row", async () => {
   await page.key("Meta+z");
   await taskIs(name, { status: "open", completedDate: null }, "the tick was taken back");
   // a date, then ⌘Z
-  await click(`__ft.grip(__ft.task(${J(name)}))`);
+  await menuOn(`__ft.at(__ft.task(${J(name)}))`);
   await menu("Tomorrow");
   await taskIs(name, { scheduled: TOMORROW });
   await toPane();
@@ -952,6 +955,90 @@ step("⌘Z takes back the last change: a tick, a date, a new row", async () => {
   await toPane();
   await page.key("Meta+z");
   await until(() => !exists(taskPath("Лишняя строка")), "⌘Z removed the note it made");
+});
+
+step("the grip selects the row; ↑/↓ walk, Shift extends, Enter edits, Esc saves and reselects", async () => {
+  await toPane();
+  await idle();
+  await page.key("Escape");
+  await selectedAre([]);
+  await settle();
+  // three rows in a row on screen (a project's row counts: its step is what gets selected)
+  const names = await page.eval(`return __ft.all('li.ft-task', __ft.view()).map((e) => e.querySelector(':scope > .ft-text:not(.ft-no-step)')?.textContent.trim()).filter(Boolean).slice(0, 3)`);
+  if (names.length < 3) throw new Error("need three rows on screen: " + J(names));
+  const [a, b, c] = names;
+  await click(`__ft.grip(__ft.task(${J(a)}))`);
+  await selectedAre([a]);
+  if (await page.eval(`return !!document.querySelector('.menu')`)) throw new Error("a plain click on the grip opened the menu");
+  await click(`__ft.grip(__ft.task(${J(a)}))`);
+  await selectedAre([]);   // the same grip again drops it
+  await click(`__ft.grip(__ft.task(${J(a)}))`);
+  await selectedAre([a]);
+  await page.key("ArrowDown");
+  await selectedAre([b]);
+  await page.key("Shift+ArrowDown");
+  await selectedAre([b, c]);
+  await page.key("ArrowUp");
+  await selectedAre([b]);
+  await page.key("Enter");
+  await editing();
+  const who = await page.eval(`return document.querySelector('.focus-tasks-view .is-editing')?.textContent.trim()`);
+  if (who !== b) throw new Error(`Enter edits the row under the cursor: expected «${b}», editing «${who}»`);
+  await page.eval(`__ft.caretToEnd()`);
+  await page.type(" x");
+  await page.key("Escape");
+  await idle();
+  await until(() => exists(taskPath(b + " x")), "Esc saved the text");
+  await selectedAre([b + " x"]);
+  await page.key("Escape");
+  await selectedAre([]);
+  // Esc on a wiped row is not a delete: the text comes back, the row is selected
+  await click(`__ft.at(__ft.task(${J(b + " x")}).querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.selectAll()`);
+  await page.key("Backspace");
+  await page.key("Escape");
+  await idle();
+  await selectedAre([b + " x"]);
+  if (!exists(taskPath(b + " x"))) throw new Error("Esc on a wiped row deleted the task");
+  await page.key("Escape");
+  await selectedAre([]);
+});
+
+step("⌘2 in the editor sends the row away; ⌘Z brings it back, selected", async () => {
+  await toPane();
+  await settle();
+  const name = await until(() => page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.view()).filter((e) => !e.closest('.ft-future-block, .is-rest'))[0]?.querySelector('.ft-text')?.textContent.trim() || null`), "a row of today's list");
+  const was = fm(name);
+  await click(`__ft.at(__ft.task(${J(name)}).querySelector('.ft-text'))`);
+  await editing();
+  await page.key("Meta+2");
+  await taskIs(name, { scheduled: TOMORROW });
+  await until(() => page.eval(`const r = __ft.task(${J(name)}); return !r || !!r.closest('.ft-future-block')`), "the row left today's list");
+  // the editor is on the next row now: ⌘Z there, with nothing typed, is the list's undo
+  await page.key("Meta+z");
+  await taskIs(name, { scheduled: was.scheduled ?? null }, "⌘Z from the next row's editor took the date back");
+  await idle();
+  await selectedAre([name]);
+  await page.key("Escape");
+  await selectedAre([]);
+});
+
+step("⌫ on a selection deletes the rows; Undo brings them back", async () => {
+  await toPane();
+  await settle();
+  const names = await page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.view()).slice(0, 2).map((e) => e.querySelector('.ft-text').textContent.trim())`);
+  if (names.length < 2) throw new Error("need two plain rows: " + J(names));
+  await click(`__ft.grip(__ft.task(${J(names[0])}))`);
+  await selectedAre([names[0]]);
+  await click(`__ft.at(__ft.task(${J(names[1])}))`, "the second row", SHIFT);
+  await selectedAre(names);
+  await page.key("Backspace");
+  for (const name of names) await noTask(name);
+  await selectedAre([]);
+  await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
+  for (const name of names) await until(() => exists(taskPath(name)), `${name} is back`);
+  await idle();
 });
 
 step("ticking a box does not move the page under the reader", async () => {
@@ -1336,7 +1423,7 @@ step("closing the pane takes the editor, the picker and the hotkeys with it", as
 step("delete a project: its note goes to the trash, its tasks stay in the area", async () => {
   await toPane();
   await until(() => page.eval(`return !!__ft.project('Marathon 2027')`), "Marathon 2027 on screen");
-  await click(`__ft.grip(__ft.project('Marathon 2027'))`);
+  await menuOn(`__ft.at(__ft.name('Marathon 2027'))`);
   await menu("Delete project");
   await until(() => page.eval(`return !!document.querySelector('.modal .mod-warning')`), "confirm");
   await click(`__ft.at(document.querySelector('.modal .mod-warning'))`);

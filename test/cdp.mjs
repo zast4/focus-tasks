@@ -88,6 +88,16 @@ export class Page {
     await sleep(150);
   }
 
+  // A right click: the page gets a contextmenu event, as from a real mouse.
+  async rightClick({ x, y }) {
+    await this.front();
+    await this.mouse("mouseMoved", x, y, 0);
+    for (const [type, buttons] of [["mousePressed", 2], ["mouseReleased", 0]]) {
+      await this.send("Input.dispatchMouseEvent", { type, x, y, button: "right", buttons, clickCount: 1 });
+    }
+    await sleep(150);
+  }
+
   async drag(a, b) {
     await this.front();
     await this.mouse("mouseMoved", a.x, a.y, 0);
@@ -112,7 +122,8 @@ export class Page {
     const modifiers = parts.reduce((m, p) => m | ({ Alt: 1, Ctrl: 2, Meta: 4, Shift: 8 }[p] || 0), 0);
     const digit = /^[0-9]$/.test(key), letter = /^[a-z]$/i.test(key);
     const code = digit ? "Digit" + key : letter ? "Key" + key.toUpperCase() : key;
-    const vk = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8 }[key] || (digit || letter ? key.toUpperCase().charCodeAt(0) : 0);
+    const vk = { Enter: 13, Escape: 27, Tab: 9, Backspace: 8, Delete: 46, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 }[key]
+      || (digit || letter ? key.toUpperCase().charCodeAt(0) : 0);
     await this.front();
     for (const type of ["rawKeyDown", "keyUp"]) await this.send("Input.dispatchKeyEvent", { type, key, code, modifiers, windowsVirtualKeyCode: vk });
     await sleep(120);

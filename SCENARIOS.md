@@ -28,10 +28,16 @@ once, so the next device sees it.
 keyboard»*
 
 **Moving work.** Tomorrow, a date from the picker, or no date at all — the last one is what sends a
-task to the отложка. Several selected rows take one date together.
+task to the отложка. Several selected rows take one date together. A row can be worked on as a whole,
+without touching its text: the grip (or Esc from the editor) selects it, the keys then date it, walk
+the list, edit or delete it — and ⌘Z takes back the last change, from the editor too while nothing
+is typed, because a date set by ⌘2 was otherwise stuck behind the browser's text undo.
 → *model: «moving a task to tomorrow takes it out of today», «sending a task to someday clears its
-date»; e2e: «⌘2 tomorrow, ⌘4 no date», «the grip of a selected row drags them all; ⌘1–4 date them
-all»; mobile: «the date picker fits the screen and sets a date by tap»*
+date», «several selected tasks are deleted together and come back together»; e2e: «⌘2 tomorrow, ⌘4
+no date», «the grip of a selected row drags them all; ⌘1–4 date them all», «the grip selects the row;
+↑/↓ walk, Shift extends, Enter edits, Esc saves and reselects», «⌘2 in the editor sends the row away;
+⌘Z brings it back, selected», «⌫ on a selection deletes the rows; Undo brings them back»; mobile:
+«the date picker fits the screen and sets a date by tap», «a tap on the grip opens the row's menu»*
 
 **Stuck work.** A task keeps the date it was first given: its age in the focus is the signal. Two days
 late or more, the row says how many days, not only in red.

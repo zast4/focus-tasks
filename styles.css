@@ -116,11 +116,13 @@ body.is-mobile .focus-tasks-view .ft-area-title > .ft-grip { top: 50%; }
 body.is-mobile .focus-tasks-view li.ft-task:hover, body.is-mobile .focus-tasks-view .ft-area-title:hover { background-color: transparent; }
 /* Selected rows (Shift / Cmd-click): a grey band, a step above hover, also under the pointer.
    Not `--text-selection`: themes tint that one, and a green selection reads as «done». */
+/* A selected row is a block picked up as a whole (the keys work on it), not a hovered one: the
+   accent, faint, tells the two apart. */
 .focus-tasks-view li.ft-task.is-selected, body.is-mobile .focus-tasks-view li.ft-task.is-selected {
   background-color: var(--background-modifier-hover);
-  background-color: color-mix(in srgb, var(--text-normal) 14%, transparent); }
+  background-color: color-mix(in srgb, var(--interactive-accent) 16%, transparent); }
 .focus-tasks-view li.ft-task.is-selected:hover {
-  background-color: color-mix(in srgb, var(--text-normal) 19%, transparent); }
+  background-color: color-mix(in srgb, var(--interactive-accent) 22%, transparent); }
 .focus-tasks-view .ft-dragging { opacity: 0.35; }
 .focus-tasks-view .ft-drop-into { outline: 2px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
 .ft-drop-line { position: fixed; height: 2px; background: var(--interactive-accent); border-radius: 1px; pointer-events: none; z-index: 1000; display: none; }

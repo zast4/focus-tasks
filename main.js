@@ -22,16 +22,19 @@
  *  - «All» at the bottom (kept per device) opens every such pile and lists the areas with nothing
  *    due below, folded; «Collapse all» / «Expand all» fold every area and project on screen.
  *
- * A click on a task's text edits it in place (Enter saves and opens the next row, Esc cancels;
- * ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date). The date on the right opens a date picker.
+ * A click on a task's text edits it in place (Enter saves and opens the next row, Esc saves and
+ * leaves the row selected; ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date; ⌘Z with nothing typed
+ * takes back the list's last change). The date on the right opens a date picker.
  * The checkbox completes a task (`status: done` + `completedDate`): the row leaves the list at once;
  * «✓ Done · N» at the bottom opens the day's closed work, by area, where a box brings a task back.
  * Nothing closed keeps an area on screen. A project is closed by hand, from its menu, once nothing in
  * it is open; till then an emptied project keeps its row, «no step yet», and takes the next one.
- * The grip on the left drags areas, projects and tasks; a plain click on it opens the row's menu.
- * Shift-click selects every task from the last clicked one, Cmd/Ctrl-click adds or drops one; the
- * grip of a selected row then drags them all, and its date, its menu or ⌘1–4 (as in the editor)
- * set the date of all of them.
+ * The grip on the left drags areas, projects and tasks; a plain click on it selects the row (on a
+ * phone it opens the menu; a right click opens it anywhere). Shift-click selects every task from the
+ * last clicked one, Cmd/Ctrl-click adds or drops one. With rows selected the keys work on them, as
+ * on a selected block in Notion: ↑/↓ walk (Shift extends), Enter edits, ⌫ deletes, ⌘1–4 date them,
+ * ⌘Z takes back the last change, Esc drops the selection; the grip drags them all, and their date
+ * or menu set the date of all of them.
  */
 const {
   Plugin, PluginSettingTab, Setting, ItemView, Modal, SuggestModal, FuzzySuggestModal, Notice, Menu,
@@ -85,7 +88,7 @@ const STRINGS = {
     deleteProject: "Delete project", noDate: "No date (someday)", tasksDialog: "Tasks dialog (date, priority)",
     openInNote: "Open in note", delete: "Delete", changed: "The task changed in the note — try again",
     overwritten: "The change did not stick: another device or plugin saved “{0}” over it",
-    deleted: "Deleted: {0}", undo: "Undo", noteExists: "Note “{0}” already exists",
+    deleted: "Deleted: {0}", deletedMany: "Deleted {0} tasks", undo: "Undo", noteExists: "Note “{0}” already exists",
     areaExists: "Area “{0}” already exists", areaCreated: "Area “{0}” created",
     projectCreated: "Project “{0}” created", projectDeleted: "Project “{0}” deleted",
     areaDeleted: "Area {0} deleted", linked: "Linked to “{0}”", unlinked: "Note unlinked",
@@ -168,7 +171,7 @@ const STRINGS = {
     deleteProject: "Удалить проект", noDate: "Без даты (в отложку)", tasksDialog: "Окно Tasks (дата, приоритет)",
     openInNote: "Открыть в заметке", delete: "Удалить", changed: "Задача изменилась в заметке, попробуй ещё раз",
     overwritten: "Правка не сохранилась: заметку «{0}» перезаписало другое устройство или плагин",
-    deleted: "Удалено: {0}", undo: "Вернуть", noteExists: "Заметка «{0}» уже есть",
+    deleted: "Удалено: {0}", deletedMany: "Удалено задач: {0}", undo: "Вернуть", noteExists: "Заметка «{0}» уже есть",
     areaExists: "Область «{0}» уже есть", areaCreated: "Область «{0}» создана",
     projectCreated: "Проект «{0}» создан", projectDeleted: "Проект «{0}» удалён",
     areaDeleted: "Область {0} удалена", linked: "Привязана «{0}»", unlinked: "Заметка отвязана",
@@ -621,6 +624,7 @@ class FocusRenderer extends MarkdownRenderChild {
     Object.assign(this, { plugin, sourcePath, leaf });
     this.selected = new Set();  // tasks of the selected rows
     this.anchor = null;         // the last clicked task: Shift-click selects from it
+    this.cursor = null;         // the selected row the arrow keys go on from
   }
 
   // Opens a note: Cmd/Ctrl-click in a new tab; from the pane never over the list itself.
@@ -895,11 +899,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // Shift-click: every row from the anchor to this one (with Cmd/Ctrl too: added to the selection);
   // Cmd/Ctrl-click (or Shift with nothing clicked before): this row in or out.
   select(task, e) {
-    if (this.editing) document.activeElement?.blur();  // an open editor saves and closes
-    const leaf = this.leafOf();
-    // the hotkeys follow the active tab; focusing a note's editor could open the block's source instead
-    if (leaf && this.plugin.app.workspace.activeLeaf !== leaf) this.plugin.app.workspace.setActiveLeaf(leaf, { focus: false });
-    this.take();
+    this.grab();
     const tasks = this.rows().map(([, x]) => x);
     const to = tasks.indexOf(task);
     if (to < 0) return;
@@ -913,7 +913,93 @@ class FocusRenderer extends MarkdownRenderChild {
       else this.selected.add(task);
       this.anchor = task;
     }
+    this.cursor = task;
     this.paint();
+  }
+
+  // The keyboard comes to the list before a selection is made.
+  grab() {
+    if (this.editing) document.activeElement?.blur();  // an open editor saves and closes
+    const leaf = this.leafOf();
+    // the hotkeys follow the active tab; focusing a note's editor could open the block's source instead
+    if (leaf && this.plugin.app.workspace.activeLeaf !== leaf) this.plugin.app.workspace.setActiveLeaf(leaf, { focus: false });
+    this.take();
+  }
+
+  // These rows and no others are selected; the first is where ↑/↓ go on from.
+  mark(tasks) {
+    const list = Array.isArray(tasks) ? tasks : [tasks];
+    this.grab();
+    this.selected = new Set(list);
+    this.anchor = this.cursor = list[0] || null;
+    this.paint();
+  }
+
+  // The same, once the list shows the row again: its note may have just been written (a rename, an
+  // undo) and the cache be a beat behind.
+  async markSoon(task) {
+    await this.cachedAll([task.uid]);
+    await this.rerendered();
+    const now = this.rows().map(([, x]) => x).find((x) => x.uid === task.uid);
+    if (now) this.mark(now);
+  }
+
+  // A plain click on the grip: this row alone is selected, or dropped when it was the only one;
+  // with Shift or ⌘ it is a click on the row.
+  pick(task, e) {
+    if (picking(e)) return this.select(task, e);
+    if (this.selected.size === 1 && this.selected.has(task)) return this.clearSelection();
+    this.mark(task);
+  }
+
+  // ↑/↓ take the selection to the row above or below the cursor; with Shift, every row from the
+  // anchor to there is selected, as a Shift-click would.
+  walk(by, extend) {
+    const rows = this.rows().filter(([el]) => el.offsetParent !== null);
+    const tasks = rows.map(([, x]) => x);
+    const at = (t) => (t ? tasks.findIndex((x) => keyOf(x) === keyOf(t)) : -1);
+    let i = at(this.cursor);
+    if (i < 0 || !this.selected.has(tasks[i])) {
+      const chosen = tasks.map((x, k) => (this.selected.has(x) ? k : -1)).filter((k) => k >= 0);
+      i = by > 0 ? chosen[chosen.length - 1] : chosen[0];
+    }
+    const to = i + by;
+    if (to < 0 || to >= tasks.length) return;
+    let from = extend ? at(this.anchor) : -1;
+    if (from < 0 || !this.selected.has(tasks[from])) from = to;
+    this.selected = new Set(tasks.slice(Math.min(from, to), Math.max(from, to) + 1));
+    this.anchor = tasks[from];
+    this.cursor = tasks[to];
+    this.paint();
+    rows[to][0].scrollIntoView({ block: "nearest" });
+  }
+
+  // Enter: the row under the cursor (the first selected one otherwise) is edited, caret at the end.
+  editSelected() {
+    const chosen = this.chosen();
+    const task = chosen.find((x) => this.cursor && keyOf(x) === keyOf(this.cursor)) || chosen[0];
+    const row = task && this.rows().find(([, x]) => x === task)?.[0];
+    const text = row?.querySelector(":scope > .ft-text");
+    if (text) this.editInline(task, text, null);
+  }
+
+  // ⌫: the selected tasks go to the trash; the notice (or ⌘Z) puts them back.
+  deleteSelected() {
+    const tasks = this.chosen();
+    this.clearSelection();
+    return this.plugin.removeTasks(tasks);
+  }
+
+  // ⌘Z: the last change taken back, and the rows it touched selected, so the keys go on from there
+  // — the row ⌘2 just sent away is back under the cursor.
+  async undo() {
+    const last = (this.plugin.history || []).at(-1);
+    const uids = last ? last.snap.map((x) => /^uid:\s*(\S+)/m.exec(x.text || "")?.[1]).filter(Boolean) : [];
+    if (!(await this.plugin.undo()) || !uids.length) return;
+    await this.cachedAll(uids);
+    await this.rerendered();
+    const back = this.rows().map(([, x]) => x).filter((x) => uids.includes(x.uid));
+    if (back.length) this.mark(back);
   }
 
   // Marks the selected rows. After a re-render the selection follows its tasks to their new rows (by
@@ -954,7 +1040,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // — a note, another pane — this scope is not pushed at all and the key never reaches us.
     this.scope.register(["Mod"], "z", () => {
       if (this.editing) return true;
-      this.plugin.undo();
+      this.undo();
       return false;
     });
     this.scope.register([], "Escape", () => {
@@ -962,6 +1048,23 @@ class FocusRenderer extends MarkdownRenderChild {
       this.clearSelection();
       return false;
     });
+    // With rows selected the keys work on them, as on a selected block in Notion: ↑/↓ walk (Shift
+    // extends), Enter edits, ⌫ deletes. Not while something is typed in — the picker's field, say.
+    const typing = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)); };
+    const own = (fn) => () => {
+      if (this.editing || !this.selected.size || typing()) return true;
+      fn();
+      return false;
+    };
+    this.scope.register([], "ArrowDown", own(() => this.walk(1, false)));
+    this.scope.register([], "ArrowUp", own(() => this.walk(-1, false)));
+    this.scope.register(["Shift"], "ArrowDown", own(() => this.walk(1, true)));
+    this.scope.register(["Shift"], "ArrowUp", own(() => this.walk(-1, true)));
+    this.scope.register([], "Enter", own(() => this.editSelected()));
+    for (const key of ["Backspace", "Delete"]) {
+      this.scope.register([], key, own(() => this.deleteSelected()));
+      this.scope.register(["Mod"], key, own(() => this.deleteSelected()));
+    }
     keymap.pushScope(this.scope);
   }
 
@@ -982,6 +1085,7 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   clearSelection() {
+    this.cursor = null;
     if (!this.selected.size) return;
     this.selected.clear();
     this.paint();
@@ -1223,7 +1327,8 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // Drag by the grip (mouse or finger — pointer events). Areas reorder among areas, projects within
   // their area, tasks move before/after another task (any note) or into a project / area when
-  // dropped on its header. A click without moving opens the row's menu.
+  // dropped on its header. A click without moving selects the row (on a finger, or for an area, it
+  // opens the menu).
   grip(parent, item) {
     const grip = parent.createSpan({ cls: "ft-grip", attr: { "aria-label": t("drag") } });
     setIcon(grip, "grip-vertical");
@@ -1324,8 +1429,11 @@ class FocusRenderer extends MarkdownRenderChild {
       if (commit && !dragging) {
         // A tap ends with a click that Obsidian's menu treats as «somewhere else» and closes itself,
         // so on a finger the menu opens just after that click, not on the pointer-up before it.
+        // A finger gets the menu (a phone has no right click); a mouse click selects the row — the
+        // menu is a right click away. An area, or a project with no step, has nothing to select.
         const where = { clientX: ev?.clientX ?? 0, clientY: ev?.clientY ?? 0 };
         if (touch) this.menuTimer = setTimeout(() => this.openMenu(item, where, row), 80);
+        else if (item.type !== "area" && item.task) this.pick(item.task, ev);
         else this.openMenu(item, ev, row);
       }
       else if (commit && drop) {
@@ -1553,7 +1661,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (offset !== null && shown !== task.text) offset = Math.round((offset * task.text.length) / Math.max(1, shown.length));
     el.textContent = task.text;
     // Wiped and left — a click elsewhere, Enter, ⌘⌫ then away — the task is deleted, with the same
-    // «Undo» a delete from the menu gets. Esc still brings the text back untouched.
+    // «Undo» a delete from the menu gets. Esc brings the text back untouched and selects the row.
     const saveText = async (value) => {
       if (!value) { await this.plugin.remove(task); return null; }
       if (value !== task.text) await this.plugin.rename(task, value);
@@ -1590,7 +1698,7 @@ class FocusRenderer extends MarkdownRenderChild {
         await close(true, false);
         if (label) this.editDate(task, label);
       },
-    }, (anchor) => this.rowAfter(el.closest("li"), anchor, inFocus(task) ? today() : null));
+    }, (anchor) => this.rowAfter(el.closest("li"), anchor, inFocus(task) ? today() : null), () => this.markSoon(task));
   }
 
   // Which list a row is in: today's focus, the area's pile of what is not today, or an area of
@@ -1624,6 +1732,17 @@ class FocusRenderer extends MarkdownRenderChild {
       this.plugin.forgetScan();
       const fresh = this.plugin.tasks().find((x) => x.uid === task.uid);
       if (fresh && ok(fresh)) return;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+  }
+
+  // The same for several notes at once: until every one of them is read back, or the time is up.
+  async cachedAll(uids, ms = 1500) {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      this.plugin.forgetScan();
+      const have = new Set(this.plugin.tasks().map((x) => x.uid));
+      if (uids.every((u) => have.has(u))) return;
       await new Promise((r) => setTimeout(r, 40));
     }
   }
@@ -1685,7 +1804,8 @@ class FocusRenderer extends MarkdownRenderChild {
       if (!value) { holder.remove(); return null; }
       await this.plugin.addLine(target, value, date.day);
       return holder;
-    }, date.keys, (prev) => this.draft(prev, { ...target, day: date.day }));   // the next one starts where this one ended
+    }, date.keys, (prev) => this.draft(prev, { ...target, day: date.day }),   // the next one starts where this one ended
+    () => this.render());   // Esc keeps what was typed (an empty row goes)
   }
 
 
@@ -1720,9 +1840,11 @@ class FocusRenderer extends MarkdownRenderChild {
 
 
   // contenteditable with note-like keys: Enter or leaving saves, Esc cancels; one line, plain text.
-  // `hotkeys`: Mod+<key> handlers; `onEnter(result of save)` continues with a next row.
-  editor(el, offset, save, hotkeys = {}, onEnter = null) {
+  // `hotkeys`: Mod+<key> handlers; `onEnter(result of save)` continues with a next row;
+  // `onEscape(result of save)`: Esc saves too (a wiped row keeps its text) and goes on from there.
+  editor(el, offset, save, hotkeys = {}, onEnter = null, onEscape = null) {
     this.editing = true;
+    const original = el.textContent;
     el.contentEditable = "true";
     el.addClass("is-editing");
     el.focus();
@@ -1760,6 +1882,14 @@ class FocusRenderer extends MarkdownRenderChild {
         return false;
       });
     }
+    // ⌘Z with nothing typed is not the browser's to answer: the editor closes and the list's last
+    // change is taken back — the row ⌘2 just sent away, most often. Typed text keeps its own undo.
+    scope.register(["Mod"], "z", (ev) => {
+      if (done || el.textContent !== original) return true;
+      ev.preventDefault();
+      finish(true, false).then(() => this.undo());
+      return false;
+    });
     this.plugin.app.keymap.pushScope(scope);
     this.endEdit = finish;
     el.onkeydown = (ev) => {
@@ -1767,7 +1897,11 @@ class FocusRenderer extends MarkdownRenderChild {
         ev.preventDefault();
         finish(true, false).then((r) => (r ? onEnter(r) : this.render()));
       } else if (ev.key === "Enter" && !ev.isComposing) { ev.preventDefault(); finish(true); }
-      else if (ev.key === "Escape") { ev.preventDefault(); finish(false); }
+      else if (ev.key === "Escape") {
+        ev.preventDefault();
+        if (onEscape) finish(!!el.textContent.trim(), false).then((r) => onEscape(r));
+        else finish(false);
+      }
       ev.stopPropagation();
     };
     el.onblur = () => finish(true);
@@ -2067,7 +2201,7 @@ class FocusRenderer extends MarkdownRenderChild {
       li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(step, e); };
     } else li.oncontextmenu = projectMenu;
     this.track(li, { type: "project", area, project, task: step });
-    this.grip(li, { type: "project", area, project });
+    this.grip(li, { type: "project", area, project, task: step });
     if (open) {
       const body = ul.createEl("li", { cls: "ft-steps" });
       await this.list(body, steps.map((task) => ({ kind: "task", task })), { ...opts, level: (opts.level || 0) + 1 });
@@ -2265,7 +2399,7 @@ module.exports = class FocusTasks extends Plugin {
       checkCallback: (checking) => {
         const view = this.app.workspace.getActiveViewOfType?.(FocusView) || (this.app.workspace.activeLeaf?.view instanceof FocusView ? this.app.workspace.activeLeaf.view : null);
         if (!view || [...this.views].some((v) => v.editing)) return false;
-        if (!checking) this.undo();
+        if (!checking) view.undo();
         return true;
       } });
     this.addCommand({ id: "area-from-note", name: t("cmdAreaFromNote"), checkCallback: (checking) => {
@@ -3129,6 +3263,15 @@ module.exports = class FocusTasks extends Plugin {
   // → the function that puts this very task back.
   async removeTask(task) {
     return this.undoable(t("deleted", task.text), [task.file], () => this.trash(task.file));
+  }
+
+  // Several at once: one notice and one undo for all of them.
+  async removeTasks(tasks) {
+    if (tasks.length === 1) return this.removeTask(tasks[0]);
+    if (!tasks.length) return null;
+    return this.undoable(t("deletedMany", tasks.length), tasks.map((x) => x.file), async () => {
+      for (const task of tasks) await this.trash(task.file);
+    });
   }
 
   // A free file name in the tasks folder.
