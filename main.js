@@ -2461,11 +2461,15 @@ module.exports = class FocusTasks extends Plugin {
         b.done.sort((x, y) => cmp(x.text, y.text));
         if (all) { area.rows.push({ kind: "project", project: b, steps: b.tasks }); continue; }
         // A project whose last step was checked off today keeps its row in the focus — empty, with
-        // nowhere to go but «the next step» or «done». A project that was never in today's work
-        // stays where its steps are: behind the area's ⏳, empty or not.
+        // nowhere to go but «the next step» or «done». So does one made today from an area that is
+        // in the focus (marked on this device, for the day): it was made to be worked on, and its
+        // first step is typed into that row. A project that was never in today's work stays where
+        // its steps are: behind the area's ⏳, empty or not.
         b.finished = !b.tasks.length && !b.later.length && b.done.some(inFocus);
-        if (b.tasks.length || b.finished) area.rows.push({ kind: "project", project: b, steps: b.tasks });
-        if (b.later.length || !(b.tasks.length || b.finished)) area.ahead.push({ kind: "project", project: b, steps: b.later });
+        b.fresh = !b.tasks.length && !b.later.length && this.data.opened["fresh:" + b.file.path] === now;
+        const here = b.tasks.length || b.finished || b.fresh;
+        if (here) area.rows.push({ kind: "project", project: b, steps: b.tasks });
+        if (b.later.length || !here) area.ahead.push({ kind: "project", project: b, steps: b.later });
       }
       // One order per area, set by hand, projects and tasks alike; what has no seat yet goes after
       // what has — tasks first, by date and name, then projects by name — until a drag seats it.
@@ -3138,7 +3142,7 @@ module.exports = class FocusTasks extends Plugin {
       if (m && m[1].trim()) steps.push(m[1].trim());
       else keep.push(line);
     }
-    const file = await this.createProject(holder, name);
+    const file = await this.createProject(holder, name, undefined, null, false);
     if (!file) return null;
     const text = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
     if (text) await this.app.vault.process(file, (t0) => t0.replace(/\s*$/, "\n\n") + text + "\n");
@@ -3307,7 +3311,10 @@ module.exports = class FocusTasks extends Plugin {
 
   // A project's task file in the folder, listed in the area's file; with `afterPath` it is ordered
   // right after that project; with `linkTo` it is linked to that note.
-  async createProject(area, name, afterPath, linkTo = null) {
+  // `fresh`: made from the focus, so its empty row goes to the focus for the day; unset, that is
+  // decided by whether the area is in the focus right now. A project made out of a task is not:
+  // it keeps the task's place.
+  async createProject(area, name, afterPath, linkTo = null, fresh = null) {
     await this.ensureFolder();
     const path = normalizePath(`${this.folder}/${fileName(name)}.md`);
     if (this.app.vault.getAbstractFileByPath(path)) { new Notice(t("noteExists", path)); return null; }
@@ -3319,6 +3326,10 @@ module.exports = class FocusTasks extends Plugin {
     if (linkTo) await this.setLinked(file, linkTo, true);
     await this.app.vault.process(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading));
     await this.setOpen("area:" + area.name, true);
+    if (fresh ?? (await this.collect(false)).some((a) => a.name === area.name)) {
+      this.data.opened["fresh:" + file.path] = today();   // per device, and only for today
+      this.saveFolds();
+    }
     // seated at once — right after `afterPath`, or last — so it does not sort itself in by name
     const list = this.areaSeats(area.name).filter((k) => k !== "p:" + file.path);
     const i = afterPath ? list.indexOf("p:" + afterPath) : -1;
@@ -3343,8 +3354,8 @@ module.exports = class FocusTasks extends Plugin {
       if (i >= 0) { list[i] = "p:" + path; touched = true; }
     }
     for (const map of [this.data.opened, this.data.folded]) {
-      for (const prefix of ["project:", "later:", "done:", "steps:"]) {
-        if (map[prefix + old]) { delete map[prefix + old]; map[prefix + path] = true; touched = true; }
+      for (const prefix of ["project:", "later:", "done:", "steps:", "fresh:"]) {
+        if (map[prefix + old]) { map[prefix + path] = map[prefix + old]; delete map[prefix + old]; touched = true; }
       }
     }
     // the steps of a project are ordered under its name: the name has just changed

@@ -1390,6 +1390,30 @@ test("renaming a project keeps the order of its steps", async () => {
   eq(names(projectOf(areaOf(await plugin.collect(false), "Work"), "Plan 2027").tasks), ["B", "A"], "and stays first after the rename");
 });
 
+test("a project made from an area in the focus starts in the focus, empty; one made elsewhere does not", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    areaNote(a, "Reading");
+    taskNote(a, "Run 5k", { area: "Sport", scheduled: TODAY });
+  });
+  const sport = areaOf(await plugin.collect(false), "Sport");
+  const made = await plugin.createProject(sport, "Marathon");
+  ok(made, "the project note was made");
+  let areas = await plugin.collect(false);
+  eq(focusProjects(areaOf(areas, "Sport")).map((p) => p.file.basename), ["Marathon"], "the new project has its row in the focus");
+  eq(aheadProjects(areaOf(areas, "Sport")).length, 0, "and not in the pile as well");
+  // an area with nothing due is not in the focus: a project made there stays out of it
+  const reading = areaOf(await plugin.collect(true), "Reading");
+  await plugin.createProject(reading, "Big books");
+  areas = await plugin.collect(false);
+  eq(areaOf(areas, "Reading"), undefined, "Reading did not come into the focus for it");
+  // a task with no day turned into a project keeps the task's place: not in the focus
+  await plugin.createTask("Someday thing", { area: "Sport", project: null }, null);
+  await plugin.toProject(plugin.tasks().find((x) => x.text === "Someday thing"));
+  areas = await plugin.collect(false);
+  eq(focusProjects(areaOf(areas, "Sport")).map((p) => p.file.basename), ["Marathon"], "the project made of an undated task is not pulled into the focus");
+});
+
 test("a project renamed takes along the step that carries its name", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Sport");
