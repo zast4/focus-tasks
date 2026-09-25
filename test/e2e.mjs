@@ -1001,6 +1001,16 @@ step("⌘Z takes back the last change: a tick, a date, a new row", async () => {
   await toPane();
   await page.key("Meta+z");
   await until(() => !exists(taskPath("Лишняя строка")), "⌘Z removed the note it made");
+  // the command does the same as the key
+  await toPane();
+  await menuOn(`__ft.at(__ft.task(${J(name)}))`);
+  await menu("Tomorrow");
+  await taskIs(name, { scheduled: TOMORROW });
+  await idle();
+  await toPane();
+  await page.eval(`await app.commands.executeCommandById('focus-tasks:undo'); return true;`);
+  await taskIs(name, { scheduled: was.scheduled ?? null }, "the Undo command took the date back");
+  await idle();
 });
 
 step("the grip selects the row; ↑/↓ walk, Shift extends, Enter edits, Esc saves and reselects", async () => {
@@ -1066,6 +1076,21 @@ step("⌘2 in the editor sends the row away; ⌘Z brings it back, selected", asy
   await taskIs(name, { scheduled: was.scheduled ?? null }, "⌘Z from the next row's editor took the date back");
   await idle();
   await selectedAre([name]);
+  await page.key("Escape");
+  await selectedAre([]);
+  // typed and erased again is still typed: ⌘Z stays with the editor, the list's history is not touched
+  await click(`__ft.at(__ft.task(${J(name)}).querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.caretToEnd()`);
+  await page.type("x");
+  await page.key("Backspace");
+  const steps = await plugin(`return (p.history || []).length`);
+  await page.key("Meta+z");
+  await sleep(300);
+  if (!(await page.eval(`return !!document.querySelector('.focus-tasks-view .is-editing')`))) throw new Error("⌘Z after typing closed the editor");
+  if ((await plugin(`return (p.history || []).length`)) !== steps) throw new Error("⌘Z after typing ran the list's undo");
+  await page.key("Escape");
+  await idle();
   await page.key("Escape");
   await selectedAre([]);
 });
@@ -1485,9 +1510,11 @@ step("a project's note is its page: the block at the bottom shows its steps, tak
   await page.click(await page.eval(`return __ft.at((${row("Page today")}).querySelector('input'))`));
   await taskIs("Page today", { status: "done", completedDate: TODAY });
   await until(() => page.eval(`return !!(${row("Page today")})?.closest('.ft-done-today')`), "Page today among the closed");
-  // «+ Step in this project» types a new step; it starts with no date, in the pile
+  // «+ Step in this project» types a new step; it starts with no date, in the pile — and with the
+  // closed block open, the row opens under the live rows, not among the closed
   await page.click(await page.eval(`return __ft.at((${block}).querySelector('.ft-page-add'))`));
   await editing();
+  if (await page.eval(`return !!document.querySelector('.focus-tasks-view .is-editing')?.closest('.ft-done-today')`)) throw new Error("the new step's row opened among the closed steps");
   await page.type("Page typed");
   await page.key("Enter");
   await until(() => exists(taskPath("Page typed")), "the typed step's note");

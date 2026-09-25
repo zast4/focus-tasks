@@ -778,7 +778,8 @@ test("the project a task becomes is listed in its area's note", async () => {
     taskNote(a, "Big thing", { area: "Sport", scheduled: TODAY });
   });
   await plugin.toProject(plugin.tasks()[0]);
-  ok(bodyOf(app, "Areas/Sport.md").includes("[[Big thing]]"), "the 📁 line is in the area note");
+  // the task note of the same name still exists while the line is written: Obsidian names the project by its path then
+  ok(/\[\[(Areas\/)?Big thing\]\]/.test(bodyOf(app, "Areas/Sport.md")), "the 📁 line is in the area note");
 });
 
 test("a task without an area can be placed into one", async () => {
@@ -1634,6 +1635,109 @@ test("undo says when there is nothing left to undo", async () => {
   const { app, plugin } = await stand((a) => areaNote(a, "Work"));
   eq(await plugin.undo(), 0);
   ok(app.notices.length > 0, "and it says so");
+});
+
+test("two changes at once are two records: undoing the first does not take the second's note", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Swim", { area: "Sport", scheduled: TODAY });
+  });
+  const [run, swim] = plugin.tasks();
+  // a group date is still writing when a new task is typed in: the two must not merge into one record
+  const dates = plugin.setDates([run, swim], DAY(1));
+  const made = plugin.createTask("Newborn", { area: "Sport", project: null }, null);
+  await Promise.all([dates, made]);
+  eq(plugin.history.length, 2, "two records: " + JSON.stringify(plugin.history.map((h) => h.label)));
+  ok(!plugin.history[0].snap.some((x) => /Newborn/.test(x.path)), "the new note is not in the date change's record");
+  await plugin.undo();   // the newest: the creation
+  eq(plugin.tasks().some((x) => x.text === "Newborn"), false, "undoing the creation removes the note");
+  await plugin.undo();   // the date change
+  eq(plugin.tasks().find((x) => x.text === "Run").date, TODAY, "and the dates are back");
+});
+
+test("a change that runs inside another joins its record, with the files it touches", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Swim", { area: "Sport", scheduled: TODAY });
+  });
+  const [run, swim] = plugin.tasks();
+  await plugin.setDates([run, swim], DAY(1));
+  eq(plugin.history.length, 1, "one record for the group");
+  eq(plugin.history[0].snap.map((x) => x.path).sort(), ["Tasks/Run.md", "Tasks/Swim.md"], "both notes in it");
+  await plugin.undo();
+  eq(plugin.tasks().map((x) => x.date), [TODAY, TODAY], "both back");
+});
+
+test("a delete that fails halfway keeps a record of what it did delete, and undo puts that back", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Swim", { area: "Sport", scheduled: TODAY });
+  });
+  const [run, swim] = plugin.tasks();
+  const orig = app.vault.trash.bind(app.vault);
+  let n = 0;
+  app.vault.trash = async (file) => { if (++n === 2) throw new Error("boom"); return orig(file); };
+  await plugin.removeTasks([run, swim]);
+  app.vault.trash = orig;
+  eq(plugin.tasks().map((x) => x.text), ["Swim"], "the first went, the second stayed");
+  eq(plugin.history.length, 1, "the partial delete has its record");
+  await plugin.undo();
+  eq(plugin.tasks().map((x) => x.text).sort(), ["Run", "Swim"], "undo brings the deleted one back");
+  // the same task twice (a row on screen twice) is one note
+  const [a1] = plugin.tasks();
+  await plugin.removeTasks([a1, a1]);
+  eq(plugin.tasks().length, 1, "deleted once");
+  eq(plugin.history[plugin.history.length - 1].label, "Deleted: " + a1.text, "and recorded as one delete");
+});
+
+test("a drag that only changes the order is a change: ⌘Z puts the order back", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Swim", { area: "Sport", scheduled: TODAY });
+  });
+  await plugin.setDate(plugin.tasks()[0], DAY(1));
+  const was = plugin.orderState();
+  const [run, swim] = plugin.tasks();
+  await plugin.drop({ type: "task", task: swim }, { into: false, after: false, target: { type: "task", task: run } }, { tasks: {} });
+  ok(plugin.orderState() !== was, "the order changed");
+  eq(plugin.history.length, 2, "the drag has a record of its own");
+  await plugin.undo();
+  eq(plugin.orderState(), was, "⌘Z put the order back");
+  eq(plugin.tasks().find((x) => x.text === "Run").date, DAY(1), "and did not touch the date before it");
+});
+
+test("a step made from a page goes to that very project, not the first of that name", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Plan");
+  });
+  const second = await app.vault.create("Areas/b/Plan.md", "---\narea: Work\ntype: project\n---\n");
+  const task = await plugin.createTask("Step", { area: "Work", project: "Plan", projectFile: second }, null);
+  eq(plugin.projectFile(plugin.tasks().find((x) => x.uid === task.uid))?.path, "Areas/b/Plan.md", "the step points at the second Plan");
+  const byName = await plugin.createTask("Other", { area: "Work", project: "Plan" }, null);
+  eq(plugin.projectFile(plugin.tasks().find((x) => x.uid === byName.uid))?.path, "Areas/Plan.md", "a name alone is the first one, as before");
+});
+
+test("a note two projects share gets a block for each; a block naming a missing project says so", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Alpha");
+    projectNote(a, "Work", "Beta");
+  });
+  const shared = await app.vault.create("Notes/Shared.md", "---\n---\nОбщий план\n\n```focus-tasks\n```\n");
+  const alpha = app.vault.getAbstractFileByPath("Areas/Alpha.md"), beta = app.vault.getAbstractFileByPath("Areas/Beta.md");
+  eq(await plugin.ensureStepsBlock(shared, alpha), true, "a bare block is not Alpha's: one naming it is added");
+  eq(await plugin.ensureStepsBlock(shared, beta), true, "and one for Beta");
+  eq(await plugin.ensureStepsBlock(shared, alpha), false, "Alpha's is there already");
+  const text = bodyOf(app, "Notes/Shared.md");
+  ok(/project: \[\[Alpha\]\]/.test(text) && /project: \[\[Beta\]\]/.test(text), "both named: " + JSON.stringify(text));
+  const missing = plugin.blockPage("project: [[Nope]]", "Notes/Shared.md");
+  eq(missing.project, null, "not found");
+  eq(missing.missing, "Nope", "and named, so the block can say so instead of showing everything");
 });
 
 test("the history does not grow without end", async () => {

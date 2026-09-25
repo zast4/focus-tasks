@@ -157,12 +157,23 @@ class FakeMetadataCache {
     if (body.trim()) sections.push({ type: "paragraph" });
     return front === null ? { sections } : { frontmatter: parseYaml(front), sections };
   }
+  // As Obsidian resolves: the full path, then a path ending in the link («b/Plan»), then the name;
+  // nothing for a link that matches nothing.
   getFirstLinkpathDest(link, from) {
     const want = link.replace(/\.md$/, "");
     const paths = [...this.vault.files.keys()];
-    return this.vault.file(paths.find((p) => p === want + ".md") || paths.find((p) => p.replace(/\.md$/, "").split("/").pop() === want.split("/").pop()) || "") || null;
+    const bare = (p) => p.replace(/\.md$/, "");
+    const hit = paths.find((p) => bare(p) === want)
+      || paths.find((p) => bare(p).endsWith("/" + want))
+      || paths.find((p) => bare(p).split("/").pop() === want.split("/").pop());
+    return hit ? this.vault.file(hit) : null;
   }
-  fileToLinktext(file) { return file.basename; }
+  // The shortest text that still names this note alone: its name, or its path when another note has that name.
+  fileToLinktext(file) {
+    if (!file.path) return file.basename;   // a bare {basename} stub some tests hand in
+    const twins = [...this.vault.files.keys()].filter((p) => p !== file.path && p.replace(/\.md$/, "").split("/").pop() === file.basename);
+    return twins.length ? file.path.replace(/\.md$/, "") : file.basename;
+  }
   on(name, fn) { this.handlers.push({ name, fn }); return { name, fn }; }
   off() {}
   trigger(name, ...args) { for (const h of this.handlers) if (h.name === name) h.fn(...args); }
