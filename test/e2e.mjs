@@ -368,6 +368,52 @@ step("a step dated later: in the plain focus its project has a row in the area's
   await settle();
 });
 
+step("the ⏳ on a project's row opens its own pile under the row; ⌘1 there brings a step into today", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Book the hotel")),
+    `---\nuid: ft-later-2\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${ymd(new Date(Date.now() + 30 * 864e5))}\nprojects:\n  - "[[Marathon]]"\n---\n`);
+  await toPane();
+  const wasAll = await plugin(`return p.everything()`);
+  await plugin(`
+    if (p.everything()) p.setEverything(false);
+    if (p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true);
+    p.refresh(); return true;`);
+  // Marathon's row among today's work carries a ⏳ (the area's pile is closed: the step is nowhere yet)
+  const row = `__ft.all('li.ft-project-row', __ft.view()).find((e) => !e.closest('.ft-future-block') && e.querySelector('.ft-link')?.textContent.trim() === 'Marathon')`;
+  await until(() => page.eval(`return !!${row}?.querySelector('.ft-later-chip')`), "the ⏳ on Marathon's row");
+  if (await page.eval(`return !!__ft.task('Book the hotel')`)) throw new Error("the later step is on screen before the ⏳ was opened");
+  // the count is read once the new note is in the cache and on the chip (Marathon had later steps before)
+  await until(() => page.eval(`const p = app.plugins.plugins['focus-tasks']; p.forgetScan(); return p.tasks().some((x) => x.uid === 'ft-later-2')`), "the new step in the cache");
+  await plugin(`p.refresh(); return true;`);
+  await settle();
+  const behind = Number(await page.eval(`return ${row}.querySelector('.ft-later-chip').getAttr('aria-label').match(/· (\\d+)/)[1]`));
+  await click(`__ft.at(${row}.querySelector('.ft-later-chip'))`, "the ⏳ of Marathon");
+  await until(() => page.eval(`
+    const s = __ft.task('Book the hotel');
+    const pile = s?.closest('li.ft-later-steps');
+    let r = pile?.previousElementSibling;
+    while (r && !r.hasClass('ft-project-row')) r = r.previousElementSibling;
+    return !!s && s.hasClass('is-later') && !!r && !r.closest('.ft-future-block') && r.querySelector('.ft-link')?.textContent.trim() === 'Marathon';`),
+    "the later step under Marathon's row, dimmed, in the project's own pile");
+  // ⌘1 on the step: it is today's now — it leaves the pile for the project's steps, and the ⏳ goes
+  await click(`__ft.at(__ft.task('Book the hotel').querySelector('.ft-text'))`);
+  await editing();
+  await page.key("Meta+1");
+  await taskIs("Book the hotel", { scheduled: TODAY });
+  await until(() => page.eval(`const s = __ft.task('Book the hotel'); return !!s && !s.closest('li.ft-later-steps') && !s.hasClass('is-later')`), "the step among today's steps of Marathon");
+  // the ⏳ counts one less (Plan route, left with no date earlier, is still behind it) — or goes
+  await until(() => page.eval(`const n = ${row}?.querySelector('.ft-later-chip')?.getAttr('aria-label').match(/· (\\d+)/)?.[1]; return n === undefined || Number(n) === ${behind} - 1`),
+    `the ⏳ says ${behind - 1} behind the row`);
+  await page.key("Escape");
+  await idle();
+  await plugin(`
+    if (p.everything() !== ${wasAll}) p.setEverything(${wasAll});
+    const n = p.notes().find((x) => x.project && x.file.basename === 'Marathon');
+    if (n && p.data.opened['later:' + n.file.path]) await p.toggleShown('later:' + n.file.path, true);
+    p.refresh(); return true;`);
+  fs.unlinkSync(path.join(VAULT, taskPath("Book the hotel")));
+  await settle();
+});
+
 step("a second click on the same box before the list catches up does not undo the first", async () => {
   await until(() => page.eval(`return !!__ft.task('Buy shoes fast')`), "Buy shoes fast on screen");
   const box = await pos(`__ft.at(__ft.task('Buy shoes fast').querySelector('input'))`, "box of Buy shoes fast");
@@ -1251,12 +1297,17 @@ step("a project is one row: its name and its first step; +N opens the rest; the 
   if (await page.eval(`return !!__ft.task('Flat two')`)) throw new Error("the second step is on screen while the row is folded");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-project')`)) throw new Error("a project header is still drawn somewhere");
   // +1 opens the steps under the row, and the row is then the name alone
+  const plusAt = await pos(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "+1");
   await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "+1");
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
     return !!row && row.hasClass('is-open') && !!row.nextElementSibling?.hasClass('ft-steps') && !!__ft.task('Flat two') && !row.querySelector('.ft-text');`),
     "both steps as rows of their own, the row without a step");
-  await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "−");
+  // the «−» is under the pointer where the «+1» was: a second click folds the steps without a hunt
+  const minus = await page.eval(`const r = __ft.project('Flatland').querySelector('.ft-steps-more').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };`);
+  if (plusAt.x < minus.left || plusAt.x > minus.right || plusAt.y < minus.top || plusAt.y > minus.bottom)
+    throw new Error(`the «−» moved away from under the pointer: +1 was at ${J(plusAt)}, − is at ${J(minus)}`);
+  await page.click(plusAt);
   await until(() => page.eval(`return !__ft.task('Flat two') && !__ft.project('Flatland').hasClass('is-open')`), "folded again");
   // the box ticks the shown step and the next one takes its place
   await settle();
@@ -1512,6 +1563,8 @@ async function openVault() {
     p.settings.areaFrontmatter = 'kind: focus-area';
     p.settings.projectFrontmatter = 'parents:\\n  - "[[{areaNote}]]"';
     await p.saveAll();
+    // what is folded or opened is per device and outlives the vault: a run must not inherit it
+    p.data.folded = {}; p.data.opened = {}; p.saveFolds();
     await app.commands.executeCommandById('focus-tasks:open');
     return true;`);
   await page.eval(HELPERS + " return true;");

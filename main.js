@@ -1299,13 +1299,13 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // The pile of what is not today, in two groups: what is already running, then what is only
   // planned. One list would put a promise made to somebody else among the «maybe next week» rows.
-  async ahead(box, rows, area) {
+  async ahead(box, rows, area, extra = {}) {
     const running = (r) => { const s = r.kind === "task" ? r.task : r.steps[0]; return !!s && s.status === STATUS_PROGRESS; };
     const first = rows.filter(running), rest = rows.filter((r) => !running(r));
-    if (first.length) await this.list(box, first, { area, pile: "ahead" });
+    if (first.length) await this.list(box, first, { area, pile: "ahead", ...extra });
     if (!rest.length) return;
     if (first.length) box.createDiv({ cls: "ft-ahead-split" });
-    await this.list(box, rest, { area, pile: "ahead" });
+    await this.list(box, rest, { area, pile: "ahead", ...extra });
   }
 
 
@@ -1345,7 +1345,11 @@ class FocusRenderer extends MarkdownRenderChild {
       hit = el.closest(".ft-task[data-ft], .ft-area-title[data-ft]");
       // a project moves as a whole: over the open steps of another project it goes before or after
       // that project's row
-      if (item.type === "project" && hit?.closest("li.ft-steps")) hit = hit.closest("li.ft-steps").previousElementSibling;
+      if (item.type === "project" && hit?.closest("li.ft-steps, li.ft-later-steps")) {
+        let row = hit.closest("li.ft-steps, li.ft-later-steps");
+        while (row && !row.hasClass("ft-project-row")) row = row.previousElementSibling;
+        hit = row;
+      }
     }
     const target = hit && this.items.get(hit);
     if (!target) return null;
@@ -1705,7 +1709,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // «Other areas», where everything is one list and nothing leaves it.
   pileOf(li) {
     if (!li || li.closest(".ft-area.is-rest")) return "all";
-    return li.closest(".ft-future-block") ? "ahead" : "focus";
+    return li.closest(".ft-future-block, .ft-later-steps") ? "ahead" : "focus";
   }
 
   // Is the task today's work — the same answer collect() gives when it fills the focus.
@@ -2178,8 +2182,19 @@ class FocusRenderer extends MarkdownRenderChild {
       more.setAttr("aria-label", open ? t("hideSteps") : t("moreSteps", hidden.length));
       more.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, true); p.refresh(); };
     }
+    // What the project holds beside today's steps hangs off its own row, as off an area's header:
+    // the ⏳ opens its pile of what is not today, right under the row. Quiet — under the pointer,
+    // lit while open, the count in its tooltip. Not in the area's ⏳ pile, where the row is that pile.
+    const laterKey = "later:" + project.file.path;
+    const laterShown = !opts.all && opts.pile !== "ahead" && project.later.length > 0 && p.isShown(laterKey, true);
+    if (!opts.all && opts.pile !== "ahead" && project.later.length)
+      this.chip(li, "ft-later-chip", "clock", null, laterShown, laterKey,
+        `${t(laterShown ? "hideUpcoming" : "showUpcoming")} · ${project.later.length}` + (project.running ? ` · ${t("ofThemRunning", project.running)}` : ""), true);
     // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
     this.plus(li, t("addStep"), async () => { if (steps.length > 1 && !open) await p.toggleShown(key, true); return target(); }, anchor);
+    // open, the row has no step and no date — but it keeps the date's column, blank, so the «−»
+    // stays exactly where the «+N» was and a second click folds the steps without a hunt
+    if (!step) li.createSpan({ cls: "ft-date is-blank" });
     if (step) {
       const date = li.createSpan();
       this.dateLabel(date, step);
@@ -2205,6 +2220,11 @@ class FocusRenderer extends MarkdownRenderChild {
     if (open) {
       const body = ul.createEl("li", { cls: "ft-steps" });
       await this.list(body, steps.map((task) => ({ kind: "task", task })), { ...opts, level: (opts.level || 0) + 1 });
+    }
+    // the project's pile of what is not today: its own list under the row (and under the open steps)
+    if (laterShown) {
+      const pile = ul.createEl("li", { cls: "ft-later-steps" });
+      await this.ahead(pile, project.later.map((task) => ({ kind: "task", task })), area, { level: (opts.level || 0) + 1 });
     }
   }
 

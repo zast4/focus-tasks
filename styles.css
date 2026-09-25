@@ -60,10 +60,12 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 
 /* A project's open steps under its row: a list of their own, one level in, with a hairline under the
    project's box column. */
-.focus-tasks-view li.ft-steps { list-style: none; display: block; position: relative; margin: 0; padding: 0; }
-.focus-tasks-view li.ft-steps::before { content: ""; position: absolute; top: 0.1em; bottom: 0.3em;
+.focus-tasks-view li.ft-steps, .focus-tasks-view li.ft-later-steps { list-style: none; display: block; position: relative; margin: 0; padding: 0; }
+.focus-tasks-view li.ft-steps::before, .focus-tasks-view li.ft-later-steps::before { content: ""; position: absolute; top: 0.1em; bottom: 0.3em;
   left: calc(var(--ft-col) * 2.5); border-left: 1px solid var(--background-modifier-border); }
-.focus-tasks-view li.ft-steps > ul.ft-list { margin: 0; }
+.focus-tasks-view li.ft-steps > ul.ft-list, .focus-tasks-view li.ft-later-steps > ul.ft-list { margin: 0; }
+/* The project's ⏳ pile under its row: the same list, its rows dimmed as «later» like the area's pile. */
+.focus-tasks-view li.ft-later-steps::before { border-left-style: dashed; }
 
 /* A project as one row: its name, then «›», then its first step. The name is never cut while there is
    room for it: it takes what it needs, up to under half the row, and wraps past that — the step's
@@ -81,9 +83,13 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-project-row > .ft-sep { flex: none; margin: 0 0.35em; line-height: var(--ft-line); color: var(--text-faint); }
 .focus-tasks-view li.ft-project-row > .ft-no-step { color: var(--text-faint); font-style: italic; }
 /* +N: the steps behind the row; red when one of them is late. Open, it is the «−» that folds them. */
-.focus-tasks-view li.ft-project-row > .ft-steps-more { flex: none; display: inline-flex; align-items: center; margin-left: 0.5em; padding: 0 0.35em;
+.focus-tasks-view li.ft-project-row > .ft-steps-more { flex: none; display: inline-flex; align-items: center; justify-content: center;
+  margin-left: 0.5em; padding: 0 0.35em; min-width: 2.2em;
   height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; border-radius: 4px; color: var(--text-muted); cursor: pointer;
   font-variant-numeric: tabular-nums; }
+/* «+N» and «−» share one box, and the open row keeps a blank date column: the button does not move
+   under the pointer when the steps open, so the second click folds them again. */
+.focus-tasks-view li.ft-project-row.is-open > .ft-date.is-blank { visibility: hidden; }
 .focus-tasks-view li.ft-project-row > .ft-steps-more:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
 .focus-tasks-view li.ft-project-row > .ft-steps-more.is-late { color: var(--text-error); }
 .focus-tasks-view li.ft-project-row > .ft-steps-more.is-open { color: var(--interactive-accent); }
@@ -220,7 +226,8 @@ body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
 .focus-tasks-view .ft-chip-icon svg { width: 0.9rem; height: 0.9rem; }
 /* The flat focus: the switch without its number, there under the pointer, lit while its pile is open. */
 .focus-tasks-view .ft-chip.is-quiet.is-off { opacity: 0; }
-.focus-tasks-view .ft-area-title:hover > .ft-chip.is-quiet, .focus-tasks-view .ft-chip.is-quiet:focus-visible,
+.focus-tasks-view .ft-area-title:hover > .ft-chip.is-quiet, .focus-tasks-view li.ft-project-row:hover > .ft-chip.is-quiet,
+.focus-tasks-view .ft-chip.is-quiet:focus-visible,
 body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 /* Neither block has a heading any more: a hairline is what separates it from the live list. Without
    one, everything the ⏳ opened read as today's work — the rows are identical otherwise. */

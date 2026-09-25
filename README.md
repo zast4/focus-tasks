@@ -41,7 +41,7 @@ What you can do in the view:
 | | |
 |---|---|
 | Complete a task | click its checkbox; for the rest of the day it stays where it lives — a step inside its project, a loose task at the bottom of its area — under a hairline, and the green ✓N on that row folds it away (its box brings it back) |
-| See what is ahead in a project | the ⏳N on the project's row opens its upcoming and undated steps, in the project itself |
+| See what is ahead in a project | the ⏳ on the project's row (under the pointer; the count is in its tooltip) opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «In progress» in the row's menu: it leaves the focus and waits behind the ▷N of its project or area. Its date now means «look at it again»: on that day the task comes back among the rows that are due, marked ▷, and that ▷ hands it back to you |
 | Priority | the dot on a row opens the levels — high, normal, low, or none at all; the same is in the row's menu, and in the menu of a selection it sets them all |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
