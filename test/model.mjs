@@ -84,6 +84,17 @@ test("a task with neither an area nor a project is not lost silently", async () 
   eq(names(plugin.orphans()), ["Also foreign", "Foreign"], "orphans are listed for the view");
 });
 
+test("a note tagged archived is history, not a task — whatever folder it lies in", async () => {
+  const { plugin } = await stand((app) => {
+    areaNote(app, "Sport");
+    taskNote(app, "Live", { area: "Sport", scheduled: TODAY });
+    taskNote(app, "Old", { area: "Sport", status: "done", completedDate: TODAY, tags: ["archived"] });
+    taskNote(app, "Older", { area: "Sport", scheduled: TODAY, tags: "#archived" });
+  });
+  eq(names(plugin.tasks()).sort(), ["Live"], "only the live one is read");
+  eq(plugin.closedToday().map((g) => names(g.tasks)), [], "and the archived one is not today's closed work either");
+});
+
 test("cancelled and someday tasks stay out of the list", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");

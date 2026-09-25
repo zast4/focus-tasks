@@ -296,6 +296,8 @@ const collator = () => (a, b) => a.localeCompare(b, LANG);
 const newUid = () => "ft-" + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
 // The list a task is dragged within: the steps of its project, or the loose tasks of its area.
 const listOf = (task) => (task.project ? "project:" + task.project : "area:" + task.area);
+// `tags: [archived]`, `tags: archived` or `#archived`: the note is in the archive.
+const isArchived = (tags) => (Array.isArray(tags) ? tags : tags ? [tags] : []).some((x) => String(x).replace(/^#/, "").toLowerCase() === "archived");
 // A row's place in its area's saved order: a task by its id, a project by its note.
 const seatKey = (row) => (row.kind === "task" ? row.task.uid : "p:" + row.project.file.path);
 // What a selected row is known by across re-renders: the task's own identity.
@@ -2376,6 +2378,9 @@ module.exports = class FocusTasks extends Plugin {
     const cache = this.app.metadataCache.getFileCache(file);
     const fm = cache?.frontmatter;
     if (!fm || !this.isTaskType(fm.type)) return null;
+    // Archived (the `archived` tag, as TaskNotes marks it): history, not a task — the focus never
+    // reads it, whatever folder it lies in.
+    if (isArchived(fm.tags)) return null;
     // A task is a service note: anything written under the frontmatter is a plan, and a plan is what
     // makes it a project. The row says so quietly; turning it into one stays the user's call.
     const described = (cache?.sections || []).some((x) => x.type !== "yaml");
