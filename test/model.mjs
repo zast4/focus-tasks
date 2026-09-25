@@ -105,36 +105,61 @@ test("cancelled and someday tasks stay out of the list", async () => {
   eq(names(loose((await plugin.collect(true))[0])), ["Real"]);
 });
 
-test("what is running waits with everything else that is not today", async () => {
+test("what is in other hands is on its own shelf, not in the pile of what is not today", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
-    taskNote(app, "Running", { area: "Sport", scheduled: DAY(4), status: "in-progress" });
+    taskNote(app, "Running", { area: "Sport", scheduled: DAY(4), status: "waiting" });
+    taskNote(app, "Someday", { area: "Sport" });
     taskNote(app, "Mine", { area: "Sport", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
   eq(names(loose(area)), ["Mine"], "the focus holds only what is mine to do today");
-  eq(names(ahead(area)), ["Running"], "and the started one waits in the upcoming list");
-  eq(area.running, 1, "counted apart only to keep the area on screen and to say so on the chip");
+  eq(names(ahead(area)), ["Someday"], "the pile holds what is not today — and not what is in other hands");
+  eq(names(area.waiting), ["Running"], "the waiting one is on the shelf");
+  eq(area.running, 1, "and counted");
+  // «in-progress» is not a state of this list any more: a task with it is an ordinary open one
+  const { plugin: p2 } = await stand((app) => {
+    areaNote(app, "Sport");
+    taskNote(app, "Being done", { area: "Sport", scheduled: TODAY, status: "in-progress" });
+  });
+  eq(names(loose((await p2.collect(false))[0])), ["Being done"], "TaskNotes' in-progress reads as open work");
+});
+
+test("the shelf lists every area's waiting, soonest to look at first", async () => {
+  const { plugin } = await stand((app) => {
+    areaNote(app, "Sport");
+    areaNote(app, "Work");
+    taskNote(app, "Later", { area: "Sport", scheduled: DAY(9), status: "waiting" });
+    taskNote(app, "Sooner", { area: "Sport", scheduled: `${DAY(2)}T18:00`, status: "waiting" });
+    taskNote(app, "Same day earlier", { area: "Sport", scheduled: `${DAY(2)}T09:00`, status: "waiting" });
+    taskNote(app, "Elsewhere", { area: "Work", scheduled: DAY(3), status: "waiting" });
+    taskNote(app, "Back today", { area: "Work", scheduled: DAY(-1), status: "waiting" });
+  });
+  const shelf = plugin.waitingAll();
+  eq(shelf.map((g) => g.name), ["Sport", "Work"], "by area");
+  eq(names(shelf[0].tasks), ["Same day earlier", "Sooner", "Later"], "by the day and hour to look again");
+  eq(names(shelf[1].tasks), ["Elsewhere"], "one whose day came is back among the rows, not on the shelf");
 });
 
 test("the moment it is due back, a running task returns to the focus", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
-    taskNote(app, "Ripe today", { area: "Sport", scheduled: TODAY, status: "in-progress" });
-    taskNote(app, "Overdue", { area: "Sport", scheduled: DAY(-1), status: "in-progress" });
-    taskNote(app, "Not yet", { area: "Sport", scheduled: DAY(5), status: "in-progress" });
-    taskNote(app, "No day at all", { area: "Sport", status: "in-progress" });
+    taskNote(app, "Ripe today", { area: "Sport", scheduled: TODAY, status: "waiting" });
+    taskNote(app, "Overdue", { area: "Sport", scheduled: DAY(-1), status: "waiting" });
+    taskNote(app, "Not yet", { area: "Sport", scheduled: DAY(5), status: "waiting" });
+    taskNote(app, "No day at all", { area: "Sport", status: "waiting" });
   });
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Sport"], "the area is on screen: its day came");
   eq(names(loose(areas[0])).sort(), ["Overdue", "Ripe today"], "today and overdue are back among the rows");
-  eq(names(ahead(areas[0])).sort(), ["No day at all", "Not yet"], "the rest waits with the upcoming work");
+  eq(names(ahead(areas[0])), [], "nothing of it in the pile");
+  eq(names(areas[0].waiting).sort(), ["No day at all", "Not yet"], "the rest waits on the shelf");
 });
 
 test("an area whose only work is running keeps its place", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Work");
-    taskNote(app, "Sent off", { area: "Work", scheduled: DAY(5), status: "in-progress" });
+    taskNote(app, "Sent off", { area: "Work", scheduled: DAY(5), status: "waiting" });
   });
   const areas = await plugin.collect(false);
   // nothing open today: the area is out of the focus; the task waits in «All» and comes back on its day
@@ -147,8 +172,8 @@ test("an area whose only work is running keeps its place", async () => {
 test("an hour of the day decides when a running task comes back", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Work");
-    taskNote(app, "Later today", { area: "Work", scheduled: `${TODAY}T23:59`, status: "in-progress" });
-    taskNote(app, "Earlier today", { area: "Work", scheduled: `${TODAY}T00:00`, status: "in-progress" });
+    taskNote(app, "Later today", { area: "Work", scheduled: `${TODAY}T23:59`, status: "waiting" });
+    taskNote(app, "Earlier today", { area: "Work", scheduled: `${TODAY}T00:00`, status: "waiting" });
   });
   const tasks = plugin.tasks();
   const at = (name) => tasks.find((x) => x.text === name);
@@ -156,7 +181,7 @@ test("an hour of the day decides when a running task comes back", async () => {
   eq(at("Later today").at, "23:59", "and the hour is kept beside it");
   const area = (await plugin.collect(false))[0];
   eq(names(loose(area)), ["Earlier today"], "its hour has passed: back among the rows");
-  eq(names(ahead(area)), ["Later today"], "this one's hour is still ahead: it waits");
+  eq(names(area.waiting), ["Later today"], "this one's hour is still ahead: it waits on the shelf");
 });
 
 test("a task typed under another stays under it, not at the bottom", async () => {
@@ -209,16 +234,16 @@ test("sending a task off names the day it comes back; taking it back puts it in 
     taskNote(a, "Something of mine", { area: "Work", scheduled: TODAY });   // держит область на экране
   });
   const task = () => plugin.tasks().find((x) => x.text === "Ask the accountant");
-  await plugin.setRunning(task(), true, DAY(4));
-  eq(task().status, "in-progress");
+  await plugin.setWaiting(task(), true, DAY(4));
+  eq(task().status, "waiting");
   eq(task().date, DAY(4), "the status and the day it comes back are written in one change");
   eq(names(loose((await plugin.collect(false))[0])), ["Something of mine"], "и до этого дня её в фокусе нет");
-  await plugin.setRunning(task(), false);
+  await plugin.setWaiting(task(), false);
   eq(task().status, "open");
   eq(task().date, TODAY, "a return day still ahead would keep it out of the focus it was pulled into");
   eq(names(loose((await plugin.collect(false))[0])).includes("Ask the accountant"), true, "снова в фокусе");
   await plugin.undo();
-  eq(task().status, "in-progress", "⌘Z puts it back where it was");
+  eq(task().status, "waiting", "⌘Z puts it back where it was");
   eq(task().date, DAY(4), "with the day it was waiting for");
 });
 
@@ -226,12 +251,13 @@ test("nothing running left: the project has no block to draw", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
-    taskNote(a, "Sent off", { area: "Work", project: "Launch", scheduled: DAY(4), status: "in-progress" });
+    taskNote(a, "Sent off", { area: "Work", project: "Launch", scheduled: DAY(4), status: "waiting" });
     taskNote(a, "Mine today", { area: "Work", project: "Launch", scheduled: TODAY });
   });
   let area = (await plugin.collect(false))[0];
-  eq(names(area.projects[0].later), ["Sent off"], "the step waits among the project's upcoming ones");
-  await plugin.setRunning(plugin.tasks().find((x) => x.text === "Sent off"), false);
+  eq(names(area.projects[0].later), [], "the step is not among the project's upcoming ones");
+  eq(names(area.projects[0].waiting), ["Sent off"], "it waits on the project's own shelf");
+  await plugin.setWaiting(plugin.tasks().find((x) => x.text === "Sent off"), false);
   area = (await plugin.collect(false))[0];
   eq(names(area.projects[0].tasks).includes("Sent off"), true, "and the task is back among today's steps");
 });
@@ -239,11 +265,11 @@ test("nothing running left: the project has no block to draw", async () => {
 test("taken back on its own day, a running task keeps that day", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
-    taskNote(a, "Ripe today", { area: "Work", scheduled: TODAY, status: "in-progress" });
-    taskNote(a, "Long overdue", { area: "Work", scheduled: DAY(-3), status: "in-progress" });
+    taskNote(a, "Ripe today", { area: "Work", scheduled: TODAY, status: "waiting" });
+    taskNote(a, "Long overdue", { area: "Work", scheduled: DAY(-3), status: "waiting" });
   });
   const task = (name) => plugin.tasks().find((x) => x.text === name);
-  await plugin.setRunning([task("Ripe today"), task("Long overdue")], false);
+  await plugin.setWaiting([task("Ripe today"), task("Long overdue")], false);
   eq(task("Ripe today").date, TODAY, "its day is here: nothing to move");
   eq(task("Long overdue").date, DAY(-3), "and an overdue one stays overdue — the focus must still nag");
 });
@@ -251,7 +277,7 @@ test("taken back on its own day, a running task keeps that day", async () => {
 test("a running task with its day taken away comes home instead of being stranded", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
-    taskNote(a, "Sent off", { area: "Work", scheduled: DAY(4), status: "in-progress" });
+    taskNote(a, "Sent off", { area: "Work", scheduled: DAY(4), status: "waiting" });
     taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
   });
   const task = () => plugin.tasks().find((x) => x.text === "Sent off");
@@ -262,31 +288,32 @@ test("a running task with its day taken away comes home instead of being strande
   eq(names(ahead(area)), ["Sent off"], "an ordinary task with no date: the отложка of its area");
 });
 
-test("among what is not today, the started ones come first", async () => {
+test("what is not today is the pile alone; a promise made to somebody is on the shelf, not above the plans", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     taskNote(a, "Planned for Friday", { area: "Work", scheduled: DAY(4) });
     taskNote(a, "Someday, no date", { area: "Work" });
-    taskNote(a, "Sent to the lawyer", { area: "Work", scheduled: DAY(6), status: "in-progress" });
+    taskNote(a, "Sent to the lawyer", { area: "Work", scheduled: DAY(6), status: "waiting" });
     taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  // a promise already made stands above a plan, even when its day is further out
-  eq(names(ahead(area))[0], "Sent to the lawyer");
-  eq(names(ahead(area)).slice(1), ["Planned for Friday", "Someday, no date"]);
+  eq(names(ahead(area)), ["Planned for Friday", "Someday, no date"], "the pile: dated first, then undated");
+  eq(names(area.waiting), ["Sent to the lawyer"], "the promise waits on the shelf");
 });
 
 test("a running step stays inside its project, not in the area", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
-    taskNote(a, "Sent to the lawyer", { area: "Work", project: "Launch", scheduled: DAY(3), status: "in-progress" });
-    taskNote(a, "Waiting on a reply", { area: "Work", scheduled: DAY(3), status: "in-progress" });
+    taskNote(a, "Sent to the lawyer", { area: "Work", project: "Launch", scheduled: DAY(3), status: "waiting" });
+    taskNote(a, "Waiting on a reply", { area: "Work", scheduled: DAY(3), status: "waiting" });
     taskNote(a, "Mine today", { area: "Work", scheduled: TODAY });
   });
   const area = (await plugin.collect(false))[0];
-  eq(names(area.projects[0].later), ["Sent to the lawyer"], "the project keeps its own");
-  eq(names(ahead(area)), ["Waiting on a reply"], "the area keeps the loose one");
+  eq(names(area.projects[0].waiting), ["Sent to the lawyer"], "the project keeps its own, on its shelf");
+  eq(names(area.projects[0].later), [], "not among its upcoming steps");
+  eq(names(area.waiting.filter((x) => !x.project)), ["Waiting on a reply"], "the area keeps the loose one");
+  eq(names(ahead(area)), [], "the pile has neither");
   eq(names(loose(area)), ["Mine today"], "the focus is untouched by either");
 });
 

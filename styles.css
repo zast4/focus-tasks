@@ -237,6 +237,11 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
   border-top: 1px solid var(--background-modifier-border); }
 .focus-tasks-view li.ft-done > .ft-text { color: var(--text-faint); text-decoration: line-through; cursor: default; }
 
+/* The shelf of what is in other hands: one block at the bottom, like the day's closed work. */
+.focus-tasks-view .ft-waiting { margin-top: 0.45em; padding-top: 0.2em; border-top: 1px solid var(--background-modifier-border); }
+.focus-tasks-view .ft-waiting li.ft-task > .ft-running { color: var(--interactive-accent); }
+.focus-tasks-view .ft-waiting-toggle.is-on { color: var(--text-normal); }
+
 /* A project's page: the block at the bottom of its note. */
 .focus-tasks-view .ft-page-add { margin: 0.2em 0 0 calc(var(--ft-col) * 1); color: var(--text-faint); cursor: pointer; }
 .focus-tasks-view .ft-page-add:hover { color: var(--text-muted); }
@@ -284,8 +289,6 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 /* A row waiting to come back is no fainter than the rest of «not today» — it was two different greys
    in one list before. What sets it apart is the ▷ and the line above the group it sits in. */
 .focus-tasks-view li.ft-task.is-waiting > .ft-date { font-weight: 400; }
-.focus-tasks-view .ft-ahead-split { height: 0; margin: 0.4em var(--ft-pad) 0.35em 0;
-  border-top: 1px dashed var(--background-modifier-border); }
 .focus-tasks-view li.ft-task > .ft-running { flex: none; display: inline-flex; align-items: center; cursor: pointer;
   margin: calc(var(--ft-line) * 0.5em - 0.5rem) 0 0 0.4em; color: var(--text-faint); }
 .focus-tasks-view li.ft-task > .ft-running svg { width: 0.8rem; height: 0.8rem; }

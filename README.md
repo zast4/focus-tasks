@@ -50,7 +50,7 @@ What you can do in the view:
 |---|---|
 | Complete a task | click its checkbox; for the rest of the day it stays where it lives — a step inside its project, a loose task at the bottom of its area — under a hairline, and the green ✓N on that row folds it away (its box brings it back) |
 | See what is ahead in a project | the ⏳ on the project's row (under the pointer; the count is in its tooltip) opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
-| Hand a task off | «In progress» in the row's menu: it leaves the focus and waits behind the ▷N of its project or area. Its date now means «look at it again»: on that day the task comes back among the rows that are due, marked ▷, and that ▷ hands it back to you |
+| Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
 | Priority | the dot on a row opens the levels — high, normal, low, or none at all; the same is in the row's menu, and in the menu of a selection it sets them all |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** saves and leaves the row selected (a wiped row keeps its text) |
@@ -62,7 +62,7 @@ What you can do in the view:
 | Reorder / move | drag the grip: areas among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
 | Select a row | click the grip on the left (again: drops it), or **Esc** while editing. A selected row is a block picked up as a whole, as in Notion: **↑/↓** walk the list, **Shift+↑/↓** extend, **Enter** edits it, **⌫** deletes (Undo in the notice), **⌘/Ctrl+1…4** date it, **⌘/Ctrl+Z** takes back the last change, **Esc** drops the selection |
 | Select several | **Shift**-click selects every task from the last clicked one, **⌘/Ctrl**-click adds or drops one; the grip of a selected row drags them all; its date, its menu, the keys above or **⌘/Ctrl+1…4** work on all of them |
-| Upcoming | the ⏳N on an area's header opens its undated and future tasks, next to ▷N running and ✓N done |
+| Upcoming | the ⏳ on an area's header opens its undated and future tasks; what is in other hands is not there but on the **▷ Waiting** shelf at the bottom |
 | Everything | «All» at the bottom shows every area (also those with nothing due); «Hide» goes back |
 | Fold | carets on headers; «Collapse all» / «Expand all» at the bottom |
 | Areas | «+ Area», «+ Area from a note» at the bottom; area menu: new project, project from a note, link a note, delete |
@@ -215,13 +215,12 @@ passes (`--keep` leaves it).
 проекта или области считает сделанное и сворачивает его одним кликом. Будущие и бессрочные шаги
 проекта лежат за его же ⏳N: видно, что осталось именно в этом проекте.
 
-Всё, что область держит сверх сегодняшней работы, висит двумя значками на её же строке: ⏳N - всё
-«не сегодня» (будущее, отложка и запущенное), ✓N - закрытое сегодня. Отдельной серой строки
-«Показать будущее» под списком больше нет - она занимала место вдвое большее и читалась как подвал.
+Всё, что область держит сверх сегодняшней работы, висит значком ⏳ на её же строке: будущее и
+отложка. Отдельной серой строки «Показать будущее» под списком больше нет - она занимала место
+вдвое большее и читалась как подвал.
 
-Задачу, которую ты уже запустил - делегировал, отправил, ждёшь ответа, - отдаёт значок **▷**: он
-есть на каждой строке и проявляется при наведении (в меню строки тот же пункт «В работу…»). Он не
-переключает статус молча, а задаёт один вопрос - когда к ней вернуться.
+Задачу, которую ты отдал - делегировал, отправил, ждёшь ответа, - отдаёт пункт **«Жду…»** в меню
+строки. Он не переключает статус молча, а задаёт один вопрос - когда к ней вернуться.
 
 Карточка «Вернуться к задаче» открывается с сегодняшним днём и курсором в часах. Часы и минуты -
 два поля, как в календаре macOS: две цифры, и курсор сам уходит в минуты, ещё две - и Tab закрывает
@@ -231,14 +230,14 @@ passes (`--keep` leaves it).
 означают весь день. Прошлое карточка не берёт, а закрыл её - не изменилось ничего: статус без дня
 возврата не ставится.
 
-Дальше задача уходит из фокуса и ждёт там же, где всё остальное «не сегодня»: за счётчиком ⏳N
-своей области или своего проекта, вперемешку с будущими задачами и отложкой, по своей дате.
-Отдельного списка для запущенного нет - вопрос у них один и тот же, «не сейчас, вернусь позже»,
-а разницу видно по значку ▷ на строке; подсказка на счётчике говорит, сколько из них запущено.
-Область, в которой только запущенные задачи, из фокуса не исчезает: иначе исчез бы и счётчик,
-а с ним единственная дорога к ним. Когда названный момент настал - день, а если указан час, то
-именно час, - задача сама возвращается в фокус со значком ▷: это «проверь», а не «делай». Клик по ▷
-забирает её в работу совсем; чтобы отложить ещё раз, нажми на дату - откроется та же карточка.
+Дальше задача уходит из фокуса на полку **«▷ Жду · N»** внизу панели, кнопка рядом с «Сделано»:
+по областям, ближайший день сверху, у каждой строки «до 26.09 19:00». В отложке области её нет -
+ждущее и отложенное читаются одинаково, а значат разное, и раньше это путало. На странице проекта
+его ждущие шаги свёрнуты под таким же «▷ Жду · N». В заметке статус пишется как `waiting`: TaskNotes
+понимает `in-progress` как «делаю сейчас», для ожидания это неправда. Когда названный момент настал -
+день, а если указан час, то именно час, - задача сама возвращается в фокус со значком ▷: это
+«проверь», а не «делай». Клик по ▷ забирает её в работу совсем («Взять обратно» в меню); чтобы
+отложить ещё раз, нажми на дату - откроется та же карточка.
 
 Точка на строке - приоритет задачи (`priority` в заметке). Клик по ней открывает уровни:
 высокий, обычный, низкий и «без приоритета» - последний убирает метку совсем. То же есть в меню

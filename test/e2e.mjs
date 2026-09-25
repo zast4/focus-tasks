@@ -585,7 +585,7 @@ step("the row shows what the note says: a priority dot and a deadline on another
   await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the badges are gone again");
 });
 
-step("«In progress…» sends the task off: a day, an hour typed in two segments, and it waits with a ▷", async () => {
+step("«Waiting…» sends the task off: a day, an hour typed in two segments, and it waits on the shelf with a ▷", async () => {
   const later = ymd(new Date(Date.now() + 5 * 864e5));
   fs.writeFileSync(path.join(VAULT, taskPath("Ask the lawyer")),
     `---\nuid: ft-run-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
@@ -594,7 +594,7 @@ step("«In progress…» sends the task off: a day, an hour typed in two segment
   // no ▷ on a row that is not running: sending off lives in the row's menu
   if (await page.eval(`return !!__ft.task('Ask the lawyer').querySelector('.ft-running')`)) throw new Error("a row not sent off carries a ▷");
   await menuOn(`__ft.at(__ft.task('Ask the lawyer'))`);
-  await menu("In progress…");
+  await menu("Waiting…");
   await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption')`), "the «look at it again» card");
   const card = JSON.parse(await page.eval(`
     const p = document.querySelector('.ft-picker');
@@ -608,7 +608,10 @@ step("«In progress…» sends the task off: a day, an hour typed in two segment
   await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
   await page.type("45");
   await page.key("Tab");
-  await taskIs("Ask the lawyer", { status: "in-progress", scheduled: `${TODAY}T18:45` }, "the moment is written in one change");
+  await taskIs("Ask the lawyer", { status: "waiting", scheduled: `${TODAY}T18:45` }, "the moment is written in one change");
+  // sent off, the row is on the shelf at the bottom — opened, so its date can be clicked
+  await plugin(`if (!p.waitingShown()) p.setWaitingShown(true); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Ask the lawyer')?.closest('.ft-waiting')`), "the row on the shelf");
   // set a moment and walk away from the card: leaving it is not «cancel»
   await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-date'))`, "the date of the row");
   await until(() => page.eval(`return !!document.querySelector('.ft-picker-clock')`), "the card again");
@@ -622,40 +625,29 @@ step("«In progress…» sends the task off: a day, an hour typed in two segment
   await click(`__ft.at(__ft.view().querySelector('.ft-rest-title') || __ft.view().querySelector('.ft-done-today .ft-empty'))`, "somewhere outside the card");
   await until(() => page.eval(`return !document.querySelector('.ft-picker')`), "the card closed");
   await taskIs("Ask the lawyer", { scheduled: `${TOMORROW}T07:30` }, "what stood in the fields was kept");
-  // out of the focus, behind the counter of its area, and reachable from there
+  // out of today's work, and not in the pile of what is not today either: on the shelf at the bottom
   await until(() => page.eval(`
     const r = __ft.task('Ask the lawyer');
-    return !r || !!r.closest('.ft-future-block');`), "the row left today's work");
-  // one counter for everything that is not today; the tooltip says how much of it is in other hands
-  await until(() => page.eval(`
-    const c = __ft.area('Sport')?.querySelector('.ft-later-chip');
-    return !!c && /running|запущен/i.test(c.getAttribute('aria-label') || '');`), "the area's ⏳ counts it among the upcoming");
+    return !r || !!r.closest('.ft-waiting');`), "the row left today's work");
   const key = await plugin(`return 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
   await plugin(`if (!p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
+  await settle();
+  if (await page.eval(`return !!__ft.task('Ask the lawyer')?.closest('.ft-future-block')`)) throw new Error("a waiting task is listed with the upcoming work");
+  if (await page.eval(`return /running|запущен|waiting|жду/i.test(__ft.area('Sport')?.querySelector('.ft-later-chip')?.getAttribute('aria-label') || '')`))
+    throw new Error("the area's ⏳ still counts what is in other hands");
+  // «▷ Waiting · 1» at the bottom: the row is on the shelf, marked, with the day to look again
+  await until(() => page.eval(`return /· 1/.test(__ft.view()?.querySelector('.ft-waiting-toggle')?.textContent || '')`), "the foot button counts it");
   await until(() => page.eval(`
     const r = __ft.task('Ask the lawyer');
-    return !!r && !!r.closest('.ft-future-block') && !!r.querySelector('.ft-running');`),
-    "and it is listed with the upcoming work, marked as running");
-  // started work stands above what is only planned, with a line between the two
-  const grouped = JSON.parse(await page.eval(`
-    const block = __ft.task('Ask the lawyer').closest('.ft-future-block');
-    const rows = [...block.querySelectorAll('li.ft-task')];
-    const split = block.querySelector('.ft-ahead-split');
-    return JSON.stringify({ first: !!rows[0]?.querySelector('.ft-running'),
-      split: !!split, before: split ? [...block.children].indexOf(rows[0].closest('ul')) < [...block.children].indexOf(split) : null });`));
-  if (!grouped.first) throw new Error("a started task is not at the top of what is not today");
+    return !!r && !!r.closest('.ft-waiting') && !!r.querySelector('.ft-running') && !r.hasClass('is-waiting');`),
+    "on the shelf, marked ▷, not greyed out");
+  const label = await page.eval(`return __ft.task('Ask the lawyer').querySelector('.ft-date')?.textContent || ''`);
+  if (!/^(by|до) /.test(label)) throw new Error(`the date on the shelf does not say by when: ${J(label)}`);
   // its date is a moment to come back, not a deadline: never painted as today's work
   const painted = await page.eval(`
     const d = __ft.task('Ask the lawyer').querySelector('.ft-date');
     return d.className + " | " + getComputedStyle(d).color;`);
   if (/is-today|is-past/.test(painted)) throw new Error(`the return moment is painted like a due date: ${J(painted)}`);
-  // the group must be told apart from today's work: without a line of its own it read as the focus
-  const edge = await page.eval(`
-    const b = __ft.task('Ask the lawyer').closest('.ft-future-block');
-    const cs = getComputedStyle(b);
-    return cs.borderTopWidth + " " + cs.borderTopStyle;`);
-  if (!/^[1-9]/.test(edge) || /none/.test(edge)) throw new Error(`the upcoming block has no edge: ${J(edge)}`);
-  if (grouped.split && !grouped.before) throw new Error("the line does not separate the started ones from the planned");
   // folded away, the waiting task is still being watched — that is where the clock lost it before
   const watched = JSON.parse(await plugin(`
     const key = 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;
@@ -670,7 +662,7 @@ step("«In progress…» sends the task off: a day, an hour typed in two segment
   // the hour passes: it comes back into the focus by itself
   await plugin(`
     const task = p.tasks().find((x) => x.text === 'Ask the lawyer');
-    await p.setRunning(task, true, ${J(TODAY)}, '00:00'); p.refresh(); return true;`);
+    await p.setWaiting(task, true, ${J(TODAY)}, '00:00'); p.refresh(); return true;`);
   await until(() => page.eval(`
     const r = __ft.task('Ask the lawyer');
     return !!r && !r.closest('.ft-future-block') && !!r.querySelector('.ft-running');`),
@@ -678,8 +670,8 @@ step("«In progress…» sends the task off: a day, an hour typed in two segment
   await click(`__ft.at(__ft.task('Ask the lawyer').querySelector('.ft-running'))`, "the ▷ on the row");
   await taskIs("Ask the lawyer", { status: "open", scheduled: TODAY }, "the row's ▷ hands it back, into today's focus");
   await settle();
-  if (await page.eval(`return !!__ft.view().querySelector('.ft-wait-block, .ft-wait-chip')`))
-    throw new Error("the old «running» block and counter are back");
+  await until(() => page.eval(`return !/· \\d/.test(__ft.view().querySelector('.ft-waiting-toggle')?.textContent || '')`), "nothing on the shelf: the button has no count");
+  await plugin(`if (p.waitingShown()) p.setWaitingShown(false); return true;`);
   fs.unlinkSync(path.join(VAULT, taskPath("Ask the lawyer")));
   await settle();
 });
@@ -1112,7 +1104,7 @@ step("⌫ on a selection deletes the rows; Undo brings them back", async () => {
   await idle();
 });
 
-step("«In progress…» on a selection sends every selected row off with one moment", async () => {
+step("«Waiting…» on a selection sends every selected row off with one moment", async () => {
   for (const [name, uid] of [["Call the bank", "ft-run-a"], ["Call the school", "ft-run-b"]])
     fs.writeFileSync(path.join(VAULT, taskPath(name)), `---\nuid: ${uid}\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
   await toPane();
@@ -1123,13 +1115,13 @@ step("«In progress…» on a selection sends every selected row off with one mo
   await click(`__ft.at(__ft.task('Call the school'))`, "the second row", CMD);
   await selectedAre(["Call the bank", "Call the school"]);
   await menuOn(`__ft.at(__ft.task('Call the bank'))`);
-  await menu("In progress…");
+  await menu("Waiting…");
   await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption') && /is-hh/.test(document.activeElement?.className || '')`), "the «look at it again» card, caret in the hour");
   await page.type("18");
   await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
   await page.type("45");
   await page.key("Tab");
-  for (const name of ["Call the bank", "Call the school"]) await taskIs(name, { status: "in-progress", scheduled: `${TODAY}T18:45` }, "both sent off with the one moment");
+  for (const name of ["Call the bank", "Call the school"]) await taskIs(name, { status: "waiting", scheduled: `${TODAY}T18:45` }, "both sent off with the one moment");
   await idle();
   await selectedAre([]);
   for (const name of ["Call the bank", "Call the school"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
