@@ -2332,6 +2332,8 @@ class FocusRenderer extends MarkdownRenderChild {
     const date = li.createSpan();
     this.dateLabel(date, task);
     if (opts.pile === "waiting" && task.date) date.setText(t("until", date.textContent));
+    // on the shelf a step stands among loose tasks of other areas: its project is named, as in «Done»
+    if (opts.pile === "waiting" && task.project) { this.projectTag(li, task); li.appendChild(date); }
     date.onclick = (e) => {
       if (picking(e)) return;
       e.stopPropagation();

@@ -629,11 +629,11 @@ step("«Waiting…» sends the task off: a day, an hour typed in two segments, a
   if (!/is-hh/.test(card.focused)) throw new Error(`the caret does not start in the hour: ${J(card.focused)}`);
   if (card.parts !== 2) throw new Error("the hour is not two segments");
   // two digits and the caret moves on by itself; two more and Tab is the end of it
-  await page.type("18");
+  await page.type("23");
   await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
-  await page.type("45");
+  await page.type("56");
   await page.key("Tab");
-  await taskIs("Ask the lawyer", { status: "waiting", scheduled: `${TODAY}T18:45` }, "the moment is written in one change");
+  await taskIs("Ask the lawyer", { status: "waiting", scheduled: `${TODAY}T23:56` }, "the moment is written in one change");
   // sent off, the row is on the shelf at the bottom — opened, so its date can be clicked
   await plugin(`if (!p.waitingShown()) p.setWaitingShown(true); return true;`);
   await until(() => page.eval(`return !!__ft.task('Ask the lawyer')?.closest('.ft-waiting')`), "the row on the shelf");
@@ -854,6 +854,9 @@ step("link a note to a project: the name opens the note, the menu opens the proj
   await menuOn(`__ft.at(__ft.name('Marathon 2027'))`);
   await menu("Open task file");
   await until(async () => (await activePath()) === "Tasks/Marathon 2027.md", "the project note open");
+  // the notes this step opened are closed again: a project's note carries its own steps block, and
+  // left open behind the pane it takes the front back whenever the window is raised
+  await page.eval(`for (const l of app.workspace.getLeavesOfType('markdown')) if (['Tasks/Marathon 2027.md', 'Notes/Running log.md'].includes(l.view.file?.path)) l.detach(); return true;`);
   await toPane();
 });
 
@@ -915,8 +918,15 @@ step("click, then Shift-click selects the rows between; Cmd-click drops one; the
 
 step("the grip of a selected row drags them all; ⌘1–4 date them all", async () => {
   const pick = async (from, to) => {
+    // a note tab left open by an earlier step takes the front back whenever the window is raised,
+    // and the clicks land in it: the pane is the only tab here
+    await page.eval(`for (const l of app.workspace.getLeavesOfType('markdown')) l.detach(); return true;`);
+    await toPane();
     await until(() => page.eval(`return !!__ft.task(${J(from)}) && !!__ft.task(${J(to)})`), `${from} … ${to} on screen`);
-    await click(`__ft.at(__ft.task(${J(from)}).querySelector('.ft-text'))`, from, CMD);
+    await page.key("Escape");   // nothing selected from before: the grip below starts afresh
+    await settle();
+    await click(`__ft.grip(__ft.task(${J(from)}))`, "grip of " + from);
+    await selectedAre([from]);
     await click(`__ft.at(__ft.task(${J(to)}).querySelector('.ft-text'))`, to, SHIFT);
     await until(async () => (await selected()).length >= 2, `${from} … ${to} selected`);
     return selected();
@@ -977,7 +987,13 @@ step("the grip of a selected row drags them all; ⌘1–4 date them all", async 
   // another tab active: ⌘4 belongs to Obsidian again
   await settle();
   const again = await pick(names[0], names[names.length - 1]);
-  await page.eval(`app.workspace.setActiveLeaf(app.workspace.getLeavesOfType('markdown')[0], { focus: true }); return true;`);
+  await page.eval(`let l = app.workspace.getLeavesOfType('markdown')[0];
+    if (!l) {
+      // a plain note: one with a steps block (the linked «Running log» got one) would be a list too
+      const f = app.vault.getAbstractFileByPath('Notes/Plain.md') || await app.vault.create('Notes/Plain.md', 'Just a note.');
+      l = app.workspace.getLeaf('tab'); await l.openFile(f);
+    }
+    app.workspace.setActiveLeaf(l, { focus: true }); return true;`);
   // the list drops its keyboard scope on active-leaf-change; pressing before that lands in a race
   await until(() => page.eval(`
     const p = app.plugins.plugins['focus-tasks'];
@@ -1138,6 +1154,20 @@ step("⌫ on a selection deletes the rows; Undo brings them back", async () => {
   await idle();
 });
 
+step("a step on the «Waiting» shelf names its project", async () => {
+  await plugin(`
+    const made = await p.createTask('Shelf step', { area: '💪Sport', project: 'Marathon 2027' }, null);
+    let t = null;
+    for (let i = 0; i < 50 && !t; i++) { p.forgetScan(); t = p.tasks().find((x) => x.uid === made.uid); if (!t) await new Promise((r) => setTimeout(r, 50)); }
+    await p.setWaiting(t, true, ${J(TOMORROW)});
+    if (!p.waitingShown()) p.setWaitingShown(true);
+    p.refresh(); return true;`);
+  await toPane();
+  await until(() => page.eval(`const r = __ft.task('Shelf step'); return !!r?.closest('.ft-waiting') && /Marathon 2027/.test(r.textContent)`), "the shelf row says «Marathon 2027»");
+  await plugin(`const t = p.tasks().find((x) => x.text === 'Shelf step'); if (t) await p.trash(t.file); p.setWaitingShown(false); return true;`);
+  await settle();
+});
+
 step("«Waiting…» on a selection sends every selected row off with one moment", async () => {
   for (const [name, uid] of [["Call the bank", "ft-run-a"], ["Call the school", "ft-run-b"]])
     fs.writeFileSync(path.join(VAULT, taskPath(name)), `---\nuid: ${uid}\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
@@ -1151,11 +1181,11 @@ step("«Waiting…» on a selection sends every selected row off with one moment
   await menuOn(`__ft.at(__ft.task('Call the bank'))`);
   await menu("Waiting…");
   await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption') && /is-hh/.test(document.activeElement?.className || '')`), "the «look at it again» card, caret in the hour");
-  await page.type("18");
+  await page.type("23");
   await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
-  await page.type("45");
+  await page.type("56");
   await page.key("Tab");
-  for (const name of ["Call the bank", "Call the school"]) await taskIs(name, { status: "waiting", scheduled: `${TODAY}T18:45` }, "both sent off with the one moment");
+  for (const name of ["Call the bank", "Call the school"]) await taskIs(name, { status: "waiting", scheduled: `${TODAY}T23:56` }, "both sent off with the one moment");
   await idle();
   await selectedAre([]);
   for (const name of ["Call the bank", "Call the school"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
