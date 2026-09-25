@@ -83,7 +83,7 @@ const DEFAULTS = {
 const STRINGS = {
   en: {
     viewTitle: "Focus", open: "Open Focus", focusEmpty: "Nothing due today",
-    noAreas: "No areas yet — create the first one", restTitle: "Other areas", focusTitle: "Focus", openTasks: "{0} open", all: "All", hide: "Hide",
+    noAreas: "No areas yet — create the first one", restTitle: "Other areas", focusTitle: "Focus", focusOnly: "Show the focus alone: its areas open, everything else folded", openTasks: "{0} open", all: "All", hide: "Hide",
     newArea: "+ Area", areaFromNote: "+ Area from a note", foldAll: "Collapse all", unfoldAll: "Expand all",
     openCount: "open {0}", inFocus: ", in focus {0}", addToArea: "Task in this area", empty: "Empty",
     addTask: "Add a task", showUpcoming: "Show upcoming", hideUpcoming: "Hide upcoming",
@@ -170,7 +170,7 @@ const STRINGS = {
   },
   ru: {
     viewTitle: "Фокус", open: "Открыть Фокус", focusEmpty: "В фокусе пусто",
-    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", focusTitle: "Фокус", openTasks: "открыто: {0}", all: "Все", hide: "Скрыть",
+    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", focusTitle: "Фокус", focusOnly: "Показать только фокус: его области развернуть, остальное свернуть", openTasks: "открыто: {0}", all: "Все", hide: "Скрыть",
     newArea: "+ Область", areaFromNote: "+ Область из заметки", foldAll: "Свернуть всё", unfoldAll: "Развернуть всё",
     openCount: "открыто {0}", inFocus: ", в фокусе {0}", addToArea: "Задача в область", empty: "Пусто",
     addTask: "Добавить задачу", showUpcoming: "Показать будущее", hideUpcoming: "Скрыть будущее",
@@ -737,6 +737,21 @@ class FocusRenderer extends MarkdownRenderChild {
     this.scopes?.clear();
   }
 
+  async focusOnly(areas, rest, wide) {
+    const p = this.plugin;
+    for (const a of areas) {
+      delete p.data.folded["area:" + a.name];
+      delete p.data.opened["future:" + a.name];
+      if (wide) p.data.opened["futureoff:" + a.name] = true;   // in «All» the pile is open unless closed
+    }
+    for (const a of rest) delete p.data.opened["area:" + a.name];
+    p.saveFolds();
+    p.app.saveLocalStorage("focus-tasks-done", null);
+    p.app.saveLocalStorage("focus-tasks-waiting", null);
+    await this.rerendered();
+    (this.scroller || this.containerEl).scrollTop = 0;
+  }
+
   // The tab the list is in: the pane, or the note with the block.
   leafOf() {
     if (this.leaf) return this.leaf;
@@ -820,7 +835,12 @@ class FocusRenderer extends MarkdownRenderChild {
       }
     }
     // the focus has a title of its own, like «Other areas» below it
-    if (areas.length) el.createDiv({ cls: "ft-rest-title ft-focus-title", text: t("focusTitle") });
+    // A click on «Focus» shows the focus and only it: every focus area opens (its ⏳ pile closed),
+    // every other area folds, the closed and waiting blocks close.
+    if (areas.length) {
+      const head = el.createDiv({ cls: "ft-rest-title ft-focus-title", text: t("focusTitle"), attr: { "aria-label": t("focusOnly") } });
+      head.onclick = () => this.focusOnly(areas, rest, everything);
+    }
     for (const area of areas) await this.area(el, area, false, everything);
     if (everything) {
       if (rest.length) el.createDiv({ cls: "ft-rest-title", text: t("restTitle") });

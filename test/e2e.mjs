@@ -1410,6 +1410,27 @@ step("an empty project's box closes the project", async () => {
   await settle();
 });
 
+step("a click on «Focus» opens every focus area and folds everything else", async () => {
+  await toPane();
+  const state = await plugin(`
+    window.__ftDoneWas = p.doneShown();
+    window.__ftFoldsWas = JSON.stringify({ folded: p.data.folded, opened: p.data.opened });
+    const areas = await p.collect(false);
+    for (const a of areas) p.data.folded['area:' + a.name] = true;
+    p.saveFolds(); p.setDoneShown(true); p.setEverything(true);
+    const rest = (await p.collect(true)).filter((a) => !areas.some((x) => x.name === a.name));
+    for (const a of rest) p.data.opened['area:' + a.name] = true;
+    p.saveFolds(); p.refresh();
+    return { focus: areas.map((a) => a.name), rest: rest.map((a) => a.name) };`);
+  await settle();
+  await click(`__ft.at(__ft.view().querySelector('.ft-focus-title'))`, "the «Focus» title");
+  await until(() => plugin(`return ${J(state.focus)}.every((n) => !p.data.folded['area:' + n]) && ${J(state.rest)}.every((n) => !p.data.opened['area:' + n]) && !p.doneShown()`),
+    "focus areas open, the rest folded, the closed block shut");
+  await plugin(`const was = JSON.parse(window.__ftFoldsWas); p.data.folded = was.folded; p.data.opened = was.opened; p.saveFolds();
+    p.setEverything(false); p.setDoneShown(window.__ftDoneWas); return true;`);
+  await settle();
+});
+
 step("a plain click anywhere else drops the selection: a header's «+», another pane", async () => {
   await toPane();
   await settle();
@@ -1446,7 +1467,8 @@ step("ticking a box does not move the page under the reader", async () => {
   const before = await page.eval(`
     const s = ${scroller};
     const top = s.getBoundingClientRect().top;
-    const rows = [...document.querySelectorAll('.focus-tasks-pane li.ft-task:not(.ft-project-row)')]
+    const rows = [...document.querySelectorAll('.focus-tasks-pane li.ft-task:not(.ft-project-row):not(.ft-done)')]
+      .filter((r) => !r.closest('.ft-waiting, .ft-done-today'))
       .filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 60; });
     const name = (r) => r.querySelector('.ft-text').textContent.trim();
     // the mark is the FIRST row on screen and the tick is below it: the list holds its place by
