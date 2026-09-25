@@ -273,7 +273,10 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 .focus-tasks-view .ft-page-head > .ft-project-icon { margin-right: 0.35em; }
 .focus-tasks-view .ft-page-head:hover > .ft-plus { opacity: 1; }
 
-.focus-tasks-view .ft-page-add { margin: 0.2em 0 0 calc(var(--ft-col) * 1); color: var(--text-faint); cursor: pointer; }
+/* On the page there is no area header to hang the rows under: the steps start at the heading's own
+   left edge — the box under the 📁 — and «+ Step» sits in the same column. */
+.focus-tasks-view .ft-page li.ft-task { --ft-level: -2; }
+.focus-tasks-view .ft-page-add { margin: 0.2em 0 0 0; padding-left: calc((var(--ft-col) - 0.7em) / 2); color: var(--text-faint); cursor: pointer; }
 .focus-tasks-view .ft-page-add:hover { color: var(--text-muted); }
 .focus-tasks-view .ft-page-done { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.9em 0 0.2em; padding: 0.25rem 0.6rem;
   font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-radius: 6px; }
