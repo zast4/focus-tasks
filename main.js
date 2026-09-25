@@ -1923,7 +1923,9 @@ class FocusRenderer extends MarkdownRenderChild {
         await close(true, false);
         this.askReturn(task, label);
       },
-    }, (anchor) => this.rowAfter(el.closest("li"), anchor, inFocus(task) ? today() : null), () => this.markSoon(task));
+    // Enter on the «Waiting» shelf saves and stops: a new row there would be nobody's to wait for,
+    // and it went straight to the focus
+    }, this.pileOf(el.closest("li")) === "waiting" ? null : (anchor) => this.rowAfter(el.closest("li"), anchor, inFocus(task) ? today() : null), () => this.markSoon(task));
   }
 
   // Which list a row is in: today's focus, the area's pile of what is not today, or an area of

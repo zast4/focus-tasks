@@ -1164,6 +1164,12 @@ step("a step on the «Waiting» shelf names its project", async () => {
     p.refresh(); return true;`);
   await toPane();
   await until(() => page.eval(`const r = __ft.task('Shelf step'); return !!r?.closest('.ft-waiting') && /Marathon 2027/.test(r.textContent)`), "the shelf row says «Marathon 2027»");
+  // Enter while editing a shelf row saves it and opens no new row there
+  await click(`__ft.at(__ft.task('Shelf step').querySelector('.ft-text'))`);
+  await editing();
+  await page.key("Enter");
+  await idle();
+  if (await page.eval(`return !!document.querySelector('.ft-waiting .ft-draft-row, .ft-waiting .ft-draft')`)) throw new Error("Enter on the shelf opened a new row");
   await plugin(`const t = p.tasks().find((x) => x.text === 'Shelf step'); if (t) await p.trash(t.file); p.setWaitingShown(false); return true;`);
   await settle();
 });
