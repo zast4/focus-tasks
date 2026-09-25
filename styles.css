@@ -242,7 +242,13 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 .focus-tasks-view .ft-waiting li.ft-task > .ft-running { color: var(--interactive-accent); }
 .focus-tasks-view .ft-waiting-toggle.is-on { color: var(--text-normal); }
 
-/* A project's page: the block at the bottom of its note. */
+/* A project's page: the block at the bottom of its note. Its heading is the project's row as in the
+   list, with a line above to set the steps apart from the note's own text. */
+.focus-tasks-view .ft-page-head { font-size: 1.1em; margin-top: 0.4em; padding-top: 0.55em; border-top: 1px solid var(--background-modifier-border);
+  border-radius: 0; }
+.focus-tasks-view .ft-page-head > .ft-project-icon { margin-right: 0.35em; }
+.focus-tasks-view .ft-page-head:hover > .ft-plus { opacity: 1; }
+
 .focus-tasks-view .ft-page-add { margin: 0.2em 0 0 calc(var(--ft-col) * 1); color: var(--text-faint); cursor: pointer; }
 .focus-tasks-view .ft-page-add:hover { color: var(--text-muted); }
 .focus-tasks-view .ft-page-done { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.9em 0 0.2em; padding: 0.25rem 0.6rem;

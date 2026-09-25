@@ -933,14 +933,26 @@ class FocusRenderer extends MarkdownRenderChild {
       return this.swap(el, old);
     }
     this.shown = { areas: [area.name], tasks: { ["project:" + b.file.basename]: [...b.tasks, ...b.later].map((x) => x.uid) } };
-    if (b.tasks.length) await this.list(box, b.tasks.map((task) => ({ kind: "task", task })), { area, pile: "focus" });
-    if (b.later.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), b.later.map((task) => ({ kind: "task", task })), area);
-    // «+ Step in this project»: a row typed in place under the last one; a step made here starts
-    // with no date (⌘1 while typing makes it today's) — the page is where a project is planned
+    // a step made here starts with no date (⌘1 while typing makes it today's): the page is where a
+    // project is planned
     const target = { area: area.name, project: b.file.basename, projectFile: b.file, noDate: true };
+    const lastRow = () => [...box.querySelectorAll(":scope > ul.ft-list > li.ft-task, :scope > .ft-future-block ul.ft-list > li.ft-task")].pop();
+    // The block's own heading, so the steps stand apart from the note above: the project's row as
+    // it is in the list — 📁 name, the ⏳ that folds its pile (open here by default), the «+».
+    const head = box.createDiv({ cls: "ft-area-title ft-page-head" });
+    head.createSpan({ cls: "ft-project-icon", text: "📁" });
+    head.createSpan({ cls: "ft-page-name", text: b.file.basename });
+    const foldKey = "pagefold:" + path;
+    const pileShown = !p.isShown(foldKey, true);
+    if (b.later.length)
+      this.chip(head, "ft-later-chip", "clock", null, pileShown, foldKey, `${t(pileShown ? "hideUpcoming" : "showUpcoming")} · ${b.later.length}`, true);
+    this.plus(head, t("addStep"), async () => target, () => lastRow() || head);
+    if (b.tasks.length) await this.list(box, b.tasks.map((task) => ({ kind: "task", task })), { area, pile: "focus" });
+    if (b.later.length && pileShown) await this.ahead(box.createDiv({ cls: "ft-future-block" }), b.later.map((task) => ({ kind: "task", task })), area);
+    // «+ Step in this project»: a row typed in place under the last one
     const add = box.createDiv({ cls: "ft-empty ft-empty-add ft-page-add", text: "+ " + t("addStep"), attr: { "aria-label": t("addStep") } });
     add.onclick = () => {
-      const last = [...box.querySelectorAll(":scope > ul.ft-list > li.ft-task, :scope > .ft-future-block ul.ft-list > li.ft-task")].pop();
+      const last = lastRow();
       this.draft(last || add, target);
       if (!last) add.remove();
     };
@@ -3806,7 +3818,7 @@ module.exports = class FocusTasks extends Plugin {
       if (i >= 0) { list[i] = "p:" + path; touched = true; }
     }
     for (const map of [this.data.opened, this.data.folded]) {
-      for (const prefix of ["project:", "later:", "done:", "waiting:", "steps:", "fresh:"]) {
+      for (const prefix of ["project:", "later:", "done:", "waiting:", "pagefold:", "steps:", "fresh:"]) {
         if (map[prefix + old]) { map[prefix + path] = map[prefix + old]; delete map[prefix + old]; touched = true; }
       }
     }

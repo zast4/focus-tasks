@@ -1493,6 +1493,13 @@ step("a project's note is its page: the block at the bottom shows its steps, tak
     "today's step, and the undated one dimmed in the pile under it");
   if (await page.eval(`return __ft.all('li.ft-task', ${block}).some((e) => /Run 5k|Flat one|Call coach/.test(e.querySelector('.ft-text')?.textContent || ''))`))
     throw new Error("another project's rows are on the page");
+  // the block has a heading of its own — the project's row: 📁 name, and a ⏳ that folds its pile
+  const head = await page.eval(`const h = (${block}).querySelector('.ft-page-head'); return h && { name: h.querySelector('.ft-page-name')?.textContent, chip: !!h.querySelector('.ft-later-chip'), plus: !!h.querySelector('.ft-plus') };`);
+  if (!head || head.name !== "Page project" || !head.chip || !head.plus) throw new Error("no heading with the name, the ⏳ and the + over the steps: " + J(head));
+  await page.click(await page.eval(`return __ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`));
+  await until(() => page.eval(`return !(${row("Page later")}) && !!(${row("Page today")})`), "the ⏳ folded the pile, today's step stays");
+  await page.click(await page.eval(`return __ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`));
+  await until(() => page.eval(`return !!(${row("Page later")})?.closest('.ft-future-block')`), "and opened it again");
   // the closed steps fold under «Done · 1»
   await until(() => page.eval(`return (${block}).querySelector('.ft-page-done')?.textContent.includes('1')`), "«Done · 1» on the page");
   if (await page.eval(`return !!(${row("Page done")})`)) throw new Error("the closed step is shown before its block is opened");
