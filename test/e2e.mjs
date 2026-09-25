@@ -1087,6 +1087,30 @@ step("⌫ on a selection deletes the rows; Undo brings them back", async () => {
   await idle();
 });
 
+step("«In progress…» on a selection sends every selected row off with one moment", async () => {
+  for (const [name, uid] of [["Call the bank", "ft-run-a"], ["Call the school", "ft-run-b"]])
+    fs.writeFileSync(path.join(VAULT, taskPath(name)), `---\nuid: ${uid}\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  await toPane();
+  for (const name of ["Call the bank", "Call the school"]) await until(() => page.eval(`return !!__ft.task(${J(name)})`), `${name} on screen`);
+  await settle();
+  await click(`__ft.grip(__ft.task('Call the bank'))`);
+  await selectedAre(["Call the bank"]);
+  await click(`__ft.at(__ft.task('Call the school'))`, "the second row", CMD);
+  await selectedAre(["Call the bank", "Call the school"]);
+  await menuOn(`__ft.at(__ft.task('Call the bank'))`);
+  await menu("In progress…");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption') && /is-hh/.test(document.activeElement?.className || '')`), "the «look at it again» card, caret in the hour");
+  await page.type("18");
+  await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
+  await page.type("45");
+  await page.key("Tab");
+  for (const name of ["Call the bank", "Call the school"]) await taskIs(name, { status: "in-progress", scheduled: `${TODAY}T18:45` }, "both sent off with the one moment");
+  await idle();
+  await selectedAre([]);
+  for (const name of ["Call the bank", "Call the school"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
+  await settle();
+});
+
 step("ticking a box does not move the page under the reader", async () => {
   await toPane();
   await page.eval(`

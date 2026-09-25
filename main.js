@@ -1616,7 +1616,8 @@ class FocusRenderer extends MarkdownRenderChild {
       this.render();
     }, {
       title: t("returnWhen"), hint: t("returnHint"), tooEarly: t("returnTooSoon"), min, clear: false,
-      time: true, at: was ? one.at : null,
+      // the hour is the one running task's own; several rows start from a blank hour
+      time: true, at: one && one.status === STATUS_PROGRESS ? one.at : null,
     });
   }
 
