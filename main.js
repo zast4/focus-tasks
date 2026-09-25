@@ -2308,9 +2308,10 @@ class FocusRenderer extends MarkdownRenderChild {
       const body = li.nextElementSibling?.hasClass("ft-steps") ? li.nextElementSibling : null;
       return body?.querySelector(":scope > ul.ft-list > li:last-child") || li;
     };
-    // The row's own controls sit by the name, not by the date: «+N» (or «−» when the steps are
-    // open), the ⏳ of the project's pile, the «+» for a step. Nothing hangs off the date, so the
-    // date takes only the room it needs — and the controls do not move when the row opens.
+    // «+N» (or «−» when the steps are open) sits by the name: it is part of what the row says, and
+    // it does not move when the row opens. The quiet controls — the ⏳ of the project's pile and the
+    // «+» for a step, both under the pointer only — sit after the step, before the date, where their
+    // hidden width is whitespace anyway.
     if (steps.length > 1) {
       const hidden = steps.slice(1);
       const more = li.createSpan({ cls: "ft-steps-more", text: open ? "−" : `+${hidden.length}` });
@@ -2320,16 +2321,6 @@ class FocusRenderer extends MarkdownRenderChild {
       more.setAttr("aria-label", open ? t("hideSteps") : t("moreSteps", hidden.length));
       more.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, true); p.refresh(); };
     }
-    // What the project holds beside today's steps hangs off its own row, as off an area's header:
-    // the ⏳ opens its pile of what is not today, right under the row. Quiet — under the pointer,
-    // lit while open, the count in its tooltip. Not in the area's ⏳ pile, where the row is that pile.
-    const laterKey = "later:" + project.file.path;
-    const laterShown = !opts.all && opts.pile !== "ahead" && project.later.length > 0 && p.isShown(laterKey, true);
-    if (!opts.all && opts.pile !== "ahead" && project.later.length)
-      this.chip(li, "ft-later-chip", "clock", null, laterShown, laterKey,
-        `${t(laterShown ? "hideUpcoming" : "showUpcoming")} · ${project.later.length}`, true);
-    // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
-    this.plus(li, t("addStep"), async () => { if (steps.length > 1 && !open) await p.toggleShown(key, true); return target(); }, anchor);
     let text = null;
     if (step) {
       li.createSpan({ cls: "ft-sep", text: "›" });
@@ -2341,6 +2332,16 @@ class FocusRenderer extends MarkdownRenderChild {
       text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), target()); };
     }
     if (!text) li.createSpan({ cls: "ft-fill" });   // open: the name keeps its width, the room goes here
+    // What the project holds beside today's steps hangs off its own row, as off an area's header:
+    // the ⏳ opens its pile of what is not today, right under the row. Quiet — under the pointer,
+    // lit while open, the count in its tooltip. Not in the area's ⏳ pile, where the row is that pile.
+    const laterKey = "later:" + project.file.path;
+    const laterShown = !opts.all && opts.pile !== "ahead" && project.later.length > 0 && p.isShown(laterKey, true);
+    if (!opts.all && opts.pile !== "ahead" && project.later.length)
+      this.chip(li, "ft-later-chip", "clock", null, laterShown, laterKey,
+        `${t(laterShown ? "hideUpcoming" : "showUpcoming")} · ${project.later.length}`, true);
+    // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
+    this.plus(li, t("addStep"), async () => { if (steps.length > 1 && !open) await p.toggleShown(key, true); return target(); }, anchor);
     if (step) {
       const date = li.createSpan();
       this.dateLabel(date, step);
