@@ -1286,6 +1286,31 @@ step("a note that becomes a project after its block was drawn turns into the pro
   await settle();
 });
 
+step("⌘Enter opens the task as a note: from the editor (text saved), and from a selected row", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Open me")), `---\nuid: ft-om-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Open me')`), "Open me on screen");
+  await settle();
+  await click(`__ft.at(__ft.task('Open me').querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.caretToEnd()`);
+  await page.type(" now");
+  await page.key("Meta+Enter");
+  await until(async () => (await activePath()) === taskPath("Open me now"), "the note of the renamed task is open");
+  await page.eval(`app.workspace.activeLeaf.detach(); return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Open me now')`), "the row again");
+  await settle();
+  await click(`__ft.grip(__ft.task('Open me now'))`);
+  await selectedAre(["Open me now"]);
+  await page.key("Meta+Enter");
+  await until(async () => (await activePath()) === taskPath("Open me now"), "a selected row's ⌘Enter opens its note");
+  await page.eval(`app.workspace.activeLeaf.detach(); return true;`);
+  await toPane();
+  fs.unlinkSync(path.join(VAULT, taskPath("Open me now")));
+  await settle();
+});
+
 step("a plain click anywhere else drops the selection: a header's «+», another pane", async () => {
   await toPane();
   await settle();

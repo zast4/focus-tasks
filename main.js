@@ -23,7 +23,8 @@
  *    due below, folded; «Collapse all» / «Expand all» fold every area and project on screen.
  *
  * A click on a task's text edits it in place (Enter saves and opens the next row, Esc saves and
- * leaves the row selected; ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date, ⌘5 «Waiting…»; ⌘Z with nothing typed
+ * leaves the row selected; ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date, ⌘5 «Waiting…», ⌘Enter opens
+ * the task's note; ⌘Z with nothing typed
  * takes back the list's last change). The date on the right opens a date picker.
  * The checkbox completes a task (`status: done` + `completedDate`): the row leaves the list at once;
  * «✓ Done · N» at the bottom opens the day's closed work, by area, where a box brings a task back.
@@ -1147,6 +1148,15 @@ class FocusRenderer extends MarkdownRenderChild {
     else this.renameProject(row, x.area, x.project);
   }
 
+  // ⌘Enter: the note of the row under the cursor opens — a task's own, or the project's.
+  openSelected() {
+    const chosen = this.chosen();
+    const x = chosen.find((y) => this.cursor && keyOf(y) === keyOf(this.cursor)) || chosen[0];
+    if (!x) return;
+    this.clearSelection();
+    this.open(x.file, null, null, x.isProject ? x.file : null);
+  }
+
   // ⌫: the selected tasks go to the trash; the notice (or ⌘Z) puts them back. A project is not
   // deleted by a key: that is its menu's, with a warning.
   deleteSelected() {
@@ -1232,6 +1242,7 @@ class FocusRenderer extends MarkdownRenderChild {
     this.scope.register(["Shift"], "ArrowDown", own(() => this.walk(1, true)));
     this.scope.register(["Shift"], "ArrowUp", own(() => this.walk(-1, true)));
     this.scope.register([], "Enter", own(() => this.editSelected()));
+    this.scope.register(["Mod"], "Enter", own(() => this.openSelected()));
     for (const key of ["Backspace", "Delete"]) {
       this.scope.register([], key, own(() => this.deleteSelected()));
       this.scope.register(["Mod"], key, own(() => this.deleteSelected()));
@@ -1904,6 +1915,12 @@ class FocusRenderer extends MarkdownRenderChild {
         await close(true, false);
         if (label) this.editDate(task, label);
       },
+      // ⌘Enter: the text is saved and the task's note opens
+      Enter: async (close) => {
+        const saved = await close(true, false);
+        const now = this.plugin.tasks().find((x) => x.uid === task.uid) || saved || task;
+        this.open(now.file);
+      },
       // ⌘5: hand the task off — the card asks when to look at it again
       5: async (close) => {
         const label = el.closest("li")?.querySelector(".ft-date");
@@ -2111,6 +2128,8 @@ class FocusRenderer extends MarkdownRenderChild {
     this.plugin.app.keymap.pushScope(scope);
     this.endEdit = finish;
     el.onkeydown = (ev) => {
+      // ⌘Enter belongs to the scope (Obsidian binds it app-wide and answers first): not a plain Enter
+      if (ev.key === "Enter" && (ev.metaKey || ev.ctrlKey)) { ev.preventDefault(); return; }
       if (ev.key === "Enter" && !ev.isComposing && onEnter) {
         ev.preventDefault();
         finish(true, false).then((r) => (r ? onEnter(r) : this.render()));
