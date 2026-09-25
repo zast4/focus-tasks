@@ -88,7 +88,6 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link { min-width: 0; overflow-wrap: anywhere; }
 .focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link:hover { color: var(--text-accent); }
 .focus-tasks-view li.ft-project-row.is-open > .ft-project-name { max-width: none; color: var(--text-normal); }
-.focus-tasks-view li.ft-project-row > .ft-fill { flex: 1 1 auto; }
 /* Open, the row is a heading over its steps: a chevron in the box column folds them, the name stays
    put. Empty, the row stays in line with the task rows around it, the column kept. */
 .focus-tasks-view li.ft-project-row > .ft-fold { cursor: pointer; color: var(--text-faint); }
@@ -466,3 +465,24 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
 
 /* «Focus» sits at the top of the list: no air above it, as «Other areas» has between the two. */
 .focus-tasks-view .ft-focus-title { margin-top: 0.2em; }
+
+/* A project's row reads as one line of text: 📁 name +N › step, wrapping as prose does — back to the
+   name's column, three lines at most (the editor shows it all). */
+.focus-tasks-view li.ft-project-row > .ft-line { flex: 1 1 auto; min-width: 0; margin-left: 0.2rem; line-height: var(--ft-line);
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.focus-tasks-view li.ft-project-row > .ft-line:has(.is-editing) { display: block; -webkit-line-clamp: none; overflow: visible; }
+.focus-tasks-view .ft-line > .ft-project-name { display: inline; color: var(--text-muted); font-weight: 500; }
+.focus-tasks-view .ft-line > .ft-project-name > .ft-project-icon { margin-right: 0.25em; }
+.focus-tasks-view .ft-line > .ft-project-name > .ft-link:hover { color: var(--text-accent); }
+.focus-tasks-view li.ft-project-row.is-open > .ft-line > .ft-project-name { color: var(--text-normal); }
+.focus-tasks-view .ft-line > .ft-steps-more { display: inline-block; margin-left: 0.4em; padding: 0 0.35em; min-width: 2.2em; text-align: center;
+  font-size: 0.8em; border-radius: 4px; color: var(--text-muted); cursor: pointer; font-variant-numeric: tabular-nums; }
+.focus-tasks-view .ft-line > .ft-steps-more:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.focus-tasks-view .ft-line > .ft-steps-more.is-late { color: var(--text-error); }
+.focus-tasks-view .ft-line > .ft-steps-more.is-open { color: var(--interactive-accent); }
+.focus-tasks-view .ft-line > .ft-sep { margin: 0 0.35em; color: var(--text-faint); }
+.focus-tasks-view .ft-line > .ft-text { display: inline; }
+.focus-tasks-view .ft-line > .ft-text > p { display: inline; margin: 0; }
+.focus-tasks-view .ft-line > .ft-no-step { color: var(--text-faint); font-style: italic; }
+.focus-tasks-view .ft-line > .ft-text > .ft-text-link { color: var(--link-color); cursor: pointer; }
+.focus-tasks-view .ft-line > .ft-text > .ft-text-link:hover { color: var(--link-color-hover); }

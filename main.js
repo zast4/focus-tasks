@@ -1144,7 +1144,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const x = chosen.find((y) => this.cursor && keyOf(y) === keyOf(this.cursor)) || chosen[0];
     const row = x && this.rows().find(([, y]) => y === x)?.[0];
     if (!row) return;
-    const text = row.querySelector(":scope > .ft-text");
+    const text = row.querySelector(":scope > .ft-text, :scope > .ft-line > .ft-text");
     if (!x.isProject) { if (text) this.editInline(x, text, null); return; }
     const item = this.items.get(row);
     if (item?.task && text) this.editInline(item.task, text, null);
@@ -1904,7 +1904,7 @@ class FocusRenderer extends MarkdownRenderChild {
       // the task's own row, or the project's row that shows it as its step — fresh from the render
       const row = next && this.rows().find(([el, x]) => x.uid === next.uid || this.items.get(el)?.task?.uid === next.uid);
       const task2 = row && (row[1].isProject ? this.items.get(row[0])?.task : row[1]);
-      const text2 = row?.[0].querySelector(":scope > .ft-text");
+      const text2 = row?.[0].querySelector(":scope > .ft-text, :scope > .ft-line > .ft-text");
       if (task2 && text2) this.editInline(task2, text2, null);
     };
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
@@ -1929,7 +1929,7 @@ class FocusRenderer extends MarkdownRenderChild {
         await this.rerendered();
         const row = prev && this.rows().find(([e, x]) => x.uid === prev.uid || this.items.get(e)?.task?.uid === prev.uid);
         const t2 = row && (row[1].isProject ? this.items.get(row[0])?.task : row[1]);
-        const text2 = row?.[0].querySelector(":scope > .ft-text");
+        const text2 = row?.[0].querySelector(":scope > .ft-text, :scope > .ft-line > .ft-text");
         if (t2 && text2) this.editInline(t2, text2, null);
       },
       // ⌘Enter: the text is saved and the task's note opens
@@ -2007,7 +2007,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const mine = rows[i][1].uid;
     for (const [el, x] of rows.slice(0, i).reverse()) {
       const task = x.isProject ? this.items?.get(el)?.task : x;
-      if (task && x.uid !== mine && el.querySelector(":scope > .ft-text")) return task;
+      if (task && x.uid !== mine && el.querySelector(":scope > .ft-text, :scope > .ft-line > .ft-text")) return task;
     }
     return null;
   }
@@ -2439,7 +2439,10 @@ class FocusRenderer extends MarkdownRenderChild {
       box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       this.check(li, box, step);
     }
-    const name = li.createSpan({ cls: "ft-project-name" });
+    // Name, «+N», «›» and the step are one line of text: a long one wraps back to the name's column,
+    // not into a hanging column under the step (which read as a big indent inside the task).
+    const line = li.createSpan({ cls: "ft-line" });
+    const name = line.createSpan({ cls: "ft-project-name" });
     name.createSpan({ cls: "ft-project-icon", text: "📁" });
     this.link(name.createSpan({ cls: "ft-link", text: project.file.basename }), project.file);
     const projectMenu = (e) => {
@@ -2462,7 +2465,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // hidden width is whitespace anyway.
     if (steps.length > 1) {
       const hidden = steps.slice(1);
-      const more = li.createSpan({ cls: "ft-steps-more", text: open ? `−${hidden.length}` : `+${hidden.length}` });
+      const more = line.createSpan({ cls: "ft-steps-more", text: open ? `−${hidden.length}` : `+${hidden.length}` });
       more.toggleClass("is-open", open);
       // late steps behind the row must not hide behind it: the number turns red
       if (!open && hidden.some((x) => x.date && x.date < today() && !waitingBack(x))) more.addClass("is-late");
@@ -2471,15 +2474,14 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     let text = null;
     if (step) {
-      li.createSpan({ cls: "ft-sep", text: "›" });
-      text = await this.text(li, step);
+      line.createSpan({ cls: "ft-sep", text: "›" });
+      text = await this.text(line, step);
       this.marks(li, step);
     } else if (!open) {
-      li.createSpan({ cls: "ft-sep", text: "›" });
-      text = li.createSpan({ cls: "ft-text ft-no-step", text: t("noStep") });
+      line.createSpan({ cls: "ft-sep", text: "›" });
+      text = line.createSpan({ cls: "ft-text ft-no-step", text: t("noStep") });
       text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), target()); };
     }
-    if (!text) li.createSpan({ cls: "ft-fill" });   // open: the name keeps its width, the room goes here
     // A project with a day of its own shows that day, not its step's: it is what keeps the project
     // in the focus or out of it. A click asks for another; the steps keep their days.
     const own = () => {
