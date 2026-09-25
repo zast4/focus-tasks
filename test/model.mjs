@@ -1819,6 +1819,19 @@ test("a drop into the pile takes today's day off; a drop among today's rows give
   eq(t("Mate").date, TODAY, "within today's list nothing changes");
 });
 
+test("an empty project sinks to the bottom of its list; the hand-set order holds above it", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Aaa empty");
+    projectNote(a, "Work", "Zzz busy");
+    taskNote(a, "Loose", { area: "Work" });
+    taskNote(a, "Step", { area: "Work", project: "Zzz busy" });
+  });
+  const area = areaOf(await plugin.collect(true), "Work");
+  const order = area.rows.map((r) => (r.kind === "task" ? r.task.text : r.project.file.basename));
+  eq(order, ["Loose", "Zzz busy", "Aaa empty"], "the empty project is last, though it sorts first by name");
+});
+
 test("the history does not grow without end", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");

@@ -2984,8 +2984,11 @@ module.exports = class FocusTasks extends Plugin {
       const byArea = (x, y) => seat(x) - seat(y) || tie(x, y);
       const stepOf = (row) => (row.kind === "task" ? row.task : row.steps[0]);
       const running = (row) => (stepOf(row) && stepOf(row).status === STATUS_WAITING ? 1 : 0);
-      area.rows.sort(byArea).sort((x, y) => running(x) - running(y));
-      area.ahead.sort(byArea).sort((x, y) => running(y) - running(x));
+      // a project with no step to show sinks below everything else in its list: it asks nothing of
+      // today but its next step. The hand-set order holds within each group.
+      const empty = (row) => (row.kind === "project" && !row.steps.length ? 1 : 0);
+      area.rows.sort(byArea).sort((x, y) => running(x) - running(y)).sort((x, y) => empty(x) - empty(y));
+      area.ahead.sort(byArea).sort((x, y) => running(y) - running(x)).sort((x, y) => empty(x) - empty(y));
       area.done.sort((x, y) => cmp(x.project || "", y.project || "") || cmp(x.text, y.text));
     }
     let areas = [...byArea.values()];
