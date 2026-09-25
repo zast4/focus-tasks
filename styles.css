@@ -51,6 +51,19 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-task { cursor: default; list-style: none; display: flex; align-items: flex-start;
   padding: 0.25em var(--ft-pad); text-indent: 0;
   margin: 0 var(--ft-pad) 3px calc(var(--ft-col) * (2 + var(--ft-level, 0)) - var(--ft-pad)) !important; }
+/* A hairline between rows, in the 3px gap: from the text's column to the row's right edge, so the
+   boxes and grips keep a clean column (as in Things). Faint — it separates, it does not box. It
+   goes out next to a hovered or selected row: the band says it already. */
+.focus-tasks-view li.ft-task + li.ft-task::before,
+.focus-tasks-view li.ft-steps + li.ft-task::before,
+.focus-tasks-view li.ft-later-steps + li.ft-task::before {
+  content: ""; position: absolute; top: -2px; height: 1px; pointer-events: none;
+  left: calc(var(--ft-pad) + var(--ft-col)); right: var(--ft-pad);
+  background: var(--background-modifier-border); opacity: 0.55; transition: opacity 0.08s; }
+.focus-tasks-view li.ft-task:hover::before, .focus-tasks-view li.ft-task.is-selected::before,
+.focus-tasks-view li.ft-task:hover + li.ft-task::before, .focus-tasks-view li.ft-task.is-selected + li.ft-task::before,
+.focus-tasks-view li.ft-dragging::before, .focus-tasks-view li.ft-dragging + li.ft-task::before { opacity: 0; }
+
 /* The box sits in a cell one line tall and is centred in it: themes size checkboxes in their own
    em (a checkbox has its own font), so any margin computed here would miss by a few pixels. */
 .focus-tasks-view li.ft-task > .ft-box { flex: none; display: flex; align-items: center; justify-content: center;
