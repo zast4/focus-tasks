@@ -670,8 +670,15 @@ class FocusRenderer extends MarkdownRenderChild {
     this.registerEvent(this.plugin.app.metadataCache.on("changed", later));
     this.registerEvent(this.plugin.app.vault.on("delete", later));
     this.registerEvent(this.plugin.app.vault.on("rename", later));
-    // a plain click anywhere else drops the selection; its hotkeys work only while this tab is active
-    this.registerDomEvent(this.containerEl, "click", (e) => { if (!picking(e)) this.clearSelection(); });
+    // A plain click anywhere else drops the selection, as it does a selected block in Notion — in
+    // another pane too, and on the parts of a row that keep their clicks to themselves (a chip, a
+    // «+»). Not a click that works on the selection: its grip (a drag, a pick), a selected row's
+    // date or box, a menu, a card, a notice with «Undo».
+    this.registerDomEvent(document, "mousedown", (e) => {
+      if (!this.selected.size || picking(e) || e.button !== 0) return;
+      if (e.target.closest(".menu, .modal, .prompt, .ft-picker, .notice, .suggestion-container, .ft-grip, li.ft-task.is-selected")) return;
+      this.clearSelection();
+    }, true);
     // Esc must drop a selection wherever the keyboard happens to be — a note's editor would swallow
     // the key otherwise, and the marked rows could not be unmarked at all.
     this.registerDomEvent(document, "keydown", (e) => {
@@ -1601,9 +1608,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const one = list.length === 1 ? list[0] : null;
     const was = one && one.status === STATUS_PROGRESS && one.date >= min ? one.date : today();
     this.anchor = list[0];
-    this.editing = true;
-    anchor.addClass("is-active");
-    this.picker = new DatePicker(anchor, was, async (chosen, at) => {
+    this.card(anchor, () => new DatePicker(anchor, was, async (chosen, at) => {
       this.editing = false;
       this.picker = null;
       this.clearSelection();
@@ -1618,7 +1623,7 @@ class FocusRenderer extends MarkdownRenderChild {
       title: t("returnWhen"), hint: t("returnHint"), tooEarly: t("returnTooSoon"), min, clear: false,
       // the hour is the one running task's own; several rows start from a blank hour
       time: true, at: one && one.status === STATUS_PROGRESS ? one.at : null,
-    });
+    }));
   }
 
   // The picker for the date of the row, or of every selected row when this is one of them.
@@ -1631,9 +1636,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (tasks.every((x) => x.status === STATUS_PROGRESS)) return this.askReturn(tasks, el);
     const days = [...new Set(tasks.map((x) => x.date || null))];
     this.anchor = task;
-    this.editing = true;
-    el.addClass("is-active");
-    this.picker = new DatePicker(el, days.length === 1 ? days[0] : null, async (day) => {
+    this.card(el, () => new DatePicker(el, days.length === 1 ? days[0] : null, async (day) => {
       this.editing = false;
       this.picker = null;
       this.clearSelection();
@@ -1645,7 +1648,18 @@ class FocusRenderer extends MarkdownRenderChild {
       this.picker = null;
       el.removeClass("is-active");
       this.render();
-    });
+    }));
+  }
+
+  // A card opens over the row: while it is up the list is «editing» (no re-render, no other keys).
+  // The flags are set only once the card is there — a card that failed to open left the list frozen
+  // for good, every click deaf, the selection stuck.
+  card(el, make) {
+    let picker;
+    try { picker = make(); } catch (e) { console.error("Focus Tasks: the card did not open", e); return; }
+    this.picker = picker;
+    this.editing = true;
+    el.addClass("is-active");
   }
 
   // Turns the text of a row into an editor: the raw markdown of the task, caret at the clicked

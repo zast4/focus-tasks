@@ -1111,6 +1111,29 @@ step("«In progress…» on a selection sends every selected row off with one mo
   await settle();
 });
 
+step("a plain click anywhere else drops the selection: a header's «+», another pane", async () => {
+  await toPane();
+  await settle();
+  const names = await page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.view()).slice(0, 2).map((e) => e.querySelector('.ft-text').textContent.trim())`);
+  if (names.length < 2) throw new Error("need two plain rows: " + J(names));
+  const two = async () => {
+    await click(`__ft.grip(__ft.task(${J(names[0])}))`);
+    await click(`__ft.at(__ft.task(${J(names[1])}))`, "the second row", CMD);
+    await selectedAre(names);
+  };
+  // the «+» of an area keeps its click to itself (it opens a row to type in) — the selection goes all the same
+  await two();
+  await click(`__ft.at(__ft.area('Sport').querySelector('.ft-plus'))`, "the area's +");
+  await selectedAre([]);
+  await page.key("Escape");
+  await idle();
+  // another pane: the file explorer on the left
+  await two();
+  await click(`__ft.at(document.querySelector('.nav-files-container'), 0.9)`, "the file explorer");
+  await selectedAre([]);
+  await toPane();
+});
+
 step("ticking a box does not move the page under the reader", async () => {
   await toPane();
   await page.eval(`
