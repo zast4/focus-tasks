@@ -1038,7 +1038,8 @@ class FocusRenderer extends MarkdownRenderChild {
       if (!(Platform.isMacOS ? e.metaKey : e.ctrlKey)) this.selected.clear();
       for (const x of tasks.slice(Math.min(from, to), Math.max(from, to) + 1)) this.selected.add(x);
     } else {
-      if (this.selected.has(task)) this.selected.delete(task);
+      const was = this.selectedOf(task);
+      if (was) this.selected.delete(was);
       else this.selected.add(task);
       this.anchor = task;
     }
@@ -1077,8 +1078,15 @@ class FocusRenderer extends MarkdownRenderChild {
   // with Shift or ⌘ it is a click on the row.
   pick(task, e) {
     if (picking(e)) return this.select(task, e);
-    if (this.selected.size === 1 && this.selected.has(task)) return this.clearSelection();
+    if (this.selected.size === 1 && this.selectedOf(task)) return this.clearSelection();
     this.mark(task);
+  }
+
+  // The selected object for this task, whatever render it came from: a row rebuilt between two
+  // clicks carries a new object for the same note, and the selection is about the note.
+  selectedOf(task) {
+    for (const x of this.selected) if (keyOf(x) === keyOf(task)) return x;
+    return null;
   }
 
   // ↑/↓ take the selection to the row above or below the cursor; with Shift, every row from the
@@ -2300,16 +2308,9 @@ class FocusRenderer extends MarkdownRenderChild {
       const body = li.nextElementSibling?.hasClass("ft-steps") ? li.nextElementSibling : null;
       return body?.querySelector(":scope > ul.ft-list > li:last-child") || li;
     };
-    let text = null;
-    if (step) {
-      li.createSpan({ cls: "ft-sep", text: "›" });
-      text = await this.text(li, step);
-      this.marks(li, step);
-    } else if (!open) {
-      li.createSpan({ cls: "ft-sep", text: "›" });
-      text = li.createSpan({ cls: "ft-text ft-no-step", text: t("noStep") });
-      text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), target()); };
-    }
+    // The row's own controls sit by the name, not by the date: «+N» (or «−» when the steps are
+    // open), the ⏳ of the project's pile, the «+» for a step. Nothing hangs off the date, so the
+    // date takes only the room it needs — and the controls do not move when the row opens.
     if (steps.length > 1) {
       const hidden = steps.slice(1);
       const more = li.createSpan({ cls: "ft-steps-more", text: open ? "−" : `+${hidden.length}` });
@@ -2329,9 +2330,17 @@ class FocusRenderer extends MarkdownRenderChild {
         `${t(laterShown ? "hideUpcoming" : "showUpcoming")} · ${project.later.length}`, true);
     // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
     this.plus(li, t("addStep"), async () => { if (steps.length > 1 && !open) await p.toggleShown(key, true); return target(); }, anchor);
-    // open, the row has no step and no date — but it keeps the date's column, blank, so the «−»
-    // stays exactly where the «+N» was and a second click folds the steps without a hunt
-    if (!step) li.createSpan({ cls: "ft-date is-blank" });
+    let text = null;
+    if (step) {
+      li.createSpan({ cls: "ft-sep", text: "›" });
+      text = await this.text(li, step);
+      this.marks(li, step);
+    } else if (!open) {
+      li.createSpan({ cls: "ft-sep", text: "›" });
+      text = li.createSpan({ cls: "ft-text ft-no-step", text: t("noStep") });
+      text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), target()); };
+    }
+    if (!text) li.createSpan({ cls: "ft-fill" });   // open: the name keeps its width, the room goes here
     if (step) {
       const date = li.createSpan();
       this.dateLabel(date, step);
