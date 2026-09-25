@@ -407,8 +407,6 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 .focus-tasks-view li.ft-done.ft-project-row > .ft-project-name { text-decoration: line-through; color: var(--text-faint); }
 .focus-tasks-view .ft-done-toggle.is-on { color: var(--text-normal); background: var(--background-modifier-hover); }
 
-/* The date column has room for «25.09.26 20:00» without pushing the text around. */
-
 /* A task with a description reads as a link, in Obsidian's own link colours: there is a note to open.
    The link is the words only; the rest of the cell is still the place to click for the editor. */
 .focus-tasks-view li.ft-task > .ft-text > .ft-text-link { color: var(--link-color); cursor: pointer; }
