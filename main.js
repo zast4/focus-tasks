@@ -1026,6 +1026,7 @@ class FocusRenderer extends MarkdownRenderChild {
   async area(el, area, all = false, wide = false) {
     const p = this.plugin;
     const box = el.createDiv({ cls: "ft-area" });
+    if (all) box.addClass("is-rest");   // one list, nothing leaves it
     const title = box.createDiv({ cls: "ft-area-title" });
     this.track(box, { type: "area", area });
     this.track(title, { type: "area-title", area });
@@ -1558,17 +1559,31 @@ class FocusRenderer extends MarkdownRenderChild {
       if (value !== task.text) await this.plugin.rename(task, value);
       return task;
     };
-    // The date changes at once and the label on the right follows; the text stays in edit.
-    const redate = async (day) => {
+    // The date changes at once and the label on the right follows; the text stays in edit. Unless
+    // the new day takes the row out of this list (tomorrow from the focus, today from the pile):
+    // then the text is saved, the row goes at once, and the editor moves on to the row that came
+    // next — leaving the editor by hand just to see the row go was one step too many.
+    const redate = async (day, close) => {
+      const li = el.closest("li");
+      const pile = this.pileOf(li);
       await this.plugin.setDate(task, day);
-      const label = el.closest("li")?.querySelector(".ft-date");
+      const label = li?.querySelector(".ft-date");
       if (label) this.dateLabel(label, task);
+      if (pile === "all" || this.inToday(task) === (pile === "focus")) return;
+      const next = this.neighbour(li);
+      await close(true, false);
+      // the note is written, the cache is a beat behind: a render now would draw the old day (or,
+      // mid-parse, no task at all) and the editor that opens next would hold that screen in place
+      await this.cached(task, (x) => x.date === (day || null));
+      await this.rerendered();
+      const row = next && this.rows().find(([, x]) => x.uid === next.uid);
+      if (row) this.editInline(row[1], row[0].querySelector(".ft-text"), null);
     };
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     this.editor(el, Math.min(offset ?? task.text.length, task.text.length), saveText, {
-      1: () => redate(day(0)),
-      2: () => redate(day(1)),
-      4: () => redate(null),
+      1: (close) => redate(day(0), close),
+      2: (close) => redate(day(1), close),
+      4: (close) => redate(null, close),
       // the picker takes the focus, so the text is saved first and the editor closes
       3: async (close) => {
         const label = el.closest("li")?.querySelector(".ft-date");
@@ -1576,6 +1591,47 @@ class FocusRenderer extends MarkdownRenderChild {
         if (label) this.editDate(task, label);
       },
     }, (anchor) => this.rowAfter(el.closest("li"), anchor, inFocus(task) ? today() : null));
+  }
+
+  // Which list a row is in: today's focus, the area's pile of what is not today, or an area of
+  // «Other areas», where everything is one list and nothing leaves it.
+  pileOf(li) {
+    if (!li || li.closest(".ft-area.is-rest")) return "all";
+    return li.closest(".ft-future-block") ? "ahead" : "focus";
+  }
+
+  // Is the task today's work — the same answer collect() gives when it fills the focus.
+  inToday(task) { return !waitingBack(task) && (inFocus(task) || task.status === STATUS_PROGRESS); }
+
+  // The task of the row after this one (a project's row counts by the step it shows), or before it
+  // when this is the last: where the editor goes when the row it was in leaves.
+  neighbour(li) {
+    const rows = this.rows();
+    const i = rows.findIndex(([el]) => el === li);
+    if (i < 0) return null;
+    const mine = rows[i][1].uid;
+    const after = rows.slice(i + 1).find(([, x]) => x.uid !== mine);
+    if (after) return after[1];
+    const before = rows.slice(0, i).reverse().find(([, x]) => x.uid !== mine);
+    return before ? before[1] : null;
+  }
+
+  // Waits (a moment, not forever) until the metadata cache shows the task the way it was just
+  // written: `ok(fresh)` on the re-read task.
+  async cached(task, ok, ms = 1500) {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      this.plugin.forgetScan();
+      const fresh = this.plugin.tasks().find((x) => x.uid === task.uid);
+      if (fresh && ok(fresh)) return;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+  }
+
+  // Renders and waits for the screen to be current, however many renders were queued behind it.
+  async rerendered() {
+    await this.render();
+    while (this.busy || this.again) await new Promise((r) => setTimeout(r, 30));
   }
 
   // An empty task row right under `prev`, written after `anchor`'s line (same indent) on Enter; then

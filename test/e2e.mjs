@@ -252,15 +252,37 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
   await until(() => page.eval(`return __ft.task('Lace them')?.querySelector('.ft-date.is-today.is-bare')?.textContent === ''`), "today says nothing on the right");
 });
 
-step("⌘2 tomorrow, ⌘4 no date", async () => {
+step("⌘2 tomorrow: the row leaves the focus at once and the editor moves on; ⌘4 no date", async () => {
   await openSteps("Marathon");
   await until(() => page.eval(`return !!__ft.task('Plan route')`), "Plan route on screen");
+  const movedOn = () => until(() => page.eval(`const e = document.querySelector('.focus-tasks-view .is-editing'); return !!e && e.textContent.trim() !== 'Plan route'`),
+    "the editor moved on to the row that came next");
+  // Plan route waits in the pile: ⌘1 brings it into today's list — the row goes there at once, and
+  // the editor is on the row that came next in the pile
+  await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-text'))`);
+  await editing();
+  await page.key("Meta+1");
+  await taskIs("Plan route", { scheduled: TODAY });
+  await until(() => page.eval(`const r = __ft.task('Plan route'); return !!r && !r.closest('.ft-future-block')`), "Plan route among today's rows");
+  await movedOn();
+  await page.key("Escape");
+  await idle();
+  // …and ⌘2 takes it back out of today's list the same way
   await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-text'))`);
   await editing();
   await page.key("Meta+2");
   await taskIs("Plan route", { scheduled: TOMORROW });
+  await until(() => page.eval(`return !!__ft.task('Plan route')?.closest('.ft-future-block')`), "Plan route among what is not today");
+  await movedOn();
+  await page.key("Escape");
+  await idle();
+  // no date keeps it in the pile: the editor stays where it is
+  await click(`__ft.at(__ft.task('Plan route').querySelector('.ft-text'))`);
+  await editing();
   await page.key("Meta+4");
   await taskIs("Plan route", { scheduled: null });
+  if (await page.eval(`return document.querySelector('.focus-tasks-view .is-editing')?.textContent.trim() !== 'Plan route'`))
+    throw new Error("the editor left a row that did not leave its list");
   await page.key("Escape");
   await idle();
 });
