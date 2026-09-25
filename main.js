@@ -23,7 +23,8 @@
  *    due below, folded; «Collapse all» / «Expand all» fold every area and project on screen.
  *
  * A click on a task's text edits it in place (Enter saves and opens the next row, Esc saves and
- * leaves the row selected; ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date, ⌘5 «Waiting…», ⌘Enter opens
+ * leaves the row selected; ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date, ⌘5 «Waiting…», ⌘⌫ deletes
+ * the task and moves up a row, ⌘Enter opens
  * the task's note; ⌘Z with nothing typed
  * takes back the list's last change). The date on the right opens a date picker.
  * The checkbox completes a task (`status: done` + `completedDate`): the row leaves the list at once;
@@ -1911,6 +1912,20 @@ class FocusRenderer extends MarkdownRenderChild {
         await close(true, false);
         if (label) this.editDate(task, label);
       },
+      // ⌘⌫: the whole task goes (to the trash, with «Undo»), not just its text; the editor moves up
+      // to the row before it — the one after when this was the first
+      Backspace: async (close) => {
+        const li = el.closest("li");
+        const prev = this.previous(li) || this.neighbour(li);
+        await close(false, false);
+        await this.plugin.remove(task);
+        await this.cachedGone(task.uid);
+        await this.rerendered();
+        const row = prev && this.rows().find(([e, x]) => x.uid === prev.uid || this.items.get(e)?.task?.uid === prev.uid);
+        const t2 = row && (row[1].isProject ? this.items.get(row[0])?.task : row[1]);
+        const text2 = row?.[0].querySelector(":scope > .ft-text");
+        if (t2 && text2) this.editInline(t2, text2, null);
+      },
       // ⌘Enter: the text is saved and the task's note opens
       Enter: async (close) => {
         const saved = await close(true, false);
@@ -1966,6 +1981,29 @@ class FocusRenderer extends MarkdownRenderChild {
       if (fresh && ok(fresh)) return;
       await new Promise((r) => setTimeout(r, 40));
     }
+  }
+
+  // Until the task is gone from what the list reads (a deleted note), or the time is up.
+  async cachedGone(uid, ms = 1500) {
+    const deadline = Date.now() + ms;
+    while (Date.now() < deadline) {
+      this.plugin.forgetScan();
+      if (!this.plugin.tasks().some((x) => x.uid === uid)) return;
+      await new Promise((r) => setTimeout(r, 40));
+    }
+  }
+
+  // The task whose text the row before `li` edits (a project's row counts by its step), or null.
+  previous(li) {
+    const rows = this.rows();
+    const i = rows.findIndex(([el]) => el === li);
+    if (i <= 0) return null;
+    const mine = rows[i][1].uid;
+    for (const [el, x] of rows.slice(0, i).reverse()) {
+      const task = x.isProject ? this.items?.get(el)?.task : x;
+      if (task && x.uid !== mine && el.querySelector(":scope > .ft-text")) return task;
+    }
+    return null;
   }
 
   // The same for several notes at once: until every one of them is read back, or the time is up.

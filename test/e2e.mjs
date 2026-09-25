@@ -1326,6 +1326,25 @@ step("a note that becomes a project after its block was drawn turns into the pro
   await settle();
 });
 
+step("⌘⌫ in the editor deletes the whole task and moves the editor to the row above", async () => {
+  for (const [n, u] of [["Above me", "ft-bk-1"], ["Delete me", "ft-bk-2"]])
+    fs.writeFileSync(path.join(VAULT, taskPath(n)), `---\nuid: ${u}\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  await toPane();
+  await plugin(`const l = 'area:💪Sport'; const k = p.data.order.tasks[l] || []; p.data.order.tasks[l] = ['ft-bk-1', 'ft-bk-2', ...k.filter((x) => !['ft-bk-1', 'ft-bk-2'].includes(x))]; await p.saveAll(); p.refresh(); return true;`);
+  await until(() => page.eval(`const a = __ft.task('Above me'), b = __ft.task('Delete me'); return !!a && !!b && a.compareDocumentPosition(b) & 4`), "Above me, then Delete me");
+  await settle();
+  await click(`__ft.at(__ft.task('Delete me').querySelector('.ft-text'))`);
+  await editing();
+  await page.key("Meta+Backspace");
+  await noTask("Delete me");
+  await until(() => page.eval(`return document.querySelector('.focus-tasks-view .is-editing')?.textContent === 'Above me'`), "the editor is on the row above");
+  await page.key("Escape");
+  await idle();
+  await page.key("Escape");
+  fs.unlinkSync(path.join(VAULT, taskPath("Above me")));
+  await settle();
+});
+
 step("⌘Enter opens the task as a note: from the editor (text saved), and from a selected row", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Open me")), `---\nuid: ft-om-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
   await toPane();
