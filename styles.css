@@ -372,10 +372,10 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
 /* The date column has room for «25.09.26 20:00» without pushing the text around. */
 .focus-tasks-view li.ft-task > .ft-date { min-width: 5.2em; }
 
-/* A task with a description reads as a link, in Obsidian's own link colours: there is a note to open. */
-.focus-tasks-view li.ft-task > .ft-text.ft-text-note { color: var(--link-color); cursor: pointer; }
-.focus-tasks-view li.ft-task > .ft-text.ft-text-note:hover { color: var(--link-color-hover); text-decoration: var(--link-decoration-hover, underline); }
-.focus-tasks-view li.ft-task > .ft-text.ft-text-note.is-editing { color: inherit; cursor: text; text-decoration: none; }
+/* A task with a description reads as a link, in Obsidian's own link colours: there is a note to open.
+   The link is the words only; the rest of the cell is still the place to click for the editor. */
+.focus-tasks-view li.ft-task > .ft-text > .ft-text-link { color: var(--link-color); cursor: pointer; }
+.focus-tasks-view li.ft-task > .ft-text > .ft-text-link:hover { color: var(--link-color-hover); text-decoration: var(--link-decoration-hover, underline); }
 
 /* The list can hold the keyboard (so Esc and ⌘1–4 reach it) without drawing a box around itself. */
 .focus-tasks-view:focus { outline: none; }

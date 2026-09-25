@@ -660,7 +660,15 @@ step("«Make it a project»: the task becomes a project and stays in the focus a
   if (!(await page.eval(`return __ft.task('Plan the season').querySelector('.ft-text').hasClass('ft-text-note')`)))
     throw new Error("a task with a description is not drawn as a link");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-described')`)) throw new Error("the description icon is still drawn");
-  await click(`__ft.at(__ft.task('Plan the season').querySelector('.ft-text'))`);
+  // a click beside the words, in the empty stretch of the cell, is a click to edit — not to open
+  await click(`(() => { const t = __ft.task('Plan the season').querySelector('.ft-text'); const w = t.querySelector('.ft-text-link').getBoundingClientRect(), c = t.getBoundingClientRect();
+    return { x: Math.min(w.right + 60, c.right - 4), y: w.top + w.height / 2 }; })()`, "beside the words");
+  await editing();
+  if (await page.eval(`return document.querySelector('.focus-tasks-view .is-editing')?.textContent !== 'Plan the season'`)) throw new Error("the click beside the words did not open the editor on this task");
+  await page.key("Escape");
+  await idle();
+  // the words themselves open the note
+  await click(`__ft.at(__ft.task('Plan the season').querySelector('.ft-text-link'))`);
   await until(async () => (await activePath()) === taskPath("Plan the season"), "the task's note open");
   await toPane();
   await click(`__ft.grip(__ft.task('Plan the season'))`);

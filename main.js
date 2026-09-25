@@ -1160,7 +1160,10 @@ class FocusRenderer extends MarkdownRenderChild {
   textClick(task, text, e) {
     if (e.target.closest("a") || picking(e)) return;
     e.stopPropagation();
-    if (task.described) this.open(task.file, e);
+    // Only the words themselves are the link. The cell runs to the right edge of the row, and a
+    // click in that empty stretch is a click to edit — the caret lands at the end, Enter opens the
+    // next row.
+    if (task.described && e.target.closest(".ft-text-link")) this.open(task.file, e);
     else this.editInline(task, text, e);
   }
 
@@ -1169,11 +1172,17 @@ class FocusRenderer extends MarkdownRenderChild {
     const text = li.createSpan({ cls: "ft-text" });
     if (task.text.length > 120) text.setAttr("aria-label", task.text);  // the row clamps long names
     // A task with a description reads as a link, the way any note does in Obsidian: a click on the
-    // text opens it. The text is still edited in place — from the row beside it, or the menu.
+    // words opens it. The text is still edited in place — a click beside the words, or the menu.
     if (task.described) text.addClass("ft-text-note");
     await MarkdownRenderer.render(this.plugin.app, task.text, text, task.file.path, this.inner);
     const para = text.querySelector("p");
     if (para) para.replaceWith(...para.childNodes);
+    // the link is the words, not the cell: the rendered text is wrapped so a click can tell them apart
+    if (task.described) {
+      const link = createSpan({ cls: "ft-text-link" });
+      link.append(...text.childNodes);
+      text.append(link);
+    }
     const box = li.querySelector("input.task-list-item-checkbox");
     if (box) {  // the checkbox is named by the text next to it, so a screen reader reads the task
       const id = "ft-" + Math.random().toString(36).slice(2, 9);
