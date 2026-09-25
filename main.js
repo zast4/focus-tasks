@@ -2421,10 +2421,20 @@ class FocusRenderer extends MarkdownRenderChild {
       const fold = li.createSpan({ cls: "ft-box ft-fold", attr: { "aria-label": t("hideSteps") } });
       setIcon(fold, "chevron-down");
       fold.onclick = async (e) => { e.stopPropagation(); await p.toggleShown("steps:" + project.file.path, true); p.refresh(); };
+    } else if (!step) {
+      // No step to tick: the box's column holds a quiet «+» that takes the first one — the row keeps
+      // the task rows' column instead of hanging one step in, as if it were inside the task above.
+      const first = li.createSpan({ cls: "ft-box ft-first", attr: { "aria-label": t("addStep") } });
+      setIcon(first, "plus");
+      first.onclick = (e) => {
+        e.stopPropagation();
+        const body = li.nextElementSibling?.hasClass("ft-steps") ? li.nextElementSibling : null;
+        this.draft(body?.querySelector(":scope > ul.ft-list > li:last-child") || li,
+          { area: area.name, project: project.file.basename, projectFile: project.file, noDate: opts.pile === "ahead" || !!opts.all });
+      };
     } else {
       box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
-      if (step) this.check(li, box, step);
-      else box.disabled = true;
+      this.check(li, box, step);
     }
     const name = li.createSpan({ cls: "ft-project-name" });
     name.createSpan({ cls: "ft-project-icon", text: "📁" });
