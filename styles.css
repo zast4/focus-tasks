@@ -73,8 +73,11 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link { min-width: 0; overflow-wrap: anywhere; }
 .focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link:hover { color: var(--text-accent); }
 .focus-tasks-view li.ft-project-row.is-open > .ft-project-name { flex: 1 1 auto; max-width: none; color: var(--text-normal); }
-/* No step on the row — the steps are open under it, or there is none: no box to tick, the column stays. */
-.focus-tasks-view li.ft-project-row.is-open > .ft-box, .focus-tasks-view li.ft-project-row.is-empty > .ft-box { visibility: hidden; }
+/* No step on the row, no box to tick. Open, the row is a heading over its steps: the box goes and
+   the name moves into its column, so the steps read one level in under the name. Empty, the row
+   stays in line with the task rows around it, the column kept. */
+.focus-tasks-view li.ft-project-row.is-open > .ft-box { display: none; }
+.focus-tasks-view li.ft-project-row.is-empty > .ft-box { visibility: hidden; }
 .focus-tasks-view li.ft-project-row > .ft-sep { flex: none; margin: 0 0.35em; line-height: var(--ft-line); color: var(--text-faint); }
 .focus-tasks-view li.ft-project-row > .ft-no-step { color: var(--text-faint); font-style: italic; }
 /* +N: the steps behind the row; red when one of them is late. Open, it is the «−» that folds them. */
