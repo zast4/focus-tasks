@@ -486,3 +486,10 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
 .focus-tasks-view .ft-line > .ft-no-step { color: var(--text-faint); font-style: italic; }
 .focus-tasks-view .ft-line > .ft-text > .ft-text-link { color: var(--link-color); cursor: pointer; }
 .focus-tasks-view .ft-line > .ft-text > .ft-text-link:hover { color: var(--link-color-hover); }
+
+/* In a row, everything beside the text sits on its first line, as the box and the date do: a «+» or
+   a ⏳ centred on a two-line row floated between the lines, out of line with the calendar. */
+.focus-tasks-view li.ft-task > .ft-plus,
+.focus-tasks-view li.ft-task > .ft-chip,
+.focus-tasks-view li.ft-task > .ft-running { align-self: flex-start; height: calc(var(--ft-line) * 1em); padding-top: 0; padding-bottom: 0;
+  display: inline-flex; align-items: center; }
