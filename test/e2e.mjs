@@ -1456,6 +1456,62 @@ step("a ```focus-tasks``` block in a note renders the same list, and its boxes w
   await settle();
 });
 
+step("a project's note is its page: the block at the bottom shows its steps, takes a new one, folds the closed", async () => {
+  await plugin(`
+    const sport = (await p.collect(true)).find((a) => a.name === '💪Sport');
+    await p.createProject(sport, 'Page project');
+    await p.createTask('Page today', { area: '💪Sport', project: 'Page project' }, ${J(TODAY)});
+    await p.createTask('Page later', { area: '💪Sport', project: 'Page project' }, null);
+    return true;`);
+  fs.writeFileSync(path.join(VAULT, taskPath("Page done")),
+    `---\nuid: ft-page-done\ntype: задача\nstatus: done\narea: "💪Sport"\nprojects:\n  - "[[Page project]]"\ncompletedDate: ${TODAY}\n---\n`);
+  await until(() => exists("Tasks/Page project.md") && exists(taskPath("Page later")), "the project and its steps");
+  // a new project note carries the block at its end
+  const body = read("Tasks/Page project.md");
+  if (!/```focus-tasks\n```\s*$/.test(body)) throw new Error("a new project note has no steps block at the end: " + J(body));
+  await page.eval(`const l = app.workspace.getLeaf('tab'); await l.openFile(app.vault.getAbstractFileByPath('Tasks/Page project.md')); return true;`);
+  const block = `[...document.querySelectorAll('.focus-tasks-view')].find((e) => e.querySelector('.ft-page') && e.getClientRects().length)`;
+  const row = (name) => `__ft.all('li.ft-task', ${block}).find((e) => e.querySelector('.ft-text')?.textContent.trim() === ${J(name)})`;
+  await until(() => page.eval(`return !!(${row("Page today")}) && !!(${row("Page later")})?.closest('.ft-future-block') && (${row("Page later")}).hasClass('is-later')`),
+    "today's step, and the undated one dimmed in the pile under it");
+  if (await page.eval(`return __ft.all('li.ft-task', ${block}).some((e) => /Run 5k|Flat one|Call coach/.test(e.querySelector('.ft-text')?.textContent || ''))`))
+    throw new Error("another project's rows are on the page");
+  // the closed steps fold under «Done · 1»
+  await until(() => page.eval(`return (${block}).querySelector('.ft-page-done')?.textContent.includes('1')`), "«Done · 1» on the page");
+  if (await page.eval(`return !!(${row("Page done")})`)) throw new Error("the closed step is shown before its block is opened");
+  await page.click(await page.eval(`return __ft.at((${block}).querySelector('.ft-page-done'))`));
+  await until(() => page.eval(`return !!(${row("Page done")})?.closest('.ft-done-today')`), "the closed step under it");
+  // the box on the page completes a step: its row joins the closed
+  await page.click(await page.eval(`return __ft.at((${row("Page today")}).querySelector('input'))`));
+  await taskIs("Page today", { status: "done", completedDate: TODAY });
+  await until(() => page.eval(`return !!(${row("Page today")})?.closest('.ft-done-today')`), "Page today among the closed");
+  // «+ Step in this project» types a new step; it starts with no date, in the pile
+  await page.click(await page.eval(`return __ft.at((${block}).querySelector('.ft-page-add'))`));
+  await editing();
+  await page.type("Page typed");
+  await page.key("Enter");
+  await until(() => exists(taskPath("Page typed")), "the typed step's note");
+  await page.key("Escape");
+  await idle();
+  await taskIs("Page typed", { projects: "[[Page project]]", scheduled: null });
+  await until(() => page.eval(`return !!(${row("Page typed")})?.closest('.ft-future-block')`), "the typed step in the page's pile");
+  // ⌘Z in the note's own text is the note's undo: the list's history is left alone
+  const steps = await plugin(`return (p.history || []).length`);
+  await page.eval(`const v = app.workspace.activeLeaf.view; v.editor.setCursor({ line: 0, ch: 0 }); v.editor.focus(); return true;`);
+  await page.key("Meta+z");
+  await sleep(400);
+  if ((await plugin(`return (p.history || []).length`)) !== steps) throw new Error("⌘Z in the note ran the list's undo");
+  // an old project note without the block gets one when opened from the list, once
+  fs.writeFileSync(path.join(VAULT, "Tasks/Old project.md"), `---\narea: "💪Sport"\ntype: проект\n---\nСтарая заметка\n`);
+  await until(() => page.eval(`return !!app.plugins.plugins['focus-tasks'].notes().find((n) => n.project && n.file.basename === 'Old project')`), "Old project known to the list");
+  await plugin(`const old = app.vault.getAbstractFileByPath('Tasks/Old project.md'); const v = [...p.views].find((x) => x.leaf); await v.open(old); return true;`);
+  await until(() => /Старая заметка\n\n```focus-tasks\n```\n$/.test(read("Tasks/Old project.md") || ""), "the block appended after the text");
+  await plugin(`const old = app.vault.getAbstractFileByPath('Tasks/Old project.md'); const v = [...p.views].find((x) => x.leaf); await v.open(old); return true;`);
+  await sleep(300);
+  if ((read("Tasks/Old project.md").match(/```focus-tasks/g) || []).length !== 1) throw new Error("the block was added twice");
+  await toPane();
+});
+
 step("in Live Preview the note holds its place when a box is ticked", async () => {
   // Live Preview scrolls in the editor's own scroller, not the one reading mode uses: the list has to
   // hold on to that one, or the note jumps on every tick.
@@ -1542,7 +1598,7 @@ step("delete an area: its projects and tasks go with it", async () => {
 
 step("commands are registered", async () => {
   const ids = await page.eval(`return Object.keys(app.commands.commands).filter((k) => k.startsWith('focus-tasks:')).sort()`);
-  const want = ["add-area", "add-task", "area-from-note", "fold-all", "open", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
+  const want = ["add-area", "add-task", "area-from-note", "fold-all", "open", "steps-blocks", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
   // ⌘Z must not be claimed for the whole app: with it on the command, a note lost its own undo
   const claimed = await page.eval(`
     const hk = app.hotkeyManager;

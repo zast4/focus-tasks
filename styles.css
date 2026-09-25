@@ -237,6 +237,17 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
   border-top: 1px solid var(--background-modifier-border); }
 .focus-tasks-view li.ft-done > .ft-text { color: var(--text-faint); text-decoration: line-through; cursor: default; }
 
+/* A project's page: the block at the bottom of its note. */
+.focus-tasks-view .ft-page-add { margin: 0.2em 0 0 calc(var(--ft-col) * 1); color: var(--text-faint); cursor: pointer; }
+.focus-tasks-view .ft-page-add:hover { color: var(--text-muted); }
+.focus-tasks-view .ft-page-done { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.9em 0 0.2em; padding: 0.25rem 0.6rem;
+  font-size: 0.85rem; color: var(--text-muted); cursor: pointer; border-radius: 6px; }
+.focus-tasks-view .ft-page-done:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+.focus-tasks-view .ft-page-done.is-on { color: var(--text-normal); }
+.focus-tasks-view .ft-page-done-icon { display: inline-flex; }
+.focus-tasks-view .ft-page-done-icon svg { width: 1rem; height: 1rem; }
+.focus-tasks-view .ft-page > .ft-done-today { margin-top: 0.2em; }
+
 /* The bottom of the view: «All» / «Hide», new areas, collapse / expand all, and the title of
    the areas with nothing due. */
 .focus-tasks-view .ft-foot { display: flex; gap: 0.4rem; margin: 0.9em 0 0.4em; padding-top: 0.6em; border-top: 1px solid var(--background-modifier-border); }

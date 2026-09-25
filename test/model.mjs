@@ -689,6 +689,49 @@ test("a task with a description becomes a project and stays in the focus as its 
   eq(bodyOf(app, "Tasks/Run a marathon.md").trim(), "", "the step has no description any more");
 });
 
+test("a project note is made with its steps block at the bottom; a description goes above it", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run a marathon", { area: "Sport", scheduled: TODAY }, "Нужен план на 16 недель.");
+  });
+  const file = await plugin.toProject(plugin.tasks()[0]);
+  const body = bodyOf(app, file.path);
+  ok(/```focus-tasks\n```\s*$/.test(body), "the block is the last thing in the note: " + JSON.stringify(body));
+  ok(body.indexOf("Нужен план") < body.indexOf("```focus-tasks"), "the description stands above the block");
+  eq((body.match(/```focus-tasks/g) || []).length, 1, "one block");
+  // the block is put into a project note that has none — once
+  const areas = await plugin.collect(true);
+  const made = await plugin.createProject(areaOf(areas, "Sport"), "Plain project");
+  ok(bodyOf(app, made.path).includes("```focus-tasks\n```"), "a new project note carries the block");
+  eq(await plugin.ensureStepsBlock(made), false, "nothing to add twice");
+  const old = await app.vault.create("Areas/Old project.md", "---\narea: Sport\ntype: project\n---\nСтарая заметка без блока\n");
+  eq(await plugin.ensureStepsBlock(old), true, "an old note gets one");
+  ok(/Старая заметка без блока\n\n```focus-tasks\n```\n$/.test(bodyOf(app, old.path)), "appended after the text: " + JSON.stringify(bodyOf(app, old.path)));
+  eq(await plugin.ensureStepsBlock(old), false, "and only once");
+});
+
+test("a block in a project's note shows that project; `project:` in the block names one anywhere", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    projectNote(a, "Sport", "Marathon");
+    taskNote(a, "Run", { area: "Sport", projects: ["[[Marathon]]"], scheduled: TODAY });
+    taskNote(a, "Plan", { area: "Sport", projects: ["[[Marathon]]"] });
+    taskNote(a, "Old", { area: "Sport", projects: ["[[Marathon]]"], status: "done", completedDate: "2026-01-01" });
+  });
+  const marathon = app.vault.getAbstractFileByPath("Areas/Marathon.md");
+  eq(plugin.blockPage("", "Areas/Marathon.md")?.project, marathon, "no text, in the project's note: that project");
+  eq(plugin.blockPage("", "Areas/Sport.md"), null, "in the area's note: the whole list");
+  eq(plugin.blockPage("project: [[Marathon]]", "Notes/Dashboard.md")?.project, marathon, "named by link");
+  eq(plugin.blockPage("project: Marathon", "Notes/Dashboard.md")?.project, marathon, "named by name");
+  // the page reads every pile of the project, in the focus or not
+  const areas = await plugin.collect(false, true);
+  const project = projectOf(areaOf(areas, "Sport"), "Marathon");
+  eq(names(project.tasks), ["Run"], "today's step");
+  eq(names(project.later), ["Plan"], "the undated one is in the pile");
+  const closed = plugin.tasks().filter((x) => x.status === "done" && plugin.projectFile(x)?.path === marathon.path);
+  eq(names(closed), ["Old"], "the closed step is found for the page");
+});
+
 test("a task whose description was a checklist becomes a project with those steps", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Sport");

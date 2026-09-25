@@ -29,6 +29,9 @@
  * «✓ Done · N» at the bottom opens the day's closed work, by area, where a box brings a task back.
  * Nothing closed keeps an area on screen. A project is closed by hand, from its menu, once nothing in
  * it is open; till then an emptied project keeps its row, «no step yet», and takes the next one.
+ * A project's note is its page: the ```focus-tasks``` block at its bottom (there from the start, or
+ * added when the note is opened from the list) shows that project's steps alone — today's, the pile
+ * of the rest, «+ Step», the closed ones folded — with the same rows as here.
  * The grip on the left drags areas, projects and tasks; a plain click on it selects the row (on a
  * phone it opens the menu; a right click opens it anywhere). Shift-click selects every task from the
  * last clicked one, Cmd/Ctrl-click adds or drops one. With rows selected the keys work on them, as
@@ -78,6 +81,8 @@ const STRINGS = {
     openCount: "open {0}", inFocus: ", in focus {0}", addToArea: "Task in this area", empty: "Empty",
     addTask: "Add a task", showUpcoming: "Show upcoming", hideUpcoming: "Hide upcoming",
     addStep: "Step in this project", drag: "Drag", collapse: "Collapse", expand: "Expand",
+    pageNoProject: "This note is not a project of the list: no steps to show",
+    cmdStepsBlocks: "Steps block in every project note", stepsBlocksAdded: "Steps block added to {0} notes", stepsBlocksNone: "Every project note already has its steps block",
     noStep: "no step yet", moreSteps: "{0} more — show them", hideSteps: "Hide the other steps", projectDone: "Project done",
     projectDoneNotice: "“{0}” is done", projectBack: "“{0}” is open again", doneButton: "Done", doneEmpty: "Nothing closed today yet", aProjectDone: "closing a project",
     setDate: "Set a date", today: "Today", yesterday: "Yesterday", tomorrow: "Tomorrow",
@@ -161,6 +166,8 @@ const STRINGS = {
     openCount: "открыто {0}", inFocus: ", в фокусе {0}", addToArea: "Задача в область", empty: "Пусто",
     addTask: "Добавить задачу", showUpcoming: "Показать будущее", hideUpcoming: "Скрыть будущее",
     addStep: "Шаг в проект", drag: "Перетащить", collapse: "Свернуть", expand: "Развернуть",
+    pageNoProject: "Эта заметка - не проект списка: шагов нет",
+    cmdStepsBlocks: "Блок шагов во все заметки проектов", stepsBlocksAdded: "Блок шагов добавлен в заметок: {0}", stepsBlocksNone: "Блок шагов уже есть во всех заметках проектов",
     noStep: "пока пусто", moreSteps: "ещё {0} — показать", hideSteps: "Скрыть остальные шаги", projectDone: "Проект выполнен",
     projectDoneNotice: "«{0}» выполнен", projectBack: "«{0}» снова открыт", doneButton: "Сделано", doneEmpty: "Сегодня ещё ничего не закрыто", aProjectDone: "закрытие проекта",
     setDate: "Поставить дату", today: "Сегодня", yesterday: "Вчера", tomorrow: "Завтра",
@@ -619,19 +626,24 @@ class ConfirmModal extends Modal {
 
 class FocusRenderer extends MarkdownRenderChild {
   // `leaf`: the pane the list fills (none for a code block in a note).
-  constructor(plugin, el, sourcePath, leaf = null) {
+  constructor(plugin, el, sourcePath, leaf = null, page = null) {
+    // `page`: {project: TFile} — the block shows that project's steps and nothing else
     super(el);
-    Object.assign(this, { plugin, sourcePath, leaf });
+    Object.assign(this, { plugin, sourcePath, leaf, page });
     this.selected = new Set();  // tasks of the selected rows
     this.anchor = null;         // the last clicked task: Shift-click selects from it
     this.cursor = null;         // the selected row the arrow keys go on from
   }
 
   // Opens a note: Cmd/Ctrl-click in a new tab; from the pane never over the list itself.
-  open(file, e = null, eState = null) {
+  async open(file, e = null, eState = null) {
     const ws = this.plugin.app.workspace;
     let leaf = ws.getLeaf(e ? Keymap.isModEvent(e) : false);
     if (this.leaf && leaf === this.leaf) leaf = ws.getLeaf("tab");
+    // a project's note is its page: the steps block at the bottom is put there the first time the
+    // note is opened from the list (the note a project is linked to gets one that names it)
+    const project = this.plugin.notes().find((n) => n.project && (n.file === file || this.plugin.linked(n.file) === file))?.file;
+    if (project) await this.plugin.ensureStepsBlock(file, project);
     return leaf.openFile(file, eState ? { eState } : undefined);
   }
 
@@ -730,6 +742,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // Builds off-screen and swaps in one go: emptying the live block first would collapse the page
   // and throw the scroll back to the top on every change.
   async build() {
+    if (this.page?.project) return this.buildPage();
     const p = this.plugin;
     const everything = p.everything();
     const areas = await p.collect(false);
@@ -844,8 +857,12 @@ class FocusRenderer extends MarkdownRenderChild {
         b.onclick = () => { pin(".ft-foot"); p.foldAll(this.folds, open); };
       }
     }
-    // Someone started typing while this was being built: leave the screen as it is and build again
-    // when they are done, or the row under the cursor would vanish mid-word.
+    this.swap(el, old);
+  }
+
+  // The built screen goes in. Someone started typing while it was being built: leave the screen as
+  // it is and build again when they are done, or the row under the cursor would vanish mid-word.
+  swap(el, old) {
     if (this.editing) {
       this.removeChild(this.inner);
       this.inner = old;
@@ -863,6 +880,56 @@ class FocusRenderer extends MarkdownRenderChild {
     this.keepPlace(anchor);
     this.paint();
     this.hold();
+  }
+
+  // A project's own page: the block at the bottom of its note. Every step of the project, the same
+  // rows as in the list — today's, then the pile of what is not today (dimmed), then a line that
+  // takes the next step, and the closed ones folded under «✓ Done · N». The note above the block is
+  // the project's own: what it is about, its links; this is where the work stands.
+  async buildPage() {
+    const p = this.plugin;
+    const path = this.page.project.path;
+    const areas = await p.collect(false, true);
+    const area = areas.find((a) => a.projects.some((b) => b.file.path === path));
+    const b = area?.projects.find((x) => x.file.path === path);
+    this.fresh = new WeakMap();
+    this.pending = [];
+    this.folds = [];
+    const old = this.inner;
+    this.inner = this.addChild(new Component());
+    const el = createDiv();
+    const box = el.createDiv({ cls: "ft-page" });
+    if (!b) {
+      this.shown = { areas: [], tasks: {} };
+      box.createDiv({ cls: "ft-empty", text: t("pageNoProject") });
+      return this.swap(el, old);
+    }
+    this.shown = { areas: [area.name], tasks: { ["project:" + b.file.basename]: [...b.tasks, ...b.later].map((x) => x.uid) } };
+    if (b.tasks.length) await this.list(box, b.tasks.map((task) => ({ kind: "task", task })), { area, pile: "focus" });
+    if (b.later.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), b.later.map((task) => ({ kind: "task", task })), area);
+    // «+ Step in this project»: a row typed in place under the last one; a step made here starts
+    // with no date (⌘1 while typing makes it today's) — the page is where a project is planned
+    const target = { area: area.name, project: b.file.basename, noDate: true };
+    const add = box.createDiv({ cls: "ft-empty ft-empty-add ft-page-add", text: "+ " + t("addStep"), attr: { "aria-label": t("addStep") } });
+    add.onclick = () => {
+      const last = [...box.querySelectorAll("ul.ft-list > li.ft-task")].pop();
+      this.draft(last || add, target);
+      if (!last) add.remove();
+    };
+    // the closed steps, all of them, newest first; folded (per device) under «✓ Done · N»
+    const done = p.tasks().filter((x) => x.status === STATUS_DONE && x.project && p.projectFile(x)?.path === path)
+      .sort((x, y) => String(y.doneDate || "").localeCompare(String(x.doneDate || "")) || collator()(x.text, y.text));
+    if (done.length) {
+      const key = "done:" + path;
+      const open = p.isShown(key, true);
+      const head = box.createDiv({ cls: "ft-page-done" });
+      head.toggleClass("is-on", open);
+      setIcon(head.createSpan({ cls: "ft-page-done-icon" }), open ? "chevron-down" : "check");
+      head.createSpan({ text: `${t("doneButton")} · ${done.length}` });
+      head.onclick = async () => { await p.toggleShown(key, true); p.refresh(); };
+      if (open) await this.completed(box.createDiv({ cls: "ft-done-today" }), done);
+    }
+    this.swap(el, old);
   }
 
   // The row to steer by when the list is rebuilt: the first one that is fully on screen and is not
@@ -1046,7 +1113,8 @@ class FocusRenderer extends MarkdownRenderChild {
     // ⌘Z belongs to whatever is in front. Here it undoes the last change to the list; anywhere else
     // — a note, another pane — this scope is not pushed at all and the key never reaches us.
     this.scope.register(["Mod"], "z", () => {
-      if (this.editing) return true;
+      // in a note the key is the note's own unless rows are selected: the block is a guest there
+      if (this.editing || (!this.leaf && !this.selected.size)) return true;
       this.undo();
       return false;
     });
@@ -2415,7 +2483,8 @@ module.exports = class FocusTasks extends Plugin {
     this.registerEvent(this.app.vault.on("rename", (file, old) => this.renamed(file.path, old)));
     this.registerEvent(this.app.metadataCache.on("changed", () => this.forgetScan()));
     this.registerView(VIEW_TYPE, (leaf) => new FocusView(leaf, this));
-    this.registerMarkdownCodeBlockProcessor("focus-tasks", (_src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath)));
+    this.registerMarkdownCodeBlockProcessor("focus-tasks", (src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath, null, this.blockPage(src, ctx.sourcePath))));
+    this.addCommand({ id: "steps-blocks", name: t("cmdStepsBlocks"), callback: () => this.stepsBlocksEverywhere() });
     this.addRibbonIcon("list-checks", t("open"), () => this.openView());
     this.addSettingTab(new FocusSettingTab(this.app, this));
     this.addCommand({ id: "open", name: t("open"), callback: () => this.openView() });
@@ -2639,7 +2708,7 @@ module.exports = class FocusTasks extends Plugin {
   // rest — undated, dated later, sent off, and the projects whose every step is such (or that have
   // none). `done`: checked off today, for the block at the bottom. `all` puts every open task of every
   // area into `rows`. Tasks are notes; areas and projects are their own notes.
-  async collect(all) {
+  async collect(all, every = false) {
     const byArea = new Map();
     const areaOf = (name) => {
       if (!byArea.has(name)) byArea.set(name, { name, note: null, rows: [], ahead: [], done: [], projects: [], focus: 0, later: 0, running: 0 });
@@ -2722,7 +2791,7 @@ module.exports = class FocusTasks extends Plugin {
     // What puts an area in the focus is today's open work: something due, something overdue, a
     // project emptied today. Nothing closed keeps it there — an open area with no row in it read as
     // «broken», and the day's closed work has its own block at the bottom.
-    if (!all) areas = areas.filter((a) => a.rows.length);
+    if (!all && !every) areas = areas.filter((a) => a.rows.length);
     const rank = (list, key) => { const i = (list || []).indexOf(key); return i < 0 ? 1e9 : i; };
     const order = this.data.order;
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));
@@ -3388,7 +3457,9 @@ module.exports = class FocusTasks extends Plugin {
     const file = await this.createProject(holder, name, undefined, null, false);
     if (!file) return null;
     const text = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-    if (text) await this.app.vault.process(file, (t0) => t0.replace(/\s*$/, "\n\n") + text + "\n");
+    if (text) await this.app.vault.process(file, (t0) => t0.includes(FocusTasks.STEPS_BLOCK)
+      ? t0.replace(FocusTasks.STEPS_BLOCK, text + "\n\n" + FocusTasks.STEPS_BLOCK)   // the note above, the steps below
+      : t0.replace(/\s*$/, "\n\n") + text + "\n");
     await this.app.fileManager.processFrontMatter(file, (fm) => { if (task.uid && !fm.uid) fm.uid = task.uid; });
     if (steps.length) {
       let day = task.date;
@@ -3557,6 +3628,42 @@ module.exports = class FocusTasks extends Plugin {
   // `fresh`: made from the focus, so its empty row goes to the focus for the day; unset, that is
   // decided by whether the area is in the focus right now. A project made out of a task is not:
   // it keeps the task's place.
+  // What a ```focus-tasks``` block shows: `project: [[Name]]` in its text names a project; with no
+  // text, a block in a project's own note shows that project. Anywhere else it is the whole list.
+  blockPage(src, sourcePath) {
+    const m = /^\s*project:\s*(.+?)\s*$/m.exec(src || "");
+    if (m) {
+      const link = m[1].replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0].trim();
+      const file = this.app.metadataCache.getFirstLinkpathDest(link, sourcePath || "")
+        || this.notes().find((n) => n.project && n.file.basename === link)?.file;
+      return file ? { project: file } : null;
+    }
+    const file = sourcePath ? this.app.vault.getAbstractFileByPath(sourcePath) : null;
+    return file && this.classify(file)?.project ? { project: file } : null;
+  }
+
+  // The block at the end of a project's note, once: the note is the project's page, the block is
+  // where its steps are. A note the project is linked to (not the project's own) names it.
+  static STEPS_BLOCK = "```focus-tasks\n```";
+  async ensureStepsBlock(note, project = note) {
+    const has = (text) => /^```focus-tasks\b/m.test(text);
+    let added = false;
+    await this.app.vault.process(note, (text) => {
+      if (has(text)) return text;
+      added = true;
+      const body = note === project ? FocusTasks.STEPS_BLOCK : "```focus-tasks\nproject: [[" + this.app.metadataCache.fileToLinktext(project, note.path) + "]]\n```";
+      return text.replace(/\s*$/, "") + "\n\n" + body + "\n";
+    });
+    return added;
+  }
+
+  async stepsBlocksEverywhere() {
+    let n = 0;
+    for (const note of this.notes().filter((x) => x.project)) if (await this.ensureStepsBlock(note.file)) n++;
+    new Notice(n ? t("stepsBlocksAdded", n) : t("stepsBlocksNone"));
+    return n;
+  }
+
   async createProject(area, name, afterPath, linkTo = null, fresh = null) {
     await this.ensureFolder();
     const path = normalizePath(`${this.folder}/${fileName(name)}.md`);
@@ -3565,7 +3672,7 @@ module.exports = class FocusTasks extends Plugin {
     if (!note) return null;
     const extra = (this.settings.projectFrontmatter || "").trim().replaceAll("{areaNote}", this.app.metadataCache.fileToLinktext(note, path));
     const file = await this.app.vault.create(path, ["---", ...(extra ? extra.split("\n") : []), `area: "${area.name.replace(/"/g, "'")}"`,
-      `type: ${this.settings.typeProject}`, "---", ""].join("\n"));
+      `type: ${this.settings.typeProject}`, "---", "", FocusTasks.STEPS_BLOCK, ""].join("\n"));
     if (linkTo) await this.setLinked(file, linkTo, true);
     await this.app.vault.process(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading));
     await this.setOpen("area:" + area.name, true);

@@ -36,6 +36,14 @@ any note as a code block:
 
 Add `cssclasses: [focus-tasks-note]` to that note's frontmatter to hide its properties and backlinks.
 
+**A project's note is its page.** The same block at the bottom of a project note shows that project
+alone: today's steps, the undated and upcoming ones dimmed under them, «+ Step in this project»
+(a step typed there starts with no date; **⌘1** while typing makes it today's), and the closed steps
+folded under «✓ Done · N». Everything about the project — what it is, links, notes — goes above the
+block. New project notes come with the block; an older one gets it the first time it is opened from
+the list, and the command **Focus Tasks: Steps block in every project note** adds it everywhere at
+once. `project: [[Name]]` inside the block puts a project's steps into any other note.
+
 What you can do in the view:
 
 | | |
