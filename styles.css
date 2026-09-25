@@ -65,11 +65,12 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
   left: calc(var(--ft-col) * 2.5); border-left: 1px solid var(--background-modifier-border); }
 .focus-tasks-view li.ft-steps > ul.ft-list { margin: 0; }
 
-/* A project as one row: its name, then «›», then its first step; the name gives way to the text. */
-.focus-tasks-view li.ft-project-row > .ft-project-name { flex: 0 1 auto; min-width: 3em; max-width: 45%; margin-left: 0.2rem;
-  display: inline-flex; align-items: baseline; gap: 0.25em; line-height: var(--ft-line); color: var(--text-muted); font-weight: 500;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link { overflow: hidden; text-overflow: ellipsis; }
+/* A project as one row: its name, then «›», then its first step. The name is never cut while there is
+   room for it: it takes what it needs, up to under half the row, and wraps past that — the step's
+   text keeps the bigger half and wraps in it. */
+.focus-tasks-view li.ft-project-row > .ft-project-name { flex: 0 0 auto; max-width: 45%; margin-left: 0.2rem;
+  display: inline-flex; align-items: baseline; gap: 0.25em; line-height: var(--ft-line); color: var(--text-muted); font-weight: 500; }
+.focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link { min-width: 0; overflow-wrap: anywhere; }
 .focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link:hover { color: var(--text-accent); }
 .focus-tasks-view li.ft-project-row.is-open > .ft-project-name { flex: 1 1 auto; max-width: none; color: var(--text-normal); }
 /* No step on the row — the steps are open under it, or there is none: no box to tick, the column stays. */
