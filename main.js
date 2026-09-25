@@ -876,7 +876,7 @@ class FocusRenderer extends MarkdownRenderChild {
       wait.onclick = () => { pin(".ft-foot"); p.setWaitingShown(!p.waitingShown()); };
     }
     foot.createEl("button", { text: t("newArea"), cls: "ft-foot-button ft-new-area" }).onclick = () => p.newArea();
-    foot.createEl("button", { text: t("areaFromNote"), cls: "ft-foot-button ft-area-from-note" }).onclick = () => p.areaFromNote();
+    // an area from a note of your own: the command «Area from a note» (no button: one «+ Area» is enough)
     // A test build has to say so where it is used, not only in the settings.
     if (p.build?.mode === "test") {
       const badge = foot.createSpan({ cls: "ft-foot-badge", text: t("buildBadge") });
@@ -2765,18 +2765,24 @@ module.exports = class FocusTasks extends Plugin {
     return folder === "/" || folder === "" || file.path.startsWith(folder + "/");
   }
 
-  // A task file: a note in the folder with `area:` in its frontmatter; `type: <project word>` makes it
-  // a project, anything else an area.
+  // A task file: a note with `area:` in its frontmatter; `type: <project word>` makes it a project,
+  // anything else an area. In the folder any such note counts; outside it only a note that says it
+  // is an area — an area is one of your own notes (a hub in Base/, say), not a copy of it.
   classify(file) {
-    if (!this.inFolder(file)) return null;
     const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm || !fm.area) return null;
+    if (!this.inFolder(file) && !this.isAreaType(fm.type)) return null;
     if (this.isTaskType(fm.type)) return null;  // a task note carries `area:` too
     const project = this.isProjectType(fm.type);
     const status = String(fm.status ?? "").trim().toLowerCase();
     // A closed project (`status: done`, by hand) is out of every list but the day's closed block.
     const done = project && (status === STATUS_DONE || status === STATUS_CANCELLED);
     return { file, area: String(fm.area), project, done, doneDate: done ? day(fm.completedDate) : null, date: project ? day(fm.scheduled) : null };
+  }
+
+  isAreaType(type) {
+    const s = String(type ?? "").trim().toLowerCase();
+    return ["area", "область"].includes(s) || s === String(this.settings.typeArea ?? "").trim().toLowerCase();
   }
 
   isTaskType(type) {
@@ -3788,7 +3794,14 @@ module.exports = class FocusTasks extends Plugin {
     if (folder && folder !== "/" && !this.app.vault.getAbstractFileByPath(folder)) await this.app.vault.createFolder(folder);
   }
 
+  // `note`: an existing note that becomes the area itself — its frontmatter gets `area` and `type`,
+  // nothing else of it changes. Without one, a new note named after the area.
   async createArea(name, note = null) {
+    if (note) {
+      await this.app.fileManager.processFrontMatter(note, (fm) => { fm.area = name; fm.type = this.settings.typeArea; });
+      this.forgetScan();
+      return note;
+    }
     await this.ensureFolder();
     const base = fileName((this.settings.areaNoteName || "{area}").replace("{area}", bare(name) || name));
     const path = normalizePath(`${this.folder}/${base}.md`);
@@ -3796,7 +3809,6 @@ module.exports = class FocusTasks extends Plugin {
     const extra = (this.settings.areaFrontmatter || "").trim();
     const file = await this.app.vault.create(path, ["---", ...(extra ? extra.split("\n") : []), `area: "${name.replace(/"/g, "'")}"`,
       `type: ${this.settings.typeArea}`, "---", ""].join("\n"));
-    if (note) await this.setLinked(file, note, true);
     return file;
   }
 
@@ -3804,7 +3816,7 @@ module.exports = class FocusTasks extends Plugin {
     return this.notes().some((n) => bare(n.area).toLowerCase() === bare(name).toLowerCase());
   }
 
-  // `note`: an existing note the area is linked to (its name is offered as the area's name).
+  // `note`: an existing note that becomes the area (its name is offered as the area's name).
   newArea(note = null) {
     const title = note ? t("areaNameTitle", note.basename) : t("newAreaTitle");
     new NameModal(this.app, title, t("areaPlaceholder"), async (name) => {

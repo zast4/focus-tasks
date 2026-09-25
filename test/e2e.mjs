@@ -160,7 +160,7 @@ const step = (name, fn) => steps.push({ name, fn });
 step("opens with an onboarding and the area buttons", async () => {
   await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .ft-onboarding')`), "onboarding");
   const foot = await page.eval(`return __ft.all('.ft-foot-button', __ft.view()).map((b) => b.textContent.trim())`);
-  if (J(foot) !== J(["+ Area", "+ Area from a note"])) throw new Error("footer: " + J(foot));
+  if (J(foot) !== J(["+ Area"])) throw new Error("footer: " + J(foot));
   if (!(await page.eval(`return !!document.querySelector('.side-dock-ribbon-action[aria-label="Open Focus"]')`))) throw new Error("no ribbon icon");
 });
 
@@ -857,15 +857,18 @@ step("link a note to a project: the name opens the note, the menu opens the proj
   await toPane();
 });
 
-step("+ Area from a note, Project from a note", async () => {
-  await click(`__ft.at(__ft.text('.ft-foot-button', '+ Area from a note'))`);
+step("Area from a note makes the note itself the area (outside the folder too); Project from a note", async () => {
+  const before = read("Notes/Home.md");
+  await page.eval(`app.plugins.plugins['focus-tasks'].areaFromNote(); return true;`);
   await modalInput(".prompt-input");
   await page.type("Notes/Home");
   await sleep(200);
   await page.key("Enter");
   await modalInput();
   await page.key("Enter");
-  await fileHas("Tasks/Home.md", 'note: "[[Notes/Home]]"');
+  await fileHas("Notes/Home.md", /area: "?Home"?\ntype: area/, "the note itself says it is the area");
+  if (!read("Notes/Home.md").includes(before.replace(/^---[\s\S]*?---\n/, "").trim())) throw new Error("the note's text changed");
+  if (exists("Tasks/Home.md")) throw new Error("a second note was made for the area");
   await until(() => page.eval(`return !!__ft.area('Home')`), "Home on screen");
   await click(`__ft.grip(__ft.area('Home'))`);
   await menu("Project from a note");
