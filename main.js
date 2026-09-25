@@ -46,7 +46,7 @@
  */
 const {
   Plugin, PluginSettingTab, Setting, ItemView, Modal, SuggestModal, FuzzySuggestModal, Notice, Menu,
-  MarkdownRenderChild, MarkdownRenderer, Component, Keymap, moment, setIcon, prepareSimpleSearch,
+  MarkdownRenderChild, MarkdownRenderer, Component, Keymap, moment, setIcon, prepareSimpleSearch, prepareFuzzySearch,
   Platform, Scope, normalizePath, requestUrl,
 } = require("obsidian");
 
@@ -83,7 +83,7 @@ const DEFAULTS = {
 const STRINGS = {
   en: {
     viewTitle: "Focus", open: "Open Focus", focusEmpty: "Nothing due today",
-    noAreas: "No areas yet — create the first one", restTitle: "Other areas", focusTitle: "Focus", focusOnly: "Show the focus alone: its areas open, everything else folded", openTasks: "{0} open", all: "All", hide: "Hide",
+    noAreas: "No areas yet — create the first one", restTitle: "Other areas", findPlaceholder: "Find an area, a project or a task…", cmdFind: "Find in the list", findGone: "Not in the list any more", focusTitle: "Focus", focusOnly: "Show the focus alone: its areas open, everything else folded", openTasks: "{0} open", all: "All", hide: "Hide",
     newArea: "+ Area", areaFromNote: "+ Area from a note", foldAll: "Collapse all", unfoldAll: "Expand all",
     openCount: "open {0}", inFocus: ", in focus {0}", addToArea: "Task in this area", empty: "Empty",
     addTask: "Add a task", showUpcoming: "Show upcoming", hideUpcoming: "Hide upcoming",
@@ -170,7 +170,7 @@ const STRINGS = {
   },
   ru: {
     viewTitle: "Фокус", open: "Открыть Фокус", focusEmpty: "В фокусе пусто",
-    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", focusTitle: "Фокус", focusOnly: "Показать только фокус: его области развернуть, остальное свернуть", openTasks: "открыто: {0}", all: "Все", hide: "Скрыть",
+    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", findPlaceholder: "Найти область, проект или задачу…", cmdFind: "Найти в списке", findGone: "Этого больше нет в списке", focusTitle: "Фокус", focusOnly: "Показать только фокус: его области развернуть, остальное свернуть", openTasks: "открыто: {0}", all: "Все", hide: "Скрыть",
     newArea: "+ Область", areaFromNote: "+ Область из заметки", foldAll: "Свернуть всё", unfoldAll: "Развернуть всё",
     openCount: "открыто {0}", inFocus: ", в фокусе {0}", addToArea: "Задача в область", empty: "Пусто",
     addTask: "Добавить задачу", showUpcoming: "Показать будущее", hideUpcoming: "Скрыть будущее",
@@ -580,6 +580,40 @@ class TargetModal extends SuggestModal {
   onChooseSuggestion(item) { this.onChoose(item); }
 }
 
+// ⌘F in the list: every area, project and open task, found by any part of its name (and a task by
+// its project and area too). Choosing one shows it in the list — unfolded, scrolled to, selected.
+class FindModal extends SuggestModal {
+  constructor(app, items, onChoose) {
+    super(app);
+    this.items = items;
+    this.onChoose = onChoose;
+    this.setPlaceholder(t("findPlaceholder"));
+    this.limit = 60;
+  }
+  getSuggestions(query) {
+    const q = query.trim();
+    if (!q) return this.items.slice(0, this.limit);
+    const match = prepareFuzzySearch(q);
+    const kind = { area: 0, project: 1, task: 2 };
+    return this.items
+      .map((i) => ({ i, r: match(i.search) }))
+      .filter((x) => x.r)
+      .sort((a, b) => b.r.score - a.r.score || kind[a.i.kind] - kind[b.i.kind])
+      .slice(0, this.limit)
+      .map((x) => x.i);
+  }
+  renderSuggestion(item, el) {
+    el.addClass("ft-find-item");
+    const icon = el.createSpan({ cls: "ft-find-icon" });
+    setIcon(icon, item.kind === "area" ? "layers" : item.kind === "project" ? "folder" : item.waiting ? "play" : "square");
+    const body = el.createDiv({ cls: "ft-find-body" });
+    body.createDiv({ cls: "ft-find-title", text: item.title });
+    if (item.where) body.createDiv({ cls: "ft-find-where", text: item.where });
+    if (item.when) el.createSpan({ cls: "ft-find-when", text: item.when });
+  }
+  onChooseSuggestion(item) { this.onChoose(item); }
+}
+
 // Any note of the vault that is not an area or a project yet.
 class NotePicker extends FuzzySuggestModal {
   constructor(app, files, onChoose) {
@@ -735,6 +769,69 @@ class FocusRenderer extends MarkdownRenderChild {
   dropScopes() {
     for (const scope of this.scopes || []) this.plugin.app.keymap.popScope(scope);
     this.scopes?.clear();
+  }
+
+  // ⌘F: the finder over everything the list holds.
+  async find() {
+    const p = this.plugin;
+    const areas = await p.collect(true);
+    const items = [];
+    const day = (task) => (task.date ? moment(task.date).format("DD.MM") : "");
+    for (const a of areas) {
+      items.push({ kind: "area", title: a.name, search: a.name, area: a.name });
+      for (const b of a.projects) items.push({ kind: "project", title: b.file.basename, where: a.name, search: `${b.file.basename} ${bare(a.name)}`, area: a.name, path: b.file.path });
+    }
+    for (const x of p.tasks()) {
+      if (!x.area || x.status === STATUS_DONE || x.status === STATUS_CANCELLED) continue;
+      const where = x.project ? `${x.area} › ${x.project}` : x.area;
+      items.push({ kind: "task", title: x.text, where, when: day(x), search: `${x.text} ${x.project || ""} ${bare(x.area)}`, uid: x.uid, waiting: waitingBack(x) });
+    }
+    new FindModal(p.app, items, (item) => this.reveal(item)).open();
+  }
+
+  // Shows a found item in the list: whatever hides it is opened (the area, «All», the pile, the
+  // project's steps, the «Waiting» shelf), then it is scrolled to and selected.
+  async reveal(item) {
+    const p = this.plugin;
+    const focus = (await p.collect(false)).map((a) => a.name);
+    const wide = p.everything();
+    const openArea = (name) => {
+      if (focus.includes(name)) delete p.data.folded["area:" + name];
+      else { if (!p.everything()) p.app.saveLocalStorage("focus-tasks-all", "1"); p.data.opened["area:" + name] = true; }
+    };
+    const task = item.kind === "task" ? p.tasks().find((x) => x.uid === item.uid) : null;
+    if (item.kind === "task" && !task) { new Notice(t("findGone")); return; }
+    if (item.kind === "area") openArea(item.area);
+    if (item.kind === "project") {
+      const b = (await p.collect(true)).flatMap((a) => a.projects).find((x) => x.file.path === item.path);
+      openArea(b?.area.name || item.area);
+    }
+    if (task) {
+      if (waitingBack(task)) p.app.saveLocalStorage("focus-tasks-waiting", "1");
+      else {
+        openArea(task.area);
+        const inFocusArea = focus.includes(task.area);
+        const today = inFocus(task) || task.status === STATUS_WAITING;
+        if (inFocusArea && !today) {   // it is in the area's ⏳ pile
+          if (p.everything() || wide) delete p.data.opened["futureoff:" + task.area];
+          else p.data.opened["future:" + task.area] = true;
+        }
+        const pf = task.project ? p.projectFile(task) : null;
+        if (pf) p.data.opened["steps:" + pf.path] = true;   // a step behind «+N»: the steps open
+      }
+    }
+    p.saveFolds();
+    await this.rerendered();
+    let row = null;
+    if (item.kind === "area") row = [...this.containerEl.querySelectorAll(".ft-area-title[data-ft]")].find((e) => this.items.get(e)?.area?.name === item.area);
+    else if (item.kind === "project") row = [...this.containerEl.querySelectorAll("li.ft-project-row[data-ft]")].find((e) => this.items.get(e)?.project?.file?.path === item.path);
+    else row = this.rows().find(([, x]) => x.uid === item.uid)?.[0] || null;
+    if (!row) { if (task) this.open(task.file); return; }
+    row.scrollIntoView({ block: "center" });
+    row.addClass("ft-found");
+    setTimeout(() => row.removeClass("ft-found"), 1400);
+    const handle = item.kind === "area" ? null : this.rows().find(([e]) => e === row)?.[1];
+    if (handle) this.mark(handle);
   }
 
   async focusOnly(areas, rest, wide) {
@@ -1270,6 +1367,12 @@ class FocusRenderer extends MarkdownRenderChild {
     this.scope.register(["Shift"], "ArrowUp", own(() => this.walk(-1, true)));
     this.scope.register([], "Enter", own(() => this.editSelected()));
     this.scope.register(["Mod"], "Enter", own(() => this.openSelected()));
+    // ⌘F in the pane finds in the list; in a note with a block it stays the note's own search
+    this.scope.register(["Mod"], "f", () => {
+      if (!this.leaf || this.editing || typing()) return true;
+      this.find();
+      return false;
+    });
     for (const key of ["Backspace", "Delete"]) {
       this.scope.register([], key, own(() => this.deleteSelected()));
       this.scope.register(["Mod"], key, own(() => this.deleteSelected()));
@@ -2743,6 +2846,11 @@ module.exports = class FocusTasks extends Plugin {
     this.addCommand({ id: "unfold-all", name: t("cmdUnfoldAll"), callback: () => this.foldAll(folds(), true) });
     this.addCommand({ id: "add-task", name: t("cmdAddTask"), callback: () => this.addTask(today()) });
     this.addCommand({ id: "add-area", name: t("cmdAddArea"), callback: () => this.newArea() });
+    this.addCommand({ id: "find", name: t("cmdFind"), callback: async () => {
+      await this.openView();
+      const view = this.app.workspace.getLeavesOfType(VIEW_TYPE)[0]?.view;
+      view?.renderer?.find();
+    } });
     // ⌘Z belongs to the editor everywhere else, so the command only fires while the list's own pane
     // is in front and nothing is being typed in it.
     // No default hotkey here. With ⌘Z on the command, Obsidian handed the key to this plugin

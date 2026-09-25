@@ -1410,6 +1410,26 @@ step("an empty project's box closes the project", async () => {
   await settle();
 });
 
+step("⌘F finds a task hidden in a folded pile, opens what hides it, scrolls to it and selects it", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Needle in the pile")), `---\nuid: ft-find-1\ntype: задача\nstatus: open\narea: "💪Sport"\n---\n`);
+  await toPane();
+  const key = await plugin(`return 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
+  const wasAll = await plugin(`return p.everything()`);
+  await plugin(`if (p.everything()) p.setEverything(false); if (p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
+  await settle();
+  if (await page.eval(`return !!__ft.task('Needle in the pile')`)) throw new Error("the task is on screen before it was looked for");
+  await page.key("Meta+f");
+  await until(() => page.eval(`return !!document.querySelector('.prompt .ft-find-item')`), "the finder");
+  await page.type("needle pile");
+  await until(() => page.eval(`return document.querySelector('.prompt .suggestion-item.is-selected .ft-find-title')?.textContent === 'Needle in the pile'`), "the task is the first hit");
+  await page.key("Enter");
+  await until(() => page.eval(`return !!__ft.task('Needle in the pile')?.classList.contains('is-selected')`), "the row is shown and selected");
+  await page.key("Escape");
+  await plugin(`if (p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); if (p.everything() !== ${wasAll}) p.setEverything(${wasAll}); p.refresh(); return true;`);
+  fs.unlinkSync(path.join(VAULT, taskPath("Needle in the pile")));
+  await settle();
+});
+
 step("a click on «Focus» opens every focus area and folds everything else", async () => {
   await toPane();
   const state = await plugin(`
@@ -1928,7 +1948,7 @@ step("delete an area: its projects and tasks go with it", async () => {
 
 step("commands are registered", async () => {
   const ids = await page.eval(`return Object.keys(app.commands.commands).filter((k) => k.startsWith('focus-tasks:')).sort()`);
-  const want = ["add-area", "add-task", "area-from-note", "fold-all", "open", "steps-blocks", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
+  const want = ["add-area", "add-task", "area-from-note", "find", "fold-all", "open", "steps-blocks", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
   // ⌘Z must not be claimed for the whole app: with it on the command, a note lost its own undo
   const claimed = await page.eval(`
     const hk = app.hotkeyManager;

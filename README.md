@@ -60,6 +60,7 @@ What you can do in the view:
 | Date picker | click the date on the right (type `25.12`, `tomorrow`, or pick a day) |
 | Add a task | **+** on an area or a project header; «Empty» in an empty area |
 | Menu | right-click a row (on a phone: tap the grip) |
+| Find | **⌘/Ctrl+F** in the list's pane (or the command «Find in the list»): any area, project or open task by part of its name; choosing one opens whatever hides it, scrolls to it and selects it |
 | Reorder / move | drag the grip: areas among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
 | Select a row | click the grip on the left (again: drops it), or **Esc** while editing. A selected row is a block picked up as a whole, as in Notion: **↑/↓** walk the list, **Shift+↑/↓** extend, **Enter** edits it, **⌫** deletes (Undo in the notice), **⌘/Ctrl+1…4** date it, **⌘/Ctrl+5** hands it off («Waiting…»), **⌘/Ctrl+Enter** opens its note, **⌘/Ctrl+Z** takes back the last change, **Esc** drops the selection |
 | Select several | **Shift**-click selects every task from the last clicked one, **⌘/Ctrl**-click adds or drops one; the grip of a selected row drags them all; its date, its menu, the keys above or **⌘/Ctrl+1…4** work on all of them |

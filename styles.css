@@ -496,3 +496,15 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
 
 .focus-tasks-view .ft-focus-title { cursor: pointer; }
 .focus-tasks-view .ft-focus-title:hover { color: var(--text-normal); }
+
+/* ⌘F: the finder. Icon, name, where it lives underneath, the day on the right. */
+.ft-find-item { display: flex; align-items: center; gap: 0.6em; }
+.ft-find-icon { flex: none; display: inline-flex; color: var(--text-faint); }
+.ft-find-icon svg { width: 1rem; height: 1rem; }
+.ft-find-body { flex: 1 1 auto; min-width: 0; }
+.ft-find-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-find-where { font-size: 0.8em; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-find-when { flex: none; font-size: 0.8em; color: var(--text-faint); font-variant-numeric: tabular-nums; }
+/* the row it took you to glows a moment */
+.focus-tasks-view .ft-found { animation: ft-found 1.4s ease-out; }
+@keyframes ft-found { from { background-color: color-mix(in srgb, var(--text-accent) 22%, transparent); } to { background-color: transparent; } }
