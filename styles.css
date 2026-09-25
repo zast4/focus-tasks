@@ -94,9 +94,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-project-row > .ft-fold { cursor: pointer; color: var(--text-faint); }
 .focus-tasks-view li.ft-project-row > .ft-fold:hover { color: var(--text-normal); }
 .focus-tasks-view li.ft-project-row > .ft-fold svg { width: 1rem; height: 1rem; }
-.focus-tasks-view li.ft-project-row > .ft-first { cursor: pointer; color: var(--text-faint); }
-.focus-tasks-view li.ft-project-row > .ft-first:hover { color: var(--text-accent); }
-.focus-tasks-view li.ft-project-row > .ft-first svg { width: 0.95rem; height: 0.95rem; }
+
 .focus-tasks-view li.ft-project-row > .ft-sep { flex: none; margin: 0 0.35em; line-height: var(--ft-line); color: var(--text-faint); }
 .focus-tasks-view li.ft-project-row > .ft-no-step { color: var(--text-faint); font-style: italic; }
 /* +N: the steps behind the row; red when one of them is late. Open, it is the «−» that folds them. */

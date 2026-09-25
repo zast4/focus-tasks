@@ -107,7 +107,7 @@ const STRINGS = {
     newAreaTitle: "New area", areaPlaceholder: "Name — an emoji in front works: 💪Sport",
     areaNameTitle: "Area name for “{0}”", newProjectTitle: "New project in {0}",
     projectPlaceholder: "Project name", create: "Create", cancel: "Cancel", next: "Next", ok: "OK",
-    deleteProjectQ: "Delete project “{0}”?", deleteProjectText: "Its note goes to the trash; its {0} tasks stay in the area as loose ones. A linked note stays.",
+    deleteProjectQ: "Delete project “{0}”?", deleteProjectText: "Its note and its {0} tasks go to the trash (Undo in the notice). A linked note stays.",
     deleteAreaQ: "Delete area {0}?", deleteAreaText: "The area, its {0} projects and its {1} tasks go to the trash. Linked notes stay.",
     taskIn: "Task added to “{0}”", where: "Where to: a project or an area (type a new name to create an area)",
     newAreaOption: "+ New area “{0}”", looseTasks: "(loose tasks)", whatToDo: "What to do",
@@ -194,7 +194,7 @@ const STRINGS = {
     newAreaTitle: "Новая область", areaPlaceholder: "Имя с эмодзи, например 💪Спорт",
     areaNameTitle: "Имя области для «{0}»", newProjectTitle: "Новый проект в {0}",
     projectPlaceholder: "Название проекта", create: "Создать", cancel: "Отмена", next: "Дальше", ok: "Готово",
-    deleteProjectQ: "Удалить проект «{0}»?", deleteProjectText: "Заметка проекта уйдёт в корзину, его задачи ({0}) останутся в области разовыми. Привязанная заметка останется.",
+    deleteProjectQ: "Удалить проект «{0}»?", deleteProjectText: "Заметка проекта и его задачи ({0}) уйдут в корзину (вернуть - в уведомлении). Привязанная заметка останется.",
     deleteAreaQ: "Удалить область {0}?", deleteAreaText: "В корзину уйдут область, её проекты ({0}) и её задачи ({1}). Привязанные заметки останутся.",
     taskIn: "Задача в «{0}»", where: "Куда: проект или область (новое имя — новая область)",
     newAreaOption: "＋ Новая область «{0}»", looseTasks: "(разовые задачи)", whatToDo: "Что сделать",
@@ -1158,12 +1158,16 @@ class FocusRenderer extends MarkdownRenderChild {
     this.open(x.file, null, null, x.isProject ? x.file : null);
   }
 
-  // ⌫: the selected tasks go to the trash; the notice (or ⌘Z) puts them back. A project is not
-  // deleted by a key: that is its menu's, with a warning.
-  deleteSelected() {
-    const tasks = this.tasksChosen();
+  // ⌫: the selected rows go to the trash; the notice (or ⌘Z) puts them back.
+  // A selected project's row goes with its tasks, as its menu's «Delete» does — with «Undo», no question.
+  async deleteSelected() {
+    const chosen = this.chosen();
+    const projects = chosen.filter((x) => x.isProject);
+    const inside = new Set(projects.map((h) => h.file.path));
+    const tasks = chosen.filter((x) => !x.isProject && !(x.project && inside.has(this.plugin.projectFile(x)?.path)));
     this.clearSelection();
-    return this.plugin.removeTasks(tasks);
+    for (const h of projects) await this.plugin.removeProject(h.area, h.project, true);
+    if (tasks.length) await this.plugin.removeTasks(tasks);
   }
 
   // ⌘Z: the last change taken back, and the rows it touched selected, so the keys go on from there
@@ -2422,16 +2426,13 @@ class FocusRenderer extends MarkdownRenderChild {
       setIcon(fold, "chevron-down");
       fold.onclick = async (e) => { e.stopPropagation(); await p.toggleShown("steps:" + project.file.path, true); p.refresh(); };
     } else if (!step) {
-      // No step to tick: the box's column holds a quiet «+» that takes the first one — the row keeps
-      // the task rows' column instead of hanging one step in, as if it were inside the task above.
-      const first = li.createSpan({ cls: "ft-box ft-first", attr: { "aria-label": t("addStep") } });
-      setIcon(first, "plus");
-      first.onclick = (e) => {
-        e.stopPropagation();
-        const body = li.nextElementSibling?.hasClass("ft-steps") ? li.nextElementSibling : null;
-        this.draft(body?.querySelector(":scope > ul.ft-list > li:last-child") || li,
-          { area: area.name, project: project.file.basename, projectFile: project.file, noDate: opts.pile === "ahead" || !!opts.all });
-      };
+      // No step to tick: the box closes the project itself — «Project done», one click, with Undo.
+      // The row keeps the task rows' column, not one step in as if it were inside the task above.
+      const cell = li.createSpan({ cls: "ft-box" });
+      box = cell.createEl("input", { type: "checkbox", cls: "task-list-item-checkbox", attr: { "aria-label": t("projectDone") } });
+      const close = (e) => { e.preventDefault(); e.stopPropagation(); p.setProjectDone(project.file, true); };
+      box.onclick = close;
+      cell.onclick = (e) => { if (e.target !== box) close(e); };
     } else {
       box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
       this.check(li, box, step);
@@ -4067,13 +4068,15 @@ module.exports = class FocusTasks extends Plugin {
 
   // The project's note goes to the trash; its tasks stay in the area as loose ones. Undo brings back
   // the note and the links its tasks had to it.
-  async removeProject(area, project) {
+  // `withTasks`: its tasks go to the trash with it (all of them, done ones too), in the same undo.
+  async removeProject(area, project, withTasks = false) {
     const name = project.file.basename;
     const mine = this.tasks().filter((x) => this.samePlace(x, project.file));
     const touched = this.notes().filter((n) => !n.project && n.area === area.name).map((n) => n.file);
     await this.undoable(t("projectDeleted", name), [project.file, ...mine.map((x) => x.file), ...touched], async () => {
       // a task that only knew where it was through this project keeps the area it was shown in
-      for (const task of mine) await this.setFields(task, { projects: null, area: task.area || area.name });
+      if (withTasks) for (const task of mine) await this.trash(task.file);
+      else for (const task of mine) await this.setFields(task, { projects: null, area: task.area || area.name });
       await this.dropLinks(project.file, area.name);
       await this.trash(project.file);
       await this.forget("steps:" + project.file.path);
@@ -4085,7 +4088,7 @@ module.exports = class FocusTasks extends Plugin {
   deleteProject(area, project) {
     const mine = this.tasks().filter((x) => this.samePlace(x, project.file));
     new ConfirmModal(this.app, t("deleteProjectQ", project.file.basename), t("deleteProjectText", mine.length), t("delete"),
-      () => this.removeProject(area, project)).open();
+      () => this.removeProject(area, project, true)).open();
   }
 
   // The area, its projects and its tasks all go to the trash; undo brings all of them back.

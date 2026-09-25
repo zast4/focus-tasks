@@ -1146,6 +1146,26 @@ step("⌘2 in the editor sends the row away; ⌘Z brings it back, selected", asy
   await selectedAre([]);
 });
 
+step("⌫ on a selected project's row deletes the project and all its tasks; Undo brings them back", async () => {
+  await plugin(`
+    const sport = (await p.collect(true)).find((a) => a.name === '💪Sport');
+    await p.createProject(sport, 'Doomed');
+    await p.createTask('Doomed one', { area: '💪Sport', project: 'Doomed' }, ${J(TODAY)});
+    await p.createTask('Doomed two', { area: '💪Sport', project: 'Doomed' }, null);
+    return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.project('Doomed')`), "Doomed on screen");
+  await settle();
+  await click(`__ft.grip(__ft.project('Doomed'))`);
+  await until(() => page.eval(`return !!__ft.project('Doomed')?.classList.contains('is-selected')`), "the project's row selected");
+  await page.key("Backspace");
+  await until(() => !exists("Tasks/Doomed.md") && !exists(taskPath("Doomed one")) && !exists(taskPath("Doomed two")), "the project and both tasks are gone");
+  await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
+  await until(() => exists("Tasks/Doomed.md") && exists(taskPath("Doomed one")) && exists(taskPath("Doomed two")), "all three are back");
+  await plugin(`for (const n of ['Doomed one', 'Doomed two']) { const t = p.tasks().find((x) => x.text === n); if (t) await p.trash(t.file); } const f = app.vault.getAbstractFileByPath('Tasks/Doomed.md'); if (f) await p.trash(f); return true;`);
+  await settle();
+});
+
 step("⌫ on a selection deletes the rows; Undo brings them back", async () => {
   await toPane();
   await settle();
@@ -1376,6 +1396,17 @@ step("⌘Enter opens the task as a note: from the editor (text saved), and from 
   await page.eval(`app.workspace.activeLeaf.detach(); return true;`);
   await toPane();
   fs.unlinkSync(path.join(VAULT, taskPath("Open me now")));
+  await settle();
+});
+
+step("an empty project's box closes the project", async () => {
+  await plugin(`const sport = (await p.collect(true)).find((a) => a.name === '💪Sport'); await p.createProject(sport, 'Hollow'); return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.project('Hollow')?.querySelector('.ft-box input')`), "Hollow on screen, with a box");
+  await settle();
+  await click(`__ft.at(__ft.project('Hollow').querySelector('.ft-box input'))`);
+  await fileHas("Tasks/Hollow.md", "status: done", "the project is closed");
+  await plugin(`const f = app.vault.getAbstractFileByPath('Tasks/Hollow.md'); if (f) await p.trash(f); return true;`);
   await settle();
 });
 
@@ -1851,7 +1882,7 @@ step("closing the pane takes the editor, the picker and the hotkeys with it", as
   await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane li.ft-task')`), "the pane is back");
 });
 
-step("delete a project: its note goes to the trash, its tasks stay in the area", async () => {
+step("delete a project: its note and its tasks go to the trash", async () => {
   await toPane();
   await until(() => page.eval(`return !!__ft.project('Marathon 2027')`), "Marathon 2027 on screen");
   await menuOn(`__ft.at(__ft.name('Marathon 2027'))`);
@@ -1859,7 +1890,7 @@ step("delete a project: its note goes to the trash, its tasks stay in the area",
   await until(() => page.eval(`return !!document.querySelector('.modal .mod-warning')`), "confirm");
   await click(`__ft.at(document.querySelector('.modal .mod-warning'))`);
   await until(() => !exists("Tasks/Marathon 2027.md") && exists(".trash/Marathon 2027.md"), "in .trash");
-  await taskIs("Buy shoes fast", { area: "💪Sport", projects: null }, "its tasks stayed in the area");
+  await noTask("Buy shoes fast");   // its tasks went with it
 });
 
 step("delete an area: its projects and tasks go with it", async () => {
