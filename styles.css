@@ -463,3 +463,6 @@ body:not(.is-mobile) .focus-tasks-view .ft-page-head:hover > .ft-plus,
 body:not(.is-mobile) .focus-tasks-view .ft-page-head:hover > .ft-chip.is-quiet.is-off { display: inline-flex; opacity: 1; }
 /* the area's «+» is pushed to the right edge; hidden, the ⋯ after it would not be: keep them together */
 body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 0; }
+
+/* «Focus» sits at the top of the list: no air above it, as «Other areas» has between the two. */
+.focus-tasks-view .ft-focus-title { margin-top: 0.2em; }

@@ -574,7 +574,7 @@ step("«Hide» / «All» at the bottom", async () => {
   fs.writeFileSync(path.join(VAULT, "Tasks/Craft.md"), '---\narea: "🎨Craft"\n---\n');
   fs.writeFileSync(path.join(VAULT, taskPath("Glue the model")), `---\nuid: ft-craft-1\ntype: задача\nstatus: open\narea: "🎨Craft"\n---\n`);
   await until(() => page.eval(`
-    const names = [...__ft.view().querySelectorAll('.ft-rest-title ~ .ft-area > .ft-area-title')].map((e) => e.textContent);
+    const names = [...__ft.view().querySelectorAll('.ft-rest-title:not(.ft-focus-title) ~ .ft-area > .ft-area-title')].map((e) => e.textContent);
     const at = (n) => names.findIndex((x) => x.includes(n));
     return at('Craft') >= 0 && at('Reading') >= 0 && at('Craft') < at('Reading');`), "Craft (open 1) before Reading (open 0)");
   for (const f of [taskPath("Glue the model"), "Tasks/Craft.md"]) fs.unlinkSync(path.join(VAULT, f));
@@ -656,7 +656,7 @@ step("«Waiting…» sends the task off: a day, an hour typed in two segments, a
     p.querySelector('.ft-picker-part.is-mm').value = '30';
     return true;`);
   // the «Other areas» title: plain text, and never under the card
-  await click(`__ft.at(__ft.view().querySelector('.ft-rest-title') || __ft.view().querySelector('.ft-done-today .ft-empty'))`, "somewhere outside the card");
+  await click(`__ft.at(__ft.view().querySelector('.ft-rest-title:not(.ft-focus-title)') || __ft.view().querySelector('.ft-done-today .ft-empty'))`, "somewhere outside the card");
   await until(() => page.eval(`return !document.querySelector('.ft-picker')`), "the card closed");
   await taskIs("Ask the lawyer", { scheduled: `${TOMORROW}T07:30` }, "what stood in the fields was kept");
   // out of today's work, and not in the pile of what is not today either: on the shelf at the bottom

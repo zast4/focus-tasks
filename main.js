@@ -83,7 +83,7 @@ const DEFAULTS = {
 const STRINGS = {
   en: {
     viewTitle: "Focus", open: "Open Focus", focusEmpty: "Nothing due today",
-    noAreas: "No areas yet — create the first one", restTitle: "Other areas", all: "All", hide: "Hide",
+    noAreas: "No areas yet — create the first one", restTitle: "Other areas", focusTitle: "Focus", openTasks: "{0} open", all: "All", hide: "Hide",
     newArea: "+ Area", areaFromNote: "+ Area from a note", foldAll: "Collapse all", unfoldAll: "Expand all",
     openCount: "open {0}", inFocus: ", in focus {0}", addToArea: "Task in this area", empty: "Empty",
     addTask: "Add a task", showUpcoming: "Show upcoming", hideUpcoming: "Hide upcoming",
@@ -170,7 +170,7 @@ const STRINGS = {
   },
   ru: {
     viewTitle: "Фокус", open: "Открыть Фокус", focusEmpty: "В фокусе пусто",
-    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", all: "Все", hide: "Скрыть",
+    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", focusTitle: "Фокус", openTasks: "открыто: {0}", all: "Все", hide: "Скрыть",
     newArea: "+ Область", areaFromNote: "+ Область из заметки", foldAll: "Свернуть всё", unfoldAll: "Развернуть всё",
     openCount: "открыто {0}", inFocus: ", в фокусе {0}", addToArea: "Задача в область", empty: "Пусто",
     addTask: "Добавить задачу", showUpcoming: "Показать будущее", hideUpcoming: "Скрыть будущее",
@@ -819,6 +819,8 @@ class FocusRenderer extends MarkdownRenderChild {
         go.onclick = (e) => { e.preventDefault(); p.setEverything(true); };
       }
     }
+    // the focus has a title of its own, like «Other areas» below it
+    if (areas.length) el.createDiv({ cls: "ft-rest-title ft-focus-title", text: t("focusTitle") });
     for (const area of areas) await this.area(el, area, false, everything);
     if (everything) {
       if (rest.length) el.createDiv({ cls: "ft-rest-title", text: t("restTitle") });
@@ -1353,17 +1355,17 @@ class FocusRenderer extends MarkdownRenderChild {
     if (area.note) this.link(name, area.note);
     if (all) {
       const open = area.rows.filter((r) => r.kind === "task").length + area.projects.reduce((n, b) => n + b.tasks.length, 0);
-      title.createSpan({ cls: "ft-count", text: t("openCount", open) + (area.focus ? t("inFocus", area.focus) : "") });
+      // just the number, as in a to-do app's sidebar: the open tasks of the area (the word is in the tooltip)
+      title.createSpan({ cls: "ft-count", text: String(open), attr: { "aria-label": t("openTasks", open) } });
     } else if (!open) title.createSpan({ cls: "ft-count", text: String(area.rows.length) });
-    // What the area holds beside today's work hangs off its own header: the ⏳ opens the pile of
-    // what is not today. An icon without a number, there under the pointer and lit while its pile is
-    // open — the count is in its tooltip.
+    // What the area holds beside today's work hangs off its own header: the ⏳ and how many tasks
+    // are in its pile of what is not today; a click opens the pile, lit while it is open.
     const futureKey = (wide ? "futureoff:" : "future:") + area.name;
     const futureShown = wide ? !p.isShown(futureKey, true) : p.isShown(futureKey, true);
     if (!all && open && area.ahead.length)
       // `true`, not `!wide`: the flag is read from the «opened» map either way, and writing it to the
       // other one in «All» mode meant the click landed where nobody was looking.
-      this.chip(title, "ft-later-chip", "clock", null, futureShown, futureKey,
+      this.chip(title, "ft-later-chip", "clock", area.later || area.ahead.length, futureShown, futureKey,
         `${t(futureShown ? "hideUpcoming" : "showUpcoming")} · ${area.ahead.length}`, true);
     this.plus(title, t("addToArea"), async () => ({ area: area.name, project: null, noDate: all }),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
