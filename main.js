@@ -2414,9 +2414,18 @@ class FocusRenderer extends MarkdownRenderChild {
     li.toggleClass("is-empty", !steps.length);
     if (step && !opts.all && !inFocus(step) && step.status !== STATUS_WAITING) li.addClass("is-later");
     if (step && waitingBack(step)) li.addClass("is-waiting");
-    const box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
-    if (step) this.check(li, box, step);
-    else box.disabled = true;
+    // Open, the row is a heading over its steps: no box to tick, and in the box's column a chevron
+    // that folds them — the name stays where it was, so nothing jumps and «−N» sits by it as «+N» did.
+    let box = null;
+    if (open) {
+      const fold = li.createSpan({ cls: "ft-box ft-fold", attr: { "aria-label": t("hideSteps") } });
+      setIcon(fold, "chevron-down");
+      fold.onclick = async (e) => { e.stopPropagation(); await p.toggleShown("steps:" + project.file.path, true); p.refresh(); };
+    } else {
+      box = li.createSpan({ cls: "ft-box" }).createEl("input", { type: "checkbox", cls: "task-list-item-checkbox" });
+      if (step) this.check(li, box, step);
+      else box.disabled = true;
+    }
     const name = li.createSpan({ cls: "ft-project-name" });
     name.createSpan({ cls: "ft-project-icon", text: "📁" });
     this.link(name.createSpan({ cls: "ft-link", text: project.file.basename }), project.file);
@@ -2440,7 +2449,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // hidden width is whitespace anyway.
     if (steps.length > 1) {
       const hidden = steps.slice(1);
-      const more = li.createSpan({ cls: "ft-steps-more", text: open ? "−" : `+${hidden.length}` });
+      const more = li.createSpan({ cls: "ft-steps-more", text: open ? `−${hidden.length}` : `+${hidden.length}` });
       more.toggleClass("is-open", open);
       // late steps behind the row must not hide behind it: the number turns red
       if (!open && hidden.some((x) => x.date && x.date < today() && !waitingBack(x))) more.addClass("is-late");

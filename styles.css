@@ -89,10 +89,11 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-project-row > .ft-project-name > .ft-link:hover { color: var(--text-accent); }
 .focus-tasks-view li.ft-project-row.is-open > .ft-project-name { max-width: none; color: var(--text-normal); }
 .focus-tasks-view li.ft-project-row > .ft-fill { flex: 1 1 auto; }
-/* No step on the row, no box to tick. Open, the row is a heading over its steps: the box goes and
-   the name moves into its column, so the steps read one level in under the name. Empty, the row
-   stays in line with the task rows around it, the column kept. */
-.focus-tasks-view li.ft-project-row.is-open > .ft-box { display: none; }
+/* Open, the row is a heading over its steps: a chevron in the box column folds them, the name stays
+   put. Empty, the row stays in line with the task rows around it, the column kept. */
+.focus-tasks-view li.ft-project-row > .ft-fold { cursor: pointer; color: var(--text-faint); }
+.focus-tasks-view li.ft-project-row > .ft-fold:hover { color: var(--text-normal); }
+.focus-tasks-view li.ft-project-row > .ft-fold svg { width: 1rem; height: 1rem; }
 .focus-tasks-view li.ft-project-row.is-empty > .ft-box { visibility: hidden; }
 .focus-tasks-view li.ft-project-row > .ft-sep { flex: none; margin: 0 0.35em; line-height: var(--ft-line); color: var(--text-faint); }
 .focus-tasks-view li.ft-project-row > .ft-no-step { color: var(--text-faint); font-style: italic; }
@@ -101,10 +102,9 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
   margin-left: 0.4em; padding: 0 0.35em; min-width: 2.2em;
   height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; border-radius: 4px; color: var(--text-muted); cursor: pointer;
   font-variant-numeric: tabular-nums; }
-/* «+N» and «−» share one box, by the name. Open, the name moves one column left (into the box's);
-   the «−» takes that column as padding, so its glyph stays where «+N» was and the second click,
-   without moving the pointer, folds the steps again. */
-.focus-tasks-view li.ft-project-row.is-open > .ft-steps-more { padding-left: calc(var(--ft-col) + 0.35em); }
+/* «+N» and «−N» share one box by the name, which does not move: the second click folds the steps
+   without moving the pointer. */
+
 .focus-tasks-view li.ft-project-row > .ft-steps-more:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
 .focus-tasks-view li.ft-project-row > .ft-steps-more.is-late { color: var(--text-error); }
 .focus-tasks-view li.ft-project-row > .ft-steps-more.is-open { color: var(--interactive-accent); }
