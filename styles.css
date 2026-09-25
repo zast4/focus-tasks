@@ -50,7 +50,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view ul.ft-list { margin: 0.1em 0; padding-inline-start: 0; }
 .focus-tasks-view li.ft-task { cursor: default; list-style: none; display: flex; align-items: flex-start;
   padding: 0.25em var(--ft-pad); text-indent: 0;
-  margin: 0 var(--ft-pad) 3px calc(var(--ft-col) * (2 + var(--ft-level, 0)) - var(--ft-pad)) !important; }
+  margin: 0 var(--ft-pad) 3px calc(var(--ft-col) * (1.25 + var(--ft-level, 0)) - var(--ft-pad)) !important; }
 /* A hairline between rows, in the 3px gap: from the text's column to the row's right edge, so the
    boxes and grips keep a clean column (as in Things). Faint — it separates, it does not box. It
    goes out next to a hovered or selected row: the band says it already. */
@@ -75,7 +75,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
    project's box column. */
 .focus-tasks-view li.ft-steps, .focus-tasks-view li.ft-later-steps { list-style: none; display: block; position: relative; margin: 0; padding: 0; }
 .focus-tasks-view li.ft-steps::before, .focus-tasks-view li.ft-later-steps::before { content: ""; position: absolute; top: 0.1em; bottom: 0.3em;
-  left: calc(var(--ft-col) * 2.5); border-left: 1px solid var(--background-modifier-border); }
+  left: calc(var(--ft-col) * 1.75); border-left: 1px solid var(--background-modifier-border); }
 .focus-tasks-view li.ft-steps > ul.ft-list, .focus-tasks-view li.ft-later-steps > ul.ft-list { margin: 0; }
 /* The project's ⏳ pile under its row: the same list, its rows dimmed as «later» like the area's pile. */
 .focus-tasks-view li.ft-later-steps::before { border-left-style: dashed; }
@@ -111,7 +111,7 @@ body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spar
 .focus-tasks-view li.ft-project-row:hover > .ft-plus { opacity: 1; }
 .focus-tasks-view li.ft-project-row.ft-draft-row > .ft-project-name { max-width: none; flex: 1 1 auto; }
 
-.focus-tasks-view .ft-area > .ft-empty { margin-left: calc(var(--ft-col) * 2); }
+.focus-tasks-view .ft-area > .ft-empty { margin-left: calc(var(--ft-col) * 1.25); }
 .focus-tasks-view .ft-empty { color: var(--text-muted); }
 .ft-input { width: 100%; margin-bottom: 0.8em; }
 
@@ -223,7 +223,7 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-date { min-width: 3em; }
 .ft-picker-foot button { width: 100%; text-align: left; }
 
 /* «Show upcoming» at the bottom of an area; revealed rows are dimmed. */
-.focus-tasks-view .ft-future { display: inline-flex; align-items: center; gap: 0.4em; margin: 0.35em 0 0.1em calc(var(--ft-col) * 2 + (var(--ft-col) - var(--ft-cb)) / 2);
+.focus-tasks-view .ft-future { display: inline-flex; align-items: center; gap: 0.4em; margin: 0.35em 0 0.1em calc(var(--ft-col) * 1.25 + (var(--ft-col) - var(--ft-cb)) / 2);
   font-size: 0.8em; color: var(--text-faint); cursor: pointer; border-radius: 6px; padding: 0.1em 0.4em 0.1em 0; }
 .focus-tasks-view .ft-future:hover { color: var(--interactive-accent); }
 .focus-tasks-view .ft-future-icon { display: inline-flex; }
@@ -272,7 +272,7 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 
 /* On the page there is no area header to hang the rows under: the steps start at the heading's own
    left edge — the box under the 📁 — and «+ Step» sits in the same column. */
-.focus-tasks-view .ft-page li.ft-task { --ft-level: -2; }
+.focus-tasks-view .ft-page li.ft-task { --ft-level: -1.25; }
 .focus-tasks-view .ft-page-add { margin: 0.2em 0 0 0; padding-left: calc((var(--ft-col) - 0.7em) / 2); color: var(--text-faint); cursor: pointer; }
 .focus-tasks-view .ft-page-add:hover { color: var(--text-muted); }
 .focus-tasks-view .ft-page-done { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.9em 0 0.2em; padding: 0.25rem 0.6rem;
