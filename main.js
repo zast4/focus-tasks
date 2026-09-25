@@ -2620,6 +2620,14 @@ module.exports = class FocusTasks extends Plugin {
     if (!ok) return;  // the note is not the one this row was read from: leave its name alone too
     if (file !== task.file.basename) {
       await this.app.fileManager.renameFile(task.file, normalizePath(`${this.tasksFolder}/${file}.md`));
+      this.forgetScan();
+      // A step named like its project had a link Obsidian resolved to the step itself, and has just
+      // rewritten to the step's new path: it is written back to the project, by path if need be.
+      const project = task.project ? this.projectFile(task) : null;
+      if (project) {
+        const link = this.projectLink(project, task.file.path);
+        if (link !== `[[${task.project}]]`) await this.setFields(task, { projects: [link] });
+      }
     }
     task.text = text;
   }
@@ -3071,7 +3079,12 @@ module.exports = class FocusTasks extends Plugin {
     const name = await this.freeName(fileName(text).slice(0, 60) || t("newTask"));
     const front = ["---", `uid: ${newUid()}`, `type: ${TASK_TYPE}`, `status: ${STATUS_OPEN}`];
     if (target.area) front.push(`area: ${JSON.stringify(target.area)}`);
-    if (target.project) front.push("projects:", `  - "[[${target.project}]]"`);
+    if (target.project) {
+      const path = normalizePath(`${this.tasksFolder}/${name}.md`);
+      const note = this.notes().find((n) => n.project && n.file.basename === target.project && (!target.area || n.area === target.area))
+        || this.notes().find((n) => n.project && n.file.basename === target.project);
+      front.push("projects:", `  - ${JSON.stringify(note ? this.projectLink(note.file, path) : `[[${target.project}]]`)}`);
+    }
     if (day) front.push(`scheduled: ${day}`);
     if (name !== text) front.push(`title: ${JSON.stringify(text)}`);
     front.push("---", "");
@@ -3140,7 +3153,7 @@ module.exports = class FocusTasks extends Plugin {
     } else if (task.date) {
       // It was in the focus today: it stays there as the project's first step, or the day would
       // quietly lose it. The row reads the same as the project — one click renames it.
-      await this.setFields(task, { projects: [`[[${name}]]`] });
+      await this.setFields(task, { projects: [this.projectLink(file, task.file.path)] });
       if (rest.trim()) await this.app.vault.process(task.file, (t0) => splitNote(t0)[0] + "\n");
     } else {
       // Nothing was due: the project starts empty, under «Show upcoming», with no twin row.
@@ -3351,8 +3364,14 @@ module.exports = class FocusTasks extends Plugin {
     const path = normalizePath(`${file.parent?.path && file.parent.path !== "/" ? file.parent.path + "/" : ""}${fileName(name)}.md`);
     if (this.app.vault.getAbstractFileByPath(path)) { new Notice(t("noteExists", path)); return; }
     const old = file.path;
+    // Its steps, found before the name changes. Obsidian rewrites the links it had resolved to this
+    // note; a step named like its project had resolved its own link to itself and would be left
+    // pointing at a name that no longer exists — so every step is re-pointed here, by hand.
+    const mine = this.tasks().filter((x) => this.samePlace(x, file));
     await this.app.fileManager.renameFile(file, path);
     await this.renamed(path, old);
+    const fresh = this.app.vault.getAbstractFileByPath(path) || file;
+    for (const task of mine) await this.setFields(task, { projects: [this.projectLink(fresh, task.file.path)] });
   }
 
   trash(file) {
@@ -3415,9 +3434,18 @@ module.exports = class FocusTasks extends Plugin {
     // area decides — every task folder is equally far from every project note.
     if (known && task.project.includes("/")) return found;
     if (known && !(task.area && list.some((n) => n.file.basename === found.basename && n.area === task.area && n.file.path !== found.path))) return found;
-    const named = list.filter((n) => n.file.basename === task.project || n.file.path.replace(/\.md$/, "") === task.project.replace(/\.md$/, ""));
+    const bare = task.project.replace(/\.md$/, "").split("/").pop();
+    const named = list.filter((n) => n.file.basename === task.project || n.file.path.replace(/\.md$/, "") === task.project.replace(/\.md$/, ""))
+      // a path that is not a project's — Obsidian rewrote a link that pointed at the step itself — still names one
+      .concat(list.filter((n) => n.file.basename === bare));
     if (!named.length) return null;
     return (task.area && named.find((n) => n.area === task.area) || named[0]).file;
+  }
+
+  // The link a task keeps to its project, written the way Obsidian writes links: by name, or by path
+  // when another note (often the project's own first step) carries that name.
+  projectLink(file, fromPath) {
+    return `[[${this.app.metadataCache.fileToLinktext(file, fromPath)}]]`;
   }
 
   // Does this task belong to that project note?

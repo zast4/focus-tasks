@@ -671,6 +671,22 @@ step("«Make it a project»: the task becomes a project and stays in the focus a
   const note = read("Tasks/Plan the season.md") || "";
   if (!note.includes("16 недель")) throw new Error("the description did not move into the project note");
   if ((fm("Plan the season")?.body || "").includes("16 недель")) throw new Error("the description is still in the task note");
+  // the step is named like its project: its link must say which of the two notes it means
+  await taskIs("Plan the season", { projects: "[[Tasks/Plan the season]]" }, "the step's link names the project by path");
+  // …and a rename of the project takes the step along, whatever Obsidian did with the link
+  await click(`__ft.grip(__ft.project('Plan the season'))`);
+  await menu("Rename");
+  await editing();
+  await page.eval(`__ft.selectAll()`);
+  await page.type("Season plan");
+  await page.key("Enter");
+  await until(() => exists("Tasks/Season plan.md") && !exists("Tasks/Plan the season.md"), "the project note renamed");
+  await editing();
+  await page.key("Escape");
+  await taskIs("Plan the season", { projects: "[[Season plan]]" }, "the step follows the renamed project");
+  await until(() => page.eval(`const r = __ft.project('Season plan'); return !!r && r.querySelector('.ft-text')?.textContent.trim() === 'Plan the season'`),
+    "the renamed project's row still shows the step");
+  await idle();
 });
 
 step("the last step of a project checked off: the project stays as an empty row, takes a new step, and closes only by hand", async () => {

@@ -1390,6 +1390,30 @@ test("renaming a project keeps the order of its steps", async () => {
   eq(names(projectOf(areaOf(await plugin.collect(false), "Work"), "Plan 2027").tasks), ["B", "A"], "and stays first after the rename");
 });
 
+test("a project renamed takes along the step that carries its name", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Run a marathon", { area: "Sport", scheduled: TODAY }, "Нужен план.");
+  });
+  const file = await plugin.toProject(plugin.tasks()[0]);
+  ok(file, "the project note was made");
+  // the step's link resolves to the step itself as far as Obsidian is concerned (same name, and the
+  // task folder is where the link is written from) — a rename must re-point it by hand
+  await plugin.renameProject(file, "Marathon 2027");
+  eq(frontmatter(app, "Tasks/Run a marathon.md").projects, ["[[Marathon 2027]]"], "the step's link follows the project");
+  eq(names(projectOf(areaOf(await plugin.collect(false), "Sport"), "Marathon 2027").tasks), ["Run a marathon"], "and the step is still in it");
+});
+
+test("a link that names the step's own path still finds the project", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    projectNote(a, "Sport", "Plan the season");
+    // what Obsidian leaves behind after a same-named step was renamed: a link to the step itself
+    taskNote(a, "Plan the season", { area: "Sport", scheduled: TODAY, projects: ["[[Tasks/Plan the season]]"] });
+  });
+  eq(names(projectOf(areaOf(await plugin.collect(false), "Sport"), "Plan the season").tasks), ["Plan the season"], "the step is read as the project's");
+});
+
 test("making a project out of a row that has since changed is refused", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Work");
