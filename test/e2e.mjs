@@ -571,14 +571,14 @@ step("a note written by another plugin: no uid, no area — the project gives bo
   await until(() => page.eval(`return !__ft.task('Written by TaskNotes')`), "the foreign task is gone again");
 });
 
-step("the row shows what the note says: a priority dot and a deadline on another day", async () => {
+step("the row shows what the note says: a robot's mark and a deadline on another day", async () => {
   await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
-    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'high'; fm.due = ${J(TOMORROW)}; }); return true;`);
-  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-priority.is-high')`), "the high-priority dot");
-  // only a high priority is marked: a low one leaves the row clean
+    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'low'; fm.due = ${J(TOMORROW)}; }); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-priority.is-low.ft-bot')`), "the robot's dot");
+  // priority as such is not shown: a high one leaves the row clean
   await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
-    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'low'; }); return true;`);
-  await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-priority')`), "no dot for a low priority");
+    await app.fileManager.processFrontMatter(f, (fm) => { fm.priority = 'high'; }); return true;`);
+  await until(() => page.eval(`return !__ft.task('Buy shoes fast')?.querySelector('.ft-priority')`), "no dot for a high priority");
   await until(() => page.eval(`return !!__ft.task('Buy shoes fast')?.querySelector('.ft-due')`), "the deadline badge");
   await page.eval(`const f = app.vault.getAbstractFileByPath(${J(taskPath("Buy shoes fast"))});
     await app.fileManager.processFrontMatter(f, (fm) => { delete fm.priority; delete fm.due; }); return true;`);
@@ -678,25 +678,27 @@ step("«Waiting…» sends the task off: a day, an hour typed in two segments, a
 
 step("the dot a robot leaves can be taken off from the row itself", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Added by a script")),
-    `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: high\n---\n`);
-  await until(() => page.eval(`return !!__ft.task('Added by a script')?.querySelector('.ft-priority.is-high')`), "the high dot is on the row");
+    `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: low\n---\n`);
+  await until(() => page.eval(`return !!__ft.task('Added by a script')?.querySelector('.ft-priority.is-low.ft-bot')`), "the robot's dot is on the row");
   await click(`__ft.at(__ft.task('Added by a script').querySelector('.ft-priority'))`, "the dot");
-  await menu("No priority");
-  await taskIs("Added by a script", { priority: null }, "the mark came off");
+  await taskIs("Added by a script", { priority: null }, "one click takes the mark off");
   await until(() => page.eval(`return !__ft.task('Added by a script')?.querySelector('.ft-priority')`), "and the dot is gone");
+  // no other priority is shown or offered: a high one is just a task
+  fs.writeFileSync(path.join(VAULT, taskPath("Added by a script")),
+    `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: high\n---\n`);
+  await settle();
+  await until(() => page.eval(`return !!__ft.task('Added by a script') && !__ft.task('Added by a script').querySelector('.ft-priority')`), "no dot for a high priority");
   await menuOn(`__ft.at(__ft.task('Added by a script'))`);
-  await menu("High priority");
-  await taskIs("Added by a script", { priority: "high" }, "and the menu can set one");
-  // the levels must look different — a rule that loses on specificity paints them all the same grey
-  await until(() => page.eval(`return !!__ft.task('Added by a script')?.querySelector('.ft-priority.is-high')`), "the high dot");
-  const looks = await page.eval(`
-    const dot = __ft.task('Added by a script').querySelector('.ft-priority');
-    const s = getComputedStyle(dot);
-    return { cls: dot.className, bg: s.backgroundColor, size: s.width };`);
-  if (!/is-high/.test(looks.cls)) throw new Error("the dot does not carry the level: " + J(looks));
-  if (looks.bg === "rgba(0, 0, 0, 0)" || looks.bg === "transparent")
-    throw new Error("a high-priority dot is not filled: " + J(looks));
-  if (parseFloat(looks.size) <= 7.2) throw new Error("a high-priority dot is not the bigger one: " + J(looks));
+  const offered = await page.eval(`return [...document.querySelectorAll('.menu .menu-item-title')].map((e) => e.textContent.trim())`);
+  await page.key("Escape");
+  if (offered.some((x) => /priority|приоритет/i.test(x))) throw new Error("the menu still offers priorities: " + J(offered));
+  // the mark comes off from the menu too
+  fs.writeFileSync(path.join(VAULT, taskPath("Added by a script")),
+    `---\nuid: ft-prio-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\npriority: low\n---\n`);
+  await until(() => page.eval(`return !!__ft.task('Added by a script')?.querySelector('.ft-priority.ft-bot')`), "the robot's dot again");
+  await menuOn(`__ft.at(__ft.task('Added by a script'))`);
+  await menu("Take the robot's mark off");
+  await taskIs("Added by a script", { priority: null }, "the menu took it off");
   fs.unlinkSync(path.join(VAULT, taskPath("Added by a script")));
   await settle();
 });
@@ -1163,6 +1165,99 @@ step("⌘5 hands a task off: from the editor, and for a selection", async () => 
   await idle();
   await selectedAre([]);
   for (const name of ["Call the vet", "Call the bank", "Call the school"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
+  await settle();
+});
+
+step("a row selected in the ⏳ pile takes ⌘1: today's date, and it moves into the focus", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Pile task")), `---\nuid: ft-pile-1\ntype: задача\nstatus: open\narea: "💪Sport"\n---\n`);
+  await toPane();
+  const key = await plugin(`return 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
+  const wasOpen = await plugin(`return !!p.data.opened[${J(key)}]`);
+  await plugin(`if (!p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Pile task')?.closest('.ft-future-block')`), "Pile task in the pile");
+  await settle();
+  await click(`__ft.grip(__ft.task('Pile task'))`);
+  await selectedAre(["Pile task"]);
+  await page.key("Meta+1");
+  await taskIs("Pile task", { scheduled: TODAY }, "⌘1 on a selected pile row dates it today");
+  await until(() => page.eval(`const r = __ft.task('Pile task'); return !!r && !r.closest('.ft-future-block')`), "and the row is among today's rows");
+  await selectedAre([]);
+  if (!wasOpen) await plugin(`if (p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
+  fs.unlinkSync(path.join(VAULT, taskPath("Pile task")));
+  await settle();
+});
+
+step("a project's row selected by its grip is the project: ⌘2 dates the project, not its step; open, it is selected too", async () => {
+  await plugin(`
+    const sport = (await p.collect(true)).find((a) => a.name === '💪Sport');
+    await p.createProject(sport, 'Dated project');
+    await p.createTask('Dated step', { area: '💪Sport', project: 'Dated project' }, ${J(TODAY)});
+    await p.createTask('Dated step 2', { area: '💪Sport', project: 'Dated project' }, ${J(TODAY)});
+    await p.createTask('Dated later', { area: '💪Sport', project: 'Dated project' }, null);
+    return true;`);
+  await toPane();
+  await until(() => page.eval(`const r = __ft.project('Dated project'); return !!r && !r.closest('.ft-future-block')`), "Dated project in the focus");
+  await settle();
+  await click(`__ft.grip(__ft.project('Dated project'))`);
+  await until(() => page.eval(`return !!__ft.project('Dated project')?.classList.contains('is-selected')`), "the project's row is selected");
+  await page.key("Meta+2");
+  await fileHas("Tasks/Dated project.md", `scheduled: ${TOMORROW}`, "the project's note got tomorrow");
+  await taskIs("Dated step", { scheduled: TODAY }, "the step's own day is untouched");
+  await until(() => page.eval(`return !!__ft.project('Dated project')?.closest('.ft-future-block')`), "dated ahead, the project waits in the pile — whatever its step says");
+  await until(() => page.eval(`return !!__ft.project('Dated project')?.querySelector('.ft-date.is-project')`), "the row shows the project's own day");
+  // the menu takes the day off: back by the steps' rule
+  await menuOn(`__ft.at(__ft.name('Dated project'))`);
+  await menu("No project date");
+  await fileLacks("Tasks/Dated project.md", "scheduled:", "the day is gone from the note");
+  await until(() => page.eval(`const r = __ft.project('Dated project'); return !!r && !r.closest('.ft-future-block')`), "back in the focus by its step");
+  // open (steps unfolded), the row has no step: the grip still selects the project, not a menu
+  await openSteps("Dated project");
+  await until(() => page.eval(`return !!__ft.project('Dated project')?.classList.contains('is-open')`), "the steps are open");
+  await click(`__ft.grip(__ft.project('Dated project'))`);
+  await until(() => page.eval(`return !!__ft.project('Dated project')?.classList.contains('is-selected')`), "the open row is selected");
+  if (await page.eval(`return !!document.querySelector('.menu')`)) throw new Error("the grip of an open project row opened the menu");
+  await page.key("Escape");
+  await openSteps("Dated project", false);
+  await plugin(`
+    for (const n of ['Dated step', 'Dated step 2', 'Dated later']) { const t = p.tasks().find((x) => x.text === n); if (t) await p.trash(t.file); }
+    const f = app.vault.getAbstractFileByPath('Tasks/Dated project.md'); if (f) await p.trash(f);
+    return true;`);
+  await settle();
+});
+
+step("«Waiting…» from the row's menu while its text is being edited: the editor closes, the card opens", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Edit and wait")), `---\nuid: ft-ew-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Edit and wait')`), "Edit and wait on screen");
+  await settle();
+  await click(`__ft.at(__ft.task('Edit and wait').querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.caretToEnd()`);
+  await page.type(" now");
+  await menuOn(`__ft.at(__ft.task('Edit and wait now') || __ft.task('Edit and wait'))`);
+  await menu("Waiting…");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption') && !document.querySelector('.focus-tasks-view .is-editing')`), "the editor closed and the card opened");
+  await page.type("23");
+  await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
+  await page.type("57");
+  await page.key("Tab");
+  await taskIs("Edit and wait now", { status: "waiting", scheduled: `${TODAY}T23:57` }, "the typed text was saved and the task sent off");
+  await idle();
+  fs.unlinkSync(path.join(VAULT, taskPath("Edit and wait now")));
+  await settle();
+});
+
+step("a note that becomes a project after its block was drawn turns into the project's page", async () => {
+  fs.writeFileSync(path.join(VAULT, "Tasks/Becomes.md"), `---\narea: "💪Sport"\n---\n\n\`\`\`focus-tasks\n\`\`\`\n`);
+  await until(() => page.eval(`return !!app.vault.getAbstractFileByPath('Tasks/Becomes.md')`), "Becomes indexed");
+  await page.eval(`const l = app.workspace.getLeaf('tab'); await l.openFile(app.vault.getAbstractFileByPath('Tasks/Becomes.md')); return true;`);
+  const block = `[...document.querySelectorAll('.focus-tasks-view')].find((e) => !e.closest('.focus-tasks-pane') && e.getClientRects().length && e.closest('.workspace-leaf.mod-active'))`;
+  await until(() => page.eval(`const b = ${block}; return !!b && !b.querySelector('.ft-page') && !!b.querySelector('.ft-area-title')`), "not a project: the whole list in the block");
+  await page.eval(`await app.fileManager.processFrontMatter(app.vault.getAbstractFileByPath('Tasks/Becomes.md'), (fm) => { fm.type = 'project'; }); return true;`);
+  await until(() => page.eval(`const b = ${block}; return !!b && b.querySelector('.ft-page-name')?.textContent === 'Becomes'`), "now a project: the block is its page", 10000);
+  await page.eval(`app.workspace.activeLeaf.detach(); return true;`);
+  fs.unlinkSync(path.join(VAULT, "Tasks/Becomes.md"));
+  await toPane();
   await settle();
 });
 

@@ -121,6 +121,8 @@ const STRINGS = {
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
+    botMark: "Added by a robot, not looked at yet — a click takes the mark off", botMarkOff: "Take the robot's mark off",
+    projectDate: "Project date…", projectNoDate: "No project date", projectDated: "The project's own date: it decides whether the project is in the focus",
     inProgress: "Waiting…", backToWork: "Take it back",
     waitingSince: "In other hands; look again {0}", waitingNoDate: "In other hands; no day set to look again",
     waitingButton: "Waiting", waitingShelf: "{0} in other hands", waitingEmpty: "Nothing in other hands", until: "by {0}",
@@ -206,6 +208,8 @@ const STRINGS = {
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
+    botMark: "Добавил бот, ещё не смотрел - клик снимает метку", botMarkOff: "Снять метку бота",
+    projectDate: "Дата проекта…", projectNoDate: "Проект без даты", projectDated: "Своя дата проекта: она решает, в фокусе ли проект",
     inProgress: "Жду…", backToWork: "Взять обратно",
     waitingSince: "Жду; посмотреть {0}", waitingNoDate: "Жду; день не назначен",
     waitingButton: "Жду", waitingShelf: "жду: {0}", waitingEmpty: "Ничего не ждёшь", until: "до {0}",
@@ -631,10 +635,12 @@ class ConfirmModal extends Modal {
 
 class FocusRenderer extends MarkdownRenderChild {
   // `leaf`: the pane the list fills (none for a code block in a note).
-  constructor(plugin, el, sourcePath, leaf = null, page = null) {
-    // `page`: {project: TFile} — the block shows that project's steps and nothing else
+  constructor(plugin, el, sourcePath, leaf = null, blockSrc = null) {
+    // `blockSrc`: the text inside a ```focus-tasks``` block (null for the pane). What the block
+    // shows is read from it and from the note it sits in on every render: a note that becomes a
+    // project after the block was drawn becomes its page without being reopened.
     super(el);
-    Object.assign(this, { plugin, sourcePath, leaf, page });
+    Object.assign(this, { plugin, sourcePath, leaf, blockSrc, page: null });
     this.selected = new Set();  // tasks of the selected rows
     this.anchor = null;         // the last clicked task: Shift-click selects from it
     this.cursor = null;         // the selected row the arrow keys go on from
@@ -748,6 +754,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // Builds off-screen and swaps in one go: emptying the live block first would collapse the page
   // and throw the scroll back to the top on every change.
   async build() {
+    if (this.blockSrc !== null) this.page = this.plugin.blockPage(this.blockSrc, this.sourcePath);
     if (this.page) return this.buildPage();
     const p = this.plugin;
     const everything = p.everything();
@@ -1014,9 +1021,22 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // The task rows on screen, top down: [row, task].
+  // A task row stands for its task; a project's row stands for the project — a handle with the
+  // project's own identity and date, so that selecting the row and giving it a day dates the
+  // project, not its first step.
   rows() {
-    return [...this.containerEl.querySelectorAll("li.ft-task[data-ft]")].map((el) => [el, this.items?.get(el)?.task]).filter(([, x]) => x);
+    return [...this.containerEl.querySelectorAll("li.ft-task[data-ft]")].map((el) => [el, this.handleOf(this.items?.get(el))]).filter(([, x]) => x);
   }
+
+  handleOf(item) {
+    if (!item) return null;
+    if (item.type !== "project") return item.task || null;
+    const b = item.project;
+    return (b.handle ||= { uid: "p:" + b.file.path, isProject: true, project: b, area: item.area, file: b.file, text: b.file.basename, date: b.date || null, at: null, status: STATUS_OPEN });
+  }
+
+  // The selected tasks alone, without project handles.
+  tasksChosen() { return this.chosen().filter((x) => !x.isProject); }
 
   // The selected tasks in screen order.
   // (a project's later step can be on screen twice — under its row and in the area's pile — and is one task)
@@ -1114,17 +1134,23 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // Enter: the row under the cursor (the first selected one otherwise) is edited, caret at the end.
+  // A project's row: its step's text, or the project's name when the row has no step.
   editSelected() {
     const chosen = this.chosen();
-    const task = chosen.find((x) => this.cursor && keyOf(x) === keyOf(this.cursor)) || chosen[0];
-    const row = task && this.rows().find(([, x]) => x === task)?.[0];
-    const text = row?.querySelector(":scope > .ft-text");
-    if (text) this.editInline(task, text, null);
+    const x = chosen.find((y) => this.cursor && keyOf(y) === keyOf(this.cursor)) || chosen[0];
+    const row = x && this.rows().find(([, y]) => y === x)?.[0];
+    if (!row) return;
+    const text = row.querySelector(":scope > .ft-text");
+    if (!x.isProject) { if (text) this.editInline(x, text, null); return; }
+    const item = this.items.get(row);
+    if (item?.task && text) this.editInline(item.task, text, null);
+    else this.renameProject(row, x.area, x.project);
   }
 
-  // ⌫: the selected tasks go to the trash; the notice (or ⌘Z) puts them back.
+  // ⌫: the selected tasks go to the trash; the notice (or ⌘Z) puts them back. A project is not
+  // deleted by a key: that is its menu's, with a warning.
   deleteSelected() {
-    const tasks = this.chosen();
+    const tasks = this.tasksChosen();
     this.clearSelection();
     return this.plugin.removeTasks(tasks);
   }
@@ -1172,7 +1198,7 @@ class FocusRenderer extends MarkdownRenderChild {
     this.scope = new Scope(this.plugin.app.scope);
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     const run = { 1: () => this.dateSelection(day(0)), 2: () => this.dateSelection(day(1)), 3: () => this.pickDates(), 4: () => this.dateSelection(null),
-      5: () => this.askReturn(this.chosen()) };
+      5: () => this.askReturn(this.tasksChosen()) };
     for (const [key, fn] of Object.entries(run)) {
       this.scope.register(["Mod"], key, () => {
         if (this.editing || !this.selected.size) return true;   // nothing of ours: let the app have the key
@@ -1213,11 +1239,14 @@ class FocusRenderer extends MarkdownRenderChild {
     keymap.pushScope(this.scope);
   }
 
-  // One date for the selected rows; the selection is done then.
-  dateSelection(day) {
-    const tasks = this.chosen();
+  // One date for the selected rows; the selection is done then. A selected project's row dates the
+  // project itself, not a step of it.
+  async dateSelection(day) {
+    const chosen = this.chosen();
     this.clearSelection();
-    return this.plugin.setDates(tasks, day);
+    const tasks = chosen.filter((x) => !x.isProject);
+    if (tasks.length) await this.plugin.setDates(tasks, day);
+    for (const h of chosen.filter((x) => x.isProject)) await this.plugin.setProjectDate(h.file, day);
   }
 
   // The picker for the selected rows, at the date of `task` (the top one by default).
@@ -1226,7 +1255,26 @@ class FocusRenderer extends MarkdownRenderChild {
     const label = row?.querySelector(".ft-date");
     if (!label) return;
     row.scrollIntoView({ block: "nearest" });
-    this.editDate(task, label);
+    if (task.isProject) this.editProjectDate(task.project, label);
+    else this.editDate(task, label);
+  }
+
+  // The picker for a project's own date. Set, it decides whether the project is in the focus; the
+  // steps keep their days.
+  editProjectDate(project, el) {
+    if (this.editing) return;
+    this.clearSelection();
+    this.card(el, () => new DatePicker(el, project.date || null, async (day) => {
+      this.editing = false;
+      this.picker = null;
+      await this.plugin.setProjectDate(project.file, day);
+      this.render();
+    }, () => {
+      this.editing = false;
+      this.picker = null;
+      el.removeClass("is-active");
+      this.render();
+    }));
   }
 
   clearSelection() {
@@ -1514,9 +1562,9 @@ class FocusRenderer extends MarkdownRenderChild {
     e.stopPropagation();
     const row = item.type === "area" ? grip.closest(".ft-area") : grip.closest(".ft-project, .ft-task");
     // the grip of a selected row carries the whole selection
-    const group = item.type === "task" && this.selected.has(item.task) && this.selected.size > 1;
-    if (group) item = { ...item, tasks: this.chosen() };
-    const moving = group ? this.rows().filter(([, x]) => this.selected.has(x)).map(([el]) => el) : [row];
+    const group = item.type === "task" && this.selected.has(item.task) && this.tasksChosen().length > 1;
+    if (group) item = { ...item, tasks: this.tasksChosen() };
+    const moving = group ? this.rows().filter(([, x]) => !x.isProject && this.selected.has(x)).map(([el]) => el) : [row];
     const scroller = this.scroller;
     const line = document.body.createDiv({ cls: "ft-drop-line" });
     const x0 = e.clientX, y0 = e.clientY;
@@ -1578,7 +1626,7 @@ class FocusRenderer extends MarkdownRenderChild {
         // menu is a right click away. An area, or a project with no step, has nothing to select.
         const where = { clientX: ev?.clientX ?? 0, clientY: ev?.clientY ?? 0 };
         if (touch) this.menuTimer = setTimeout(() => this.openMenu(item, where, row), 80);
-        else if (item.type !== "area" && item.task) this.pick(item.task, ev);
+        else if (item.type !== "area" && this.handleOf(item)) this.pick(this.handleOf(item), ev);
         else this.openMenu(item, ev, row);
       }
       else if (commit && drop) {
@@ -1637,18 +1685,14 @@ class FocusRenderer extends MarkdownRenderChild {
         this.plugin.setWaiting(this.selected.has(task) && this.selected.size > 1 ? this.chosen() : task, false);
       };
     }
-    const level = String(task.priority || "").toLowerCase();
-    // Only a high priority is marked: a dot on every row said «normal» a hundred times and nothing
-    // else. The rest is set and seen from the menu.
-    if (["high", "highest"].includes(level)) {
-      const rank = "high";
-      const dot = li.createSpan({ cls: `ft-priority is-${rank}` });
-      dot.setAttr("aria-label", t(rank === "high" ? "priorityHigh" : rank === "low" ? "priorityLow" : "priorityNormal"));
+    // Priority is not a thing this list shows or sets. One mark only: `priority: low` is what a
+    // robot leaves on a task it added — «not looked at yet». A click takes the mark off.
+    if (String(task.priority || "").toLowerCase() === "low") {
+      const dot = li.createSpan({ cls: "ft-priority is-low ft-bot" });
+      dot.setAttr("aria-label", t("botMark"));
       dot.onclick = (e) => {
         e.stopPropagation();
-        const menu = new Menu();
-        this.priorityItems(menu, this.selected.has(task) && this.selected.size > 1 ? this.chosen() : task);
-        showMenu(menu, e);
+        this.plugin.setPriority(this.selected.has(task) && this.selected.size > 1 ? this.tasksChosen() : task, null);
       };
     }
     if (task.due && task.due !== task.date) {
@@ -1727,15 +1771,18 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // The row of a task as it stands on screen: what a picker opened from a menu hangs on.
   rowLabel(task) {
-    const row = this.rows().find(([, x]) => x === task)?.[0];
+    // the row of the task itself, or the project's row that shows it as its step
+    const row = this.rows().find(([el, x]) => x === task || this.items?.get(el)?.task === task)?.[0];
     return row?.querySelector(".ft-date") || row || null;
   }
 
   // Sending a task off is one question — when do I look at it again? The day is not optional: the
   // status is written together with it, so a running task can never be one that silently has no way
   // back. Cancel the card and nothing was changed at all.
-  askReturn(tasks, el = null) {
-    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
+  async askReturn(tasks, el = null) {
+    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter((x) => x && !x.isProject);
+    // asked from the row's menu while its text is being edited: the editor closes (and saves) first
+    if (this.editing) { if (!this.endEdit) return; await this.endEdit(true, false); }
     const anchor = el || this.rowLabel(list[0]);
     if (!list.length || !anchor || this.editing) return;
     const min = today();
@@ -1761,7 +1808,8 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // The picker for the date of the row, or of every selected row when this is one of them.
-  editDate(task, el) {
+  async editDate(task, el) {
+    if (this.editing) { if (!this.endEdit) return; await this.endEdit(true, false); }
     if (this.editing) return;
     if (!this.selected.has(task)) this.clearSelection();
     const tasks = this.selected.size ? this.chosen() : [task];
@@ -1837,8 +1885,11 @@ class FocusRenderer extends MarkdownRenderChild {
       // mid-parse, no task at all) and the editor that opens next would hold that screen in place
       await this.cached(task, (x) => x.date === (day || null));
       await this.rerendered();
-      const row = next && this.rows().find(([, x]) => x.uid === next.uid);
-      if (row) this.editInline(row[1], row[0].querySelector(".ft-text"), null);
+      // the task's own row, or the project's row that shows it as its step — fresh from the render
+      const row = next && this.rows().find(([el, x]) => x.uid === next.uid || this.items.get(el)?.task?.uid === next.uid);
+      const task2 = row && (row[1].isProject ? this.items.get(row[0])?.task : row[1]);
+      const text2 = row?.[0].querySelector(":scope > .ft-text");
+      if (task2 && text2) this.editInline(task2, text2, null);
     };
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     this.editor(el, Math.min(offset ?? task.text.length, task.text.length), saveText, {
@@ -1878,10 +1929,14 @@ class FocusRenderer extends MarkdownRenderChild {
     const i = rows.findIndex(([el]) => el === li);
     if (i < 0) return null;
     const mine = rows[i][1].uid;
-    const after = rows.slice(i + 1).find(([, x]) => x.uid !== mine);
-    if (after) return after[1];
-    const before = rows.slice(0, i).reverse().find(([, x]) => x.uid !== mine);
-    return before ? before[1] : null;
+    // the task whose text the row edits: its own, or the step a project's row shows (an open
+    // project's row is the name alone — nothing to put a caret in)
+    const editable = ([el, x]) => (x.isProject ? this.items?.get(el)?.task : x) || null;
+    const ok = (pair) => pair[1].uid !== mine && !!editable(pair);
+    const after = rows.slice(i + 1).find(ok);
+    if (after) return editable(after);
+    const before = rows.slice(0, i).reverse().find(ok);
+    return before ? editable(before) : null;
   }
 
   // Waits (a moment, not forever) until the metadata cache shows the task the way it was just
@@ -2105,6 +2160,11 @@ class FocusRenderer extends MarkdownRenderChild {
     const p = this.plugin;
     menu.addItem((i) => i.setTitle(t("addStep")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: project.file.basename })));
     if (head) menu.addItem((i) => i.setTitle(t("rename")).setIcon("pencil").onClick(() => this.renameProject(head, area, project)));
+    if (head) menu.addItem((i) => i.setTitle(t("projectDate")).setIcon("calendar-days").onClick(() => {
+      const label = head.querySelector(":scope > .ft-date") || head;
+      this.editProjectDate(project, label);
+    }));
+    if (project.date) menu.addItem((i) => i.setTitle(t("projectNoDate")).setIcon("calendar-x").onClick(() => p.setProjectDate(project.file, null)));
     // Closing a project is the user's call, never the last box's: an emptied project waits for its
     // next step or for this. Only offered when nothing in it is open.
     if (!(project.tasks || []).length && !(project.later || []).length)
@@ -2176,17 +2236,11 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // The dot on a row is a mark, and a mark you cannot take off is a nuisance: every level, and
   // «no priority», are one click away — in the row's menu and on the dot itself.
+  // The robot's mark comes off from the menu too — only offered while one of the rows carries it.
   priorityItems(menu, tasks) {
-    const list = Array.isArray(tasks) ? tasks : [tasks];
-    const now = new Set(list.map((x) => String(x.priority || "").toLowerCase()));
-    const item = (title, icon, value) => menu.addItem((i) => {
-      i.setTitle(title).setIcon(icon).onClick(() => this.plugin.setPriority(list, value));
-      if (now.size === 1 && now.has(String(value || "")) && i.setChecked) i.setChecked(true);
-    });
-    item(t("priorityHigh"), "flame", "high");
-    item(t("priorityNormal"), "circle", "normal");
-    item(t("priorityLow"), "circle-dot", "low");
-    item(t("priorityNone"), "circle-slash", null);
+    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter((x) => x && !x.isProject);
+    if (!list.some((x) => String(x.priority || "").toLowerCase() === "low")) return;
+    menu.addItem((i) => i.setTitle(t("botMarkOff")).setIcon("circle-slash").onClick(() => this.plugin.setPriority(list, null)));
   }
 
   // The menu of a selected row when there are several: one date for all of them.
@@ -2195,8 +2249,8 @@ class FocusRenderer extends MarkdownRenderChild {
     const menu = new Menu();
     menu.addItem((i) => i.setTitle(t("selected", this.selected.size)).setIcon("list-checks").setDisabled(true));
     menu.addSeparator();
-    const chosen = this.chosen();
-    if (chosen.every((x) => x.status === STATUS_WAITING)) {
+    const chosen = this.tasksChosen();
+    if (chosen.length && chosen.every((x) => x.status === STATUS_WAITING)) {
       menu.addItem((i) => i.setTitle(t("returnWhen") + "…").setIcon("calendar-clock").onClick(() => this.askReturn(chosen)));
     } else {
       menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => this.dateSelection(day(0))));
@@ -2205,9 +2259,8 @@ class FocusRenderer extends MarkdownRenderChild {
       menu.addItem((i) => i.setTitle(t("noDate")).setIcon("calendar-x").onClick(() => this.dateSelection(null)));
     }
     menu.addSeparator();
-    this.priorityItems(menu, this.chosen());
-    menu.addSeparator();
-    this.progressItem(menu, this.chosen());
+    this.priorityItems(menu, chosen);
+    if (chosen.length) { menu.addSeparator(); this.progressItem(menu, chosen); }
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
     showMenu(menu, e);
@@ -2216,7 +2269,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // One step up or down among the rows it shares a list with (the steps of its project, or the loose
   // tasks of its area) — the same order a drag would write.
   async shift(task, by) {
-    const list = this.rows().map(([, x]) => x).filter((x) => listOf(x) === listOf(task));
+    const list = this.rows().map(([, x]) => x).filter((x) => !x.isProject && listOf(x) === listOf(task));
     const i = list.findIndex((x) => x.uid === task.uid);
     const to = i + by;
     if (i < 0 || to < 0 || to >= list.length) return;
@@ -2346,6 +2399,15 @@ class FocusRenderer extends MarkdownRenderChild {
       text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), target()); };
     }
     if (!text) li.createSpan({ cls: "ft-fill" });   // open: the name keeps its width, the room goes here
+    // A project with a day of its own shows that day, not its step's: it is what keeps the project
+    // in the focus or out of it. A click asks for another; the steps keep their days.
+    const own = () => {
+      const date = li.createSpan();
+      this.dateLabel(date, { date: project.date, at: null, status: STATUS_OPEN });
+      date.addClass("is-project");   // after dateLabel: it sets the classes afresh
+      date.setAttr("aria-label", t("projectDated"));
+      date.onclick = (e) => { if (picking(e)) return; e.stopPropagation(); this.editProjectDate(project, date); };
+    };
     // What the project holds beside today's steps hangs off its own row, as off an area's header:
     // the ⏳ opens its pile of what is not today, right under the row. Quiet — under the pointer,
     // lit while open, the count in its tooltip. Not in the area's ⏳ pile, where the row is that pile.
@@ -2357,13 +2419,16 @@ class FocusRenderer extends MarkdownRenderChild {
     // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
     this.plus(li, t("addStep"), async () => { if (steps.length > 1 && !open) await p.toggleShown(key, true); return target(); }, anchor);
     if (step) {
-      const date = li.createSpan();
-      this.dateLabel(date, step);
-      date.onclick = (e) => {
-        if (picking(e)) return;
-        e.stopPropagation();
-        this.editDate(step, date);
-      };
+      if (project.date) own();
+      else {
+        const date = li.createSpan();
+        this.dateLabel(date, step);
+        date.onclick = (e) => {
+          if (picking(e)) return;
+          e.stopPropagation();
+          this.editDate(step, date);
+        };
+      }
       text.onclick = (e) => this.textClick(step, text, e);
       li.onclick = (e) => {
         if (e.target.closest("a, input, .ft-box, .ft-grip, .ft-date, .ft-project-name, .ft-steps-more, .ft-plus") || picking(e)) return;
@@ -2375,7 +2440,10 @@ class FocusRenderer extends MarkdownRenderChild {
         this.select(step, e);
       });
       li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(step, e); };
-    } else li.oncontextmenu = projectMenu;
+    } else {
+      if (project.date) own();
+      li.oncontextmenu = projectMenu;
+    }
     this.track(li, { type: "project", area, project, task: step });
     this.grip(li, { type: "project", area, project, task: step });
     if (open) {
@@ -2561,7 +2629,7 @@ module.exports = class FocusTasks extends Plugin {
     this.registerEvent(this.app.vault.on("rename", (file, old) => this.renamed(file.path, old)));
     this.registerEvent(this.app.metadataCache.on("changed", () => this.forgetScan()));
     this.registerView(VIEW_TYPE, (leaf) => new FocusView(leaf, this));
-    this.registerMarkdownCodeBlockProcessor("focus-tasks", (src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath, null, this.blockPage(src, ctx.sourcePath))));
+    this.registerMarkdownCodeBlockProcessor("focus-tasks", (src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath, null, src || "")));
     this.addCommand({ id: "steps-blocks", name: t("cmdStepsBlocks"), callback: () => this.stepsBlocksEverywhere() });
     this.addRibbonIcon("list-checks", t("open"), () => this.openView());
     this.addSettingTab(new FocusSettingTab(this.app, this));
@@ -2687,7 +2755,7 @@ module.exports = class FocusTasks extends Plugin {
     const status = String(fm.status ?? "").trim().toLowerCase();
     // A closed project (`status: done`, by hand) is out of every list but the day's closed block.
     const done = project && (status === STATUS_DONE || status === STATUS_CANCELLED);
-    return { file, area: String(fm.area), project, done, doneDate: done ? day(fm.completedDate) : null };
+    return { file, area: String(fm.area), project, done, doneDate: done ? day(fm.completedDate) : null, date: project ? day(fm.scheduled) : null };
   }
 
   isTaskType(type) {
@@ -2811,7 +2879,7 @@ module.exports = class FocusTasks extends Plugin {
     for (const n of this.notes()) {
       const area = areaOf(n.area);
       if (!n.project) { if (!area.note) area.note = n.file; continue; }
-      const bucket = { file: n.file, area, tasks: [], later: [], done: [], waiting: [], running: 0 };
+      const bucket = { file: n.file, area, date: n.date || null, tasks: [], later: [], done: [], waiting: [], running: 0 };
       projects.set(n.file.path, bucket);
       area.projects.push(bucket);
     }
@@ -2872,9 +2940,13 @@ module.exports = class FocusTasks extends Plugin {
         // its steps are: behind the area's ⏳, empty or not.
         b.finished = !b.tasks.length && !b.later.length && b.done.some(inFocus);
         b.fresh = !b.tasks.length && !b.later.length && this.data.opened["fresh:" + b.file.path] === now;
-        const here = b.tasks.length || b.finished || b.fresh;
-        if (here) area.rows.push({ kind: "project", project: b, steps: b.tasks });
-        if (b.later.length || !here) area.ahead.push({ kind: "project", project: b, steps: b.later });
+        // A project with a day of its own goes by that day alone: due, it is in the focus with
+        // whatever steps it has; still ahead, it waits in the pile with all of them. Without one,
+        // its steps decide.
+        const here = b.date ? b.date <= now : b.tasks.length || b.finished || b.fresh;
+        if (here) area.rows.push({ kind: "project", project: b, steps: b.tasks.length || !b.date ? b.tasks : b.later });
+        if (!here) area.ahead.push({ kind: "project", project: b, steps: b.date ? [...b.tasks, ...b.later] : b.later });
+        else if (b.later.length && (b.tasks.length || !b.date)) area.ahead.push({ kind: "project", project: b, steps: b.later });
       }
       // One order per area, set by hand, projects and tasks alike; what has no seat yet goes after
       // what has — tasks first, by date and name, then projects by name — until a drag seats it.
@@ -3498,6 +3570,15 @@ module.exports = class FocusTasks extends Plugin {
   // → the function that puts this very task back.
   async removeTask(task) {
     return this.undoable(t("deleted", task.text), [task.file], () => this.trash(task.file));
+  }
+
+  // The project's own day, in its note (`scheduled`); null takes it off.
+  async setProjectDate(file, day) {
+    return this.track(t("aDate"), [file], async () => {
+      await this.app.fileManager.processFrontMatter(file, (fm) => { if (day) fm.scheduled = day; else delete fm.scheduled; });
+      this.forgetScan();
+      this.refresh();
+    });
   }
 
   // Several at once: one notice and one undo for all of them.

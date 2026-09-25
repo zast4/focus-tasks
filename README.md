@@ -51,7 +51,8 @@ What you can do in the view:
 | Complete a task | click its checkbox; for the rest of the day it stays where it lives — a step inside its project, a loose task at the bottom of its area — under a hairline, and the green ✓N on that row folds it away (its box brings it back) |
 | See what is ahead in a project | the ⏳ on the project's row (under the pointer; the count is in its tooltip) opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
-| Priority | the dot on a row opens the levels — high, normal, low, or none at all; the same is in the row's menu, and in the menu of a selection it sets them all |
+| A robot's mark | the list shows no priorities; the one dot it draws is `priority: low`, what a script or a bot leaves on a task it added and you have not looked at — a click on the dot (or «Take the robot's mark off» in the menu) removes it |
+| A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note, not to its step. Set, it alone decides whether the project is in the focus (due) or in the area's ⏳ pile with all of its steps; the steps keep their days |
 | Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** saves and leaves the row selected (a wiped row keeps its text) |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date, **⌘/Ctrl+5** «Waiting…» (the card asks when to look again); a day that takes the row out of its list sends it off at once and moves the editor to the next row |
@@ -239,9 +240,14 @@ passes (`--keep` leaves it).
 «проверь», а не «делай». Клик по ▷ забирает её в работу совсем («Взять обратно» в меню); чтобы
 отложить ещё раз, нажми на дату - откроется та же карточка.
 
-Точка на строке - приоритет задачи (`priority` в заметке). Клик по ней открывает уровни:
-высокий, обычный, низкий и «без приоритета» - последний убирает метку совсем. То же есть в меню
-строки и в меню выделения, где уровень ставится сразу всем выбранным.
+Приоритетов список не показывает. Единственная точка на строке - `priority: low`, метка задачи,
+которую добавил скрипт или бот и которую ты ещё не смотрел; клик по точке (или «Снять метку бота»
+в меню) убирает её.
+
+У проекта может быть своя дата: выдели его строку ручкой и нажми ⌘1-4, или «Дата проекта…» в его
+меню. Она пишется в заметку проекта, шаги свои дни не меняют. Пока она есть, она одна решает, в
+фокусе ли проект: наступила - проект в фокусе с тем, что у него есть; впереди - ждёт в ⏳ отложке
+области со всеми шагами.
 
 Проект, в котором сегодня закрыли последнюю задачу, тоже не исчезает: до конца дня он стоит
 на своём месте, вместо счётчика — зелёное «сделано N», а «+» рядом заводит следующий шаг.

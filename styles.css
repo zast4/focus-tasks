@@ -153,6 +153,8 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 /* The day a running task comes back is not a deadline and not today's work: it is quiet, whatever
    day it names. Green «Сегодня 20:00» in the «not today» group read as work for today. */
 .focus-tasks-view .ft-date.is-ahead { color: var(--text-muted); }
+/* A project's own day: what keeps the project in the focus, or out of it. */
+.focus-tasks-view .ft-date.is-project { font-weight: 600; }
 .focus-tasks-view .ft-date.is-empty { color: var(--text-faint); opacity: 0; }
 .focus-tasks-view li.ft-task:hover > .ft-date.is-empty { opacity: 0.8; }
 /* Today with no hour: nothing to read, a calendar to click under the pointer. */

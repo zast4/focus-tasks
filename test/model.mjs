@@ -1767,6 +1767,39 @@ test("a note two projects share gets a block for each; a block naming a missing 
   eq(missing.missing, "Nope", "and named, so the block can say so instead of showing everything");
 });
 
+test("a project with a day of its own goes by that day, its steps keep theirs", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch", { scheduled: DAY(3) });
+    taskNote(a, "Step today", { area: "Work", project: "Launch", scheduled: TODAY });
+    taskNote(a, "Step later", { area: "Work", project: "Launch" });
+    taskNote(a, "Keeps the area", { area: "Work", scheduled: TODAY });
+  });
+  const launchRow = (a) => a.rows.find((r) => r.kind === "project" && r.project.file.basename === "Launch");
+  let area = areaOf(await plugin.collect(false), "Work");
+  eq(focusProjects(area).map((b) => b.file.basename), [], "a project dated ahead is not in the focus, whatever its steps say");
+  const ahead = aheadProjects(area).find((r) => r.file.basename === "Launch");
+  eq(names(ahead.tasks).sort(), ["Step later", "Step today"], "it waits in the pile with all of its steps");
+  eq(plugin.tasks().find((x) => x.text === "Step today").date, TODAY, "the step's own day is untouched");
+  // its day comes: in the focus, with its steps
+  await plugin.setProjectDate(app.vault.getAbstractFileByPath("Areas/Launch.md"), TODAY);
+  area = areaOf(await plugin.collect(false), "Work");
+  eq(focusProjects(area).map((b) => b.file.basename), ["Launch"], "due, it is in the focus");
+  eq(names(launchRow(area).steps), ["Step today"], "showing today's steps");
+  // dated today with nothing due today: still in the focus, with what it has
+  await plugin.setDate(plugin.tasks().find((x) => x.text === "Step today"), null);
+  area = areaOf(await plugin.collect(false), "Work");
+  eq(names(launchRow(area).steps).sort(), ["Step later", "Step today"], "a due project with no due step shows its pile");
+  eq(aheadProjects(area).some((r) => r.file.basename === "Launch"), false, "and is not doubled in the pile");
+  // the day off: back to the steps' rule
+  await plugin.setProjectDate(app.vault.getAbstractFileByPath("Areas/Launch.md"), null);
+  eq("scheduled" in frontmatter(app, "Areas/Launch.md"), false, "the key is gone from the note");
+  area = areaOf(await plugin.collect(false), "Work");
+  eq(focusProjects(area).length, 0, "no due step, no day of its own: out of the focus");
+  await plugin.undo();
+  eq(frontmatter(app, "Areas/Launch.md").scheduled, TODAY, "⌘Z puts the day back");
+});
+
 test("the history does not grow without end", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");
