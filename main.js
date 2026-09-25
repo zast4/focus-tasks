@@ -23,7 +23,7 @@
  *    due below, folded; «Collapse all» / «Expand all» fold every area and project on screen.
  *
  * A click on a task's text edits it in place (Enter saves and opens the next row, Esc saves and
- * leaves the row selected; ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date; ⌘Z with nothing typed
+ * leaves the row selected; ⌘1 today, ⌘2 tomorrow, ⌘3 date picker, ⌘4 no date, ⌘5 «Waiting…»; ⌘Z with nothing typed
  * takes back the list's last change). The date on the right opens a date picker.
  * The checkbox completes a task (`status: done` + `completedDate`): the row leaves the list at once;
  * «✓ Done · N» at the bottom opens the day's closed work, by area, where a box brings a task back.
@@ -1028,6 +1028,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // Shift-click: every row from the anchor to this one (with Cmd/Ctrl too: added to the selection);
   // Cmd/Ctrl-click (or Shift with nothing clicked before): this row in or out.
   select(task, e) {
+    this.touch = (this.touch || 0) + 1;
     this.grab();
     const tasks = this.rows().map(([, x]) => x);
     const to = tasks.indexOf(task);
@@ -1077,6 +1078,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // A plain click on the grip: this row alone is selected, or dropped when it was the only one;
   // with Shift or ⌘ it is a click on the row.
   pick(task, e) {
+    this.touch = (this.touch || 0) + 1;
     if (picking(e)) return this.select(task, e);
     if (this.selected.size === 1 && this.selectedOf(task)) return this.clearSelection();
     this.mark(task);
@@ -1133,8 +1135,11 @@ class FocusRenderer extends MarkdownRenderChild {
     const last = (this.plugin.history || []).at(-1);
     const uids = last ? last.snap.map((x) => /^uid:\s*(\S+)/m.exec(x.text || "")?.[1]).filter(Boolean) : [];
     if (!(await this.plugin.undo()) || !uids.length) return;
+    // the rows come back a beat later; a selection made by hand in the meantime is newer and wins
+    const touch = this.touch || 0;
     await this.cachedAll(uids);
     await this.rerendered();
+    if ((this.touch || 0) !== touch) return;
     const back = this.rows().map(([, x]) => x).filter((x) => uids.includes(x.uid));
     if (back.length) this.mark(back);
   }
@@ -1153,7 +1158,8 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // While rows are selected and this tab is active: Mod+1 today, Mod+2 tomorrow, Mod+3 the picker,
-  // Mod+4 no date (as in the editor, over Obsidian's «go to tab»), Esc drops the selection. A menu, a
+  // Mod+4 no date, Mod+5 «Waiting…» (as in the editor, over Obsidian's «go to tab»), Esc drops the
+  // selection. A menu, a
   // modal or the editor pushes its own scope on top, so their keys come first.
   keys(on) {
     const keymap = this.plugin.app.keymap;
@@ -1165,7 +1171,8 @@ class FocusRenderer extends MarkdownRenderChild {
     if (this.scope) return;
     this.scope = new Scope(this.plugin.app.scope);
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
-    const run = { 1: () => this.dateSelection(day(0)), 2: () => this.dateSelection(day(1)), 3: () => this.pickDates(), 4: () => this.dateSelection(null) };
+    const run = { 1: () => this.dateSelection(day(0)), 2: () => this.dateSelection(day(1)), 3: () => this.pickDates(), 4: () => this.dateSelection(null),
+      5: () => this.askReturn(this.chosen()) };
     for (const [key, fn] of Object.entries(run)) {
       this.scope.register(["Mod"], key, () => {
         if (this.editing || !this.selected.size) return true;   // nothing of ours: let the app have the key
@@ -1223,6 +1230,7 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   clearSelection() {
+    this.touch = (this.touch || 0) + 1;
     this.cursor = null;
     if (!this.selected.size) return;
     this.selected.clear();
@@ -1842,6 +1850,12 @@ class FocusRenderer extends MarkdownRenderChild {
         const label = el.closest("li")?.querySelector(".ft-date");
         await close(true, false);
         if (label) this.editDate(task, label);
+      },
+      // ⌘5: hand the task off — the card asks when to look at it again
+      5: async (close) => {
+        const label = el.closest("li")?.querySelector(".ft-date");
+        await close(true, false);
+        this.askReturn(task, label);
       },
     }, (anchor) => this.rowAfter(el.closest("li"), anchor, inFocus(task) ? today() : null), () => this.markSoon(task));
   }

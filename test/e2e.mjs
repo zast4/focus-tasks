@@ -1003,6 +1003,9 @@ step("⌘Z takes back the last change: a tick, a date, a new row", async () => {
   await page.eval(`await app.commands.executeCommandById('focus-tasks:undo'); return true;`);
   await taskIs(name, { scheduled: was.scheduled ?? null }, "the Undo command took the date back");
   await idle();
+  await selectedAre([name]);   // the row it brought back is selected — a beat later, once the cache has it
+  await page.key("Escape");
+  await selectedAre([]);
 });
 
 step("the grip selects the row; ↑/↓ walk, Shift extends, Enter edits, Esc saves and reselects", async () => {
@@ -1125,6 +1128,41 @@ step("«Waiting…» on a selection sends every selected row off with one moment
   await idle();
   await selectedAre([]);
   for (const name of ["Call the bank", "Call the school"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
+  await settle();
+});
+
+step("⌘5 hands a task off: from the editor, and for a selection", async () => {
+  for (const [name, uid] of [["Call the vet", "ft-vet"], ["Call the bank", "ft-run-a"], ["Call the school", "ft-run-b"]])
+    fs.writeFileSync(path.join(VAULT, taskPath(name)), `---\nuid: ${uid}\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  await toPane();
+  for (const name of ["Call the vet", "Call the bank", "Call the school"]) await until(() => page.eval(`return !!__ft.task(${J(name)})`), `${name} on screen`);
+  await settle();
+  // in the editor: ⌘5 saves the text, closes it and opens the card
+  await click(`__ft.at(__ft.task('Call the vet').querySelector('.ft-text'))`);
+  await editing();
+  await page.key("Meta+5");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption') && /is-hh/.test(document.activeElement?.className || '')`), "the «look at it again» card from ⌘5");
+  await page.type("23");
+  await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
+  await page.type("59");
+  await page.key("Tab");
+  await taskIs("Call the vet", { status: "waiting", scheduled: `${TODAY}T23:59` }, "sent off from the editor");
+  await idle();
+  // for a selection: every selected row
+  await click(`__ft.grip(__ft.task('Call the bank'))`);
+  await selectedAre(["Call the bank"]);
+  await click(`__ft.at(__ft.task('Call the school'))`, "the second row", CMD);
+  await selectedAre(["Call the bank", "Call the school"]);
+  await page.key("Meta+5");
+  await until(() => page.eval(`return !!document.querySelector('.ft-picker .ft-picker-caption') && /is-hh/.test(document.activeElement?.className || '')`), "the card for the selection");
+  await page.type("23");
+  await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
+  await page.type("58");
+  await page.key("Tab");
+  for (const name of ["Call the bank", "Call the school"]) await taskIs(name, { status: "waiting", scheduled: `${TODAY}T23:58` }, "both sent off by ⌘5");
+  await idle();
+  await selectedAre([]);
+  for (const name of ["Call the vet", "Call the bank", "Call the school"]) fs.unlinkSync(path.join(VAULT, taskPath(name)));
   await settle();
 });
 
