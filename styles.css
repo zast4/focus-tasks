@@ -247,9 +247,10 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
   border: 1px dashed var(--background-modifier-border); color: var(--text-faint); font-size: 0.75em; cursor: default; }
 .focus-tasks-view .ft-foot-gap { flex: 1; }
 
-/* As a pane: room on the left for the grips, a readable width. */
+/* As a pane: room on the left for the grips, and the whole width of the pane — a project's name and
+   its step share one line, and a column in the middle of a wide screen wrapped them for nothing. */
 .focus-tasks-pane { padding: 0.5rem 1.2rem 2rem 2.2rem !important; }
-.focus-tasks-pane > .focus-tasks-view { max-width: 46rem; margin: 0 auto; }
+.focus-tasks-pane > .focus-tasks-view { max-width: none; margin: 0; }
 .focus-tasks-view .ft-onboarding { padding: 1.2em 0 0.4em; font-size: 1.05em; }
 
 /* What the frontmatter says and the row would otherwise hide: the priority dot right after the text
