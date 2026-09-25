@@ -3042,7 +3042,10 @@ module.exports = class FocusTasks extends Plugin {
     // What puts an area in the focus is today's open work: something due, something overdue, a
     // project emptied today. Nothing closed keeps it there — an open area with no row in it read as
     // «broken», and the day's closed work has its own block at the bottom.
-    if (!all && !every) areas = areas.filter((a) => a.rows.length);
+    // A project finished today keeps its empty row among the area's work — but it does not hold an
+    // area in the focus by itself: with nothing else open there, the area had nothing to do today.
+    const holds = (r) => !(r.kind === "project" && r.project.finished && !r.steps.length);
+    if (!all && !every) areas = areas.filter((a) => a.rows.some(holds));
     const rank = (list, key) => { const i = (list || []).indexOf(key); return i < 0 ? 1e9 : i; };
     const order = this.data.order;
     return areas.sort((a, b) => rank(order.areas, a.name) - rank(order.areas, b.name) || cmp(bare(a.name), bare(b.name)));

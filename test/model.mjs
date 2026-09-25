@@ -367,15 +367,14 @@ test("what was checked off today stays in its area, what was checked off before 
   eq(names(loose(area)), ["Open"]);
 });
 
-test("a step of a project checked off today keeps its area in the focus", async () => {
+test("a project's last step checked off today does not keep its area in the focus alone", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");
     projectNote(app, "Sport", "Marathon");
     taskNote(app, "Laced", { area: "Sport", project: "Marathon", status: "done", scheduled: TODAY, completedDate: TODAY });
   });
-  const areas = await plugin.collect(false);
-  eq(areaNames(areas), ["Sport"], "the area with only a completed step");
-  eq(names(areas[0].done), ["Laced"], "the done step shows in the area's Completed");
+  eq(areaNames(await plugin.collect(false)), [], "nothing open: the area is out of the focus");
+  eq(names(areaOf(await plugin.collect(true), "Sport").done), ["Laced"], "the done step is still counted in its area");
 });
 
 test("a task ticked out of the отложка does not drag its area into the focus", async () => {
@@ -399,7 +398,7 @@ test("a completed task remembers which project it came from", async () => {
     projectNote(app, "Sport", "Marathon");
     taskNote(app, "Laced", { area: "Sport", project: "Marathon", status: "done", scheduled: TODAY, completedDate: TODAY });
   });
-  const area = (await plugin.collect(false))[0];
+  const area = areaOf(await plugin.collect(true), "Sport");
   eq(area.done[0].project, "Marathon");
 });
 
@@ -970,9 +969,18 @@ test("evening: everything checked off today is counted in its area, and gone tom
     taskNote(a, "Two", { area: "Work", project: "Launch", status: "done", scheduled: TODAY, completedDate: TODAY });
     taskNote(a, "Three", { area: "Work", status: "done", scheduled: DAY(-1), completedDate: DAY(-1) });
   });
-  const area = (await plugin.collect(false))[0];
+  const area = areaOf(await plugin.collect(true), "Work");
   eq(names(area.done), ["One", "Two"], "today's two, the project's step included");
   eq(area.done.map((x) => x.project || ""), ["", "Launch"], "each row knows where it came from");
+});
+
+test("a project finished today alone does not keep its area in the focus", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    projectNote(a, "Work", "Launch");
+    taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", scheduled: TODAY, completedDate: TODAY });
+  });
+  eq(areaNames(await plugin.collect(false)), [], "nothing open in the area: out of the focus");
 });
 
 test("a project whose steps are all done today keeps its place, marked done", async () => {
@@ -980,6 +988,7 @@ test("a project whose steps are all done today keeps its place, marked done", as
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch");
     taskNote(a, "Last step", { area: "Work", project: "Launch", status: "done", scheduled: TODAY, completedDate: TODAY });
+    taskNote(a, "Other work", { area: "Work", scheduled: TODAY });   // keeps the area in the focus
   });
   const areas = await plugin.collect(false);
   eq(areaNames(areas), ["Work"]);
