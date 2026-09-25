@@ -91,7 +91,7 @@ const STRINGS = {
     cmdStepsBlocks: "Steps block in every project note", stepsBlocksAdded: "Steps block added to {0} notes", stepsBlocksNone: "Every project note already has its steps block",
     noStep: "no step yet", moreSteps: "{0} more — show them", hideSteps: "Hide the other steps", projectDone: "Project done",
     projectDoneNotice: "“{0}” is done", projectBack: "“{0}” is open again", doneButton: "Done", doneEmpty: "Nothing closed today yet", aProjectDone: "closing a project",
-    setDate: "Set a date", today: "Today", yesterday: "Yesterday", tomorrow: "Tomorrow",
+    setDate: "Set a date", todayShort: "today", today: "Today", yesterday: "Yesterday", tomorrow: "Tomorrow",
     newTask: "New task", newStep: "New step", newProject: "New project", actions: "Actions",
     projectFromNote: "Project from a note", deleteArea: "Delete area", rename: "Rename",
     openNote: "Open linked note", openFile: "Open task file", linkNote: "Link a note…", relinkNote: "Link another note…",
@@ -178,7 +178,7 @@ const STRINGS = {
     cmdStepsBlocks: "Блок шагов во все заметки проектов", stepsBlocksAdded: "Блок шагов добавлен в заметок: {0}", stepsBlocksNone: "Блок шагов уже есть во всех заметках проектов",
     noStep: "пока пусто", moreSteps: "ещё {0} — показать", hideSteps: "Скрыть остальные шаги", projectDone: "Проект выполнен",
     projectDoneNotice: "«{0}» выполнен", projectBack: "«{0}» снова открыт", doneButton: "Сделано", doneEmpty: "Сегодня ещё ничего не закрыто", aProjectDone: "закрытие проекта",
-    setDate: "Поставить дату", today: "Сегодня", yesterday: "Вчера", tomorrow: "Завтра",
+    setDate: "Поставить дату", todayShort: "сегодня", today: "Сегодня", yesterday: "Вчера", tomorrow: "Завтра",
     newTask: "Новая задача", newStep: "Новый шаг", newProject: "Новый проект", actions: "Действия",
     projectFromNote: "Проект из заметки", deleteArea: "Удалить область", rename: "Переименовать",
     openNote: "Открыть привязанную заметку", openFile: "Открыть файл задач", linkNote: "Привязать заметку…", relinkNote: "Привязать другую заметку…",
@@ -1745,13 +1745,9 @@ class FocusRenderer extends MarkdownRenderChild {
     // read as work for today, in a group that is explicitly not today.
     if (waitingBack(task)) el.addClass("is-ahead");
     else el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
+    // Today says so, short and green: a row with nothing on the right read as a task with no date.
     if (task.date === now) {
-      if (task.at) el.setText(task.at);
-      else {
-        // Nothing to read, but still the place to click for a new date: a faint calendar on hover.
-        el.addClass("is-bare");
-        setIcon(el, "calendar");
-      }
+      el.setText(task.at ? `${t("todayShort")} ${task.at}` : t("todayShort"));
       return;
     }
     if (task.date < now) {

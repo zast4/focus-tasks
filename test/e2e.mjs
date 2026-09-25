@@ -252,7 +252,7 @@ step("inline edit: ⌘1 dates today, Enter renames the note and opens the next r
   if (!steps || steps.indexOf("Lace them") !== steps.indexOf("Buy shoes fast") + 1)
     throw new Error("the new row did not stay under the one it was typed from: " + J(steps));
   await idle();
-  await until(() => page.eval(`return __ft.task('Lace them')?.querySelector('.ft-date.is-today.is-bare')?.textContent === ''`), "today says nothing on the right");
+  await until(() => page.eval(`return __ft.task('Lace them')?.querySelector('.ft-date.is-today')?.textContent === 'today'`), "today says «today», in green, on the right");
 });
 
 step("⌘2 tomorrow: the row leaves the focus at once and the editor moves on; ⌘4 no date", async () => {
@@ -858,6 +858,7 @@ step("link a note to a project: the name opens the note, the menu opens the proj
 });
 
 step("Area from a note makes the note itself the area (outside the folder too); Project from a note", async () => {
+  await toPane();   // the last step left a project's note in front — with its own steps block
   const before = read("Notes/Home.md");
   await page.eval(`app.plugins.plugins['focus-tasks'].areaFromNote(); return true;`);
   await modalInput(".prompt-input");
