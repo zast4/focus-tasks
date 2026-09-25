@@ -454,6 +454,31 @@ step("drag a task onto an area header moves it out of its project", async () => 
   await taskIs("Plan route", { area: "💪Sport", projects: null });
 });
 
+step("drag a row from today's list into the ⏳ pile clears its day; back among today's rows, it is today's", async () => {
+  fs.writeFileSync(path.join(VAULT, taskPath("Drag me off")), `---\nuid: ft-dm-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
+  fs.writeFileSync(path.join(VAULT, taskPath("Pile anchor")), `---\nuid: ft-dm-2\ntype: задача\nstatus: open\narea: "💪Sport"\n---\n`);
+  await toPane();
+  const key = await plugin(`return 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
+  const wasOpen = await plugin(`return !!p.data.opened[${J(key)}]`);
+  await plugin(`if (!p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Pile anchor')?.closest('.ft-future-block') && !!__ft.task('Drag me off')`), "both rows on screen");
+  const drag = async (from, to, what) => {
+    await settle();
+    const a = await pos(`__ft.grip(__ft.task(${J(from)}))`, "grip of " + from);
+    const b = await pos(`(() => { const r = __ft.task(${J(to)}).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height * 0.8 }; })()`, what);
+    await page.drag(a, b);
+  };
+  await drag("Drag me off", "Pile anchor", "under Pile anchor");
+  await taskIs("Drag me off", { scheduled: null }, "dropped into the pile: no day");
+  await until(() => page.eval(`return !!__ft.task('Drag me off')?.closest('.ft-future-block')`), "and the row is in the pile");
+  const today = await until(() => page.eval(`return __ft.all('li.ft-task', __ft.view()).find((e) => !e.closest('.ft-future-block, .ft-waiting, .ft-done-today, li.ft-later-steps') && e.querySelector(':scope > .ft-text:not(.ft-no-step)'))?.querySelector(':scope > .ft-text').textContent.trim() || null`), "a row of today's list");
+  await drag("Pile anchor", today, "under a row of today's list");
+  await taskIs("Pile anchor", { scheduled: TODAY }, "dropped among today's rows: today");
+  if (!wasOpen) await plugin(`if (p.data.opened[${J(key)}]) await p.toggleShown(${J(key)}, true); p.refresh(); return true;`);
+  for (const n of ["Drag me off", "Pile anchor"]) fs.unlinkSync(path.join(VAULT, taskPath(n)));
+  await settle();
+});
+
 step("drag a task below another keeps the order the plugin remembers", async () => {
   await until(() => page.eval(`return __ft.task('Plan route') && !__ft.task('Plan route').closest('.ft-steps')`), "Plan route among the area's tasks");
   const from = await pos(`__ft.grip(__ft.task('Run 5k'))`, "grip of Run 5k");

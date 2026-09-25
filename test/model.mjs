@@ -1800,6 +1800,25 @@ test("a project with a day of its own goes by that day, its steps keep theirs", 
   eq(frontmatter(app, "Areas/Launch.md").scheduled, TODAY, "⌘Z puts the day back");
 });
 
+test("a drop into the pile takes today's day off; a drop among today's rows gives today", async () => {
+  const { plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Today", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Mate", { area: "Sport", scheduled: TODAY });
+    taskNote(a, "Someday", { area: "Sport" });
+    taskNote(a, "Friday", { area: "Sport", scheduled: DAY(4) });
+  });
+  const t = (n) => plugin.tasks().find((x) => x.text === n);
+  await plugin.moveTasks([t("Today")], { into: false, after: true, target: { type: "task", task: t("Someday") }, pile: "ahead" });
+  eq(t("Today").date, null, "into the pile: no day");
+  await plugin.moveTasks([t("Someday")], { into: false, after: true, target: { type: "task", task: t("Mate") }, pile: "focus" });
+  eq(t("Someday").date, TODAY, "among today's rows: today");
+  await plugin.moveTasks([t("Friday")], { into: false, after: true, target: { type: "task", task: t("Today") }, pile: "ahead" });
+  eq(t("Friday").date, DAY(4), "a day ahead moved within the pile is kept");
+  await plugin.moveTasks([t("Mate")], { into: false, after: false, target: { type: "task", task: t("Someday") }, pile: "focus" });
+  eq(t("Mate").date, TODAY, "within today's list nothing changes");
+});
+
 test("the history does not grow without end", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Work");

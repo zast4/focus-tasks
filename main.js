@@ -1553,7 +1553,9 @@ class FocusRenderer extends MarkdownRenderChild {
     // A header takes the row in. A project's row takes a task in through its middle and lets it
     // pass above and below — a flat list has rows to be dropped between, not only headers.
     const into = target.type === "area-title" || (item.type === "task" && target.type === "project" && rel > 0.25 && rel < 0.75);
-    return { el: hit, target, into, after: !into && rel > 0.5 };
+    // which list the row lands in: a drop into the pile or into today's list says the day too
+    const pile = hit.matches(".ft-area-title") ? null : this.pileOf(hit);
+    return { el: hit, target, into, after: !into && rel > 0.5, pile };
   }
 
   drag(e, item, grip) {
@@ -3213,8 +3215,19 @@ module.exports = class FocusTasks extends Plugin {
     for (const task of tasks) {
       // the link is written the way Obsidian writes links, so two notes of the same name stay apart
       const link = file ? this.app.metadataCache.fileToLinktext(file, task.file.path) : null;
-      const ok = await this.setFields(task, { area, projects: link ? [`[[${link}]]`] : null });
-      if (ok) Object.assign(task, { area, project });
+      const fields = { area, projects: link ? [`[[${link}]]`] : null };
+      // Dropped into the pile, a task of today's list loses its day (it was today's by a date you
+      // cannot see); dropped among today's rows, a task from the pile gets today. A day still ahead
+      // moved within the pile is kept, and what waits in other hands keeps its day to come back.
+      if (task.status !== STATUS_WAITING) {
+        if (drop.pile === "ahead" && inFocus(task)) fields.scheduled = null;
+        if (drop.pile === "focus" && !inFocus(task)) fields.scheduled = today();
+      }
+      const ok = await this.setFields(task, fields);
+      if (ok) {
+        Object.assign(task, { area, project });
+        if ("scheduled" in fields) Object.assign(task, { date: fields.scheduled, at: null });
+      }
     }
     // Dropped into a project, but dated later than today? Its row hides behind the area's ⏳ — open
     // it, or the work you just moved vanishes from the screen.
