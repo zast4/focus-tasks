@@ -1158,6 +1158,36 @@ step("⌘2 in the editor sends the row away; ⌘Z brings it back, selected", asy
   await selectedAre([]);
 });
 
+step("⌘D copies the selected task right under it and selects the copy; in the editor it moves into the copy; ⌘Z takes a copy back", async () => {
+  await plugin(`await p.createTask('Twin me', { area: '💪Sport', project: null }, ${J(TODAY)}); return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Twin me')`), "the row on screen");
+  await settle();
+  await click(`__ft.grip(__ft.task('Twin me'))`);
+  await selectedAre(["Twin me"]);
+  await page.key("Meta+d");
+  await until(() => exists(taskPath("Twin me (2)")), "the copy's note");
+  const one = fm("Twin me"), two = fm("Twin me (2)");
+  if (!two.uid || two.uid === one.uid) throw new Error("the copy needs a uid of its own: " + J([one.uid, two.uid]));
+  if (two.title !== "Twin me" || two.scheduled !== one.scheduled || two.area !== one.area) throw new Error("the copy is not the same task: " + J(two));
+  await until(() => page.eval(`const r = __ft.all('li.ft-task', __ft.view()).map((e) => ({ t: e.querySelector('.ft-text')?.textContent.trim(), sel: e.classList.contains('is-selected'), uid: e.dataset.uid })); const i = r.findIndex((x) => x.t === 'Twin me' && !x.sel); return i >= 0 && r[i + 1]?.t === 'Twin me' && r[i + 1].sel`), "the copy right under the original, selected");
+  await page.key("Meta+z");
+  await until(() => !exists(taskPath("Twin me (2)")), "⌘Z took the copy back");
+  await idle();
+  await page.key("Escape");
+  await selectedAre([]);
+  // in the editor: the text is saved, the copy comes, the editor is in the copy
+  await click(`__ft.at(__ft.task('Twin me').querySelector('.ft-text'))`);
+  await editing();
+  await page.key("Meta+d");
+  await until(() => exists(taskPath("Twin me (2)")), "the copy from the editor");
+  await until(() => page.eval(`const e = document.querySelector('.focus-tasks-view .is-editing'); const li = e?.closest('li'); return !!li && li.previousElementSibling?.querySelector('.ft-text')?.textContent.trim() === 'Twin me'`), "the editor moved into the copy under the original");
+  await page.key("Escape");
+  await idle();
+  await page.key("Escape");
+  await selectedAre([]);
+});
+
 step("⌫ on a selected project's row deletes the project and all its tasks; Undo brings them back", async () => {
   await plugin(`
     const sport = (await p.collect(true)).find((a) => a.name === '💪Sport');

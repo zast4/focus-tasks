@@ -118,7 +118,7 @@ const STRINGS = {
     repeating: "This task repeats — install TaskNotes to close one occurrence, or remove `recurrence` from the note",
     undoKept: "Put back {0} of {1}: the rest changed in the meantime",
     allDone: "done {0}", undone: "Undone: {0}", nothingToUndo: "Nothing to undo", cmdUndo: "Undo the last change",
-    aDate: "the date", aPriority: "the priority", aRunning: "the status", aMove: "the move", aRename: "the new text", aDone: "completing the task", aNew: "the new task", aProject: "making it a project", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
+    aDate: "the date", aPriority: "the priority", aRunning: "the status", aMove: "the move", aRename: "the new text", aDone: "completing the task", aNew: "the new task", aCopy: "the copy", aProject: "making it a project", focusDone: "Nothing due today — {0} tasks are waiting", showAll: "Show them",
     orphans: "Without an area", orphansHelp: "These tasks are in no area, so the focus cannot show them. Pick a place for each.",
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
@@ -205,7 +205,7 @@ const STRINGS = {
     repeating: "Задача повторяется — закрыть одно вхождение может TaskNotes; либо убери `recurrence` из заметки",
     undoKept: "Вернул {0} из {1}: остальные с тех пор изменились",
     allDone: "сделано {0}", undone: "Отменено: {0}", nothingToUndo: "Нечего отменять", cmdUndo: "Отменить последнее действие",
-    aDate: "дата", aPriority: "приоритет", aRunning: "статус", aMove: "перенос", aRename: "текст задачи", aDone: "выполнение задачи", aNew: "новая задача", aProject: "превращение в проект", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
+    aDate: "дата", aPriority: "приоритет", aRunning: "статус", aMove: "перенос", aRename: "текст задачи", aDone: "выполнение задачи", aNew: "новая задача", aCopy: "копия", aProject: "превращение в проект", focusDone: "На сегодня ничего — в работе ещё {0}", showAll: "Показать",
     orphans: "Без области", orphansHelp: "Эти задачи ни в одной области, поэтому фокус их не показывает. Разложи их по местам.",
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
@@ -1318,7 +1318,7 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // While rows are selected and this tab is active: Mod+1 today, Mod+2 tomorrow, Mod+3 the picker,
-  // Mod+4 no date, Mod+5 «Waiting…» (as in the editor); with nothing selected they switch tabs. Esc drops the
+  // Mod+4 no date, Mod+5 «Waiting…», Mod+D a copy (as in the editor); with nothing selected they switch tabs. Esc drops the
   // selection. A menu, a
   // modal or the editor pushes its own scope on top, so their keys come first.
   keys(on) {
@@ -1335,7 +1335,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const pass = (ev, ctx) => this.plugin.app.scope.handleKey(ev, ctx);
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     const run = { 1: () => this.dateSelection(day(0)), 2: () => this.dateSelection(day(1)), 3: () => this.pickDates(), 4: () => this.dateSelection(null),
-      5: () => this.askReturn(this.tasksChosen()) };
+      5: () => this.askReturn(this.tasksChosen()), d: () => this.duplicateSelected() };
     for (const [key, fn] of Object.entries(run)) {
       this.scope.register(["Mod"], key, (ev, ctx) => {
         if (this.editing || !this.selected.size) return pass(ev, ctx);   // nothing of ours: the app's key
@@ -1381,6 +1381,19 @@ class FocusRenderer extends MarkdownRenderChild {
       this.scope.register(["Mod"], key, own(() => this.deleteSelected()));
     }
     keymap.pushScope(this.scope);
+  }
+
+  // ⌘D on selected rows: a copy of each right under it, and the copies are selected instead.
+  async duplicateSelected() {
+    const copies = await this.plugin.duplicateTasks(this.tasksChosen());
+    if (!copies?.length) return;
+    const touch = this.touch || 0;
+    const uids = copies.map((x) => x.uid);
+    await this.cachedAll(uids);
+    await this.rerendered();
+    if ((this.touch || 0) !== touch) return;
+    const rows = this.rows().map(([, x]) => x).filter((x) => uids.includes(x.uid));
+    if (rows.length) this.mark(rows);
   }
 
   // One date for the selected rows; the selection is done then. A selected project's row dates the
@@ -2063,6 +2076,19 @@ class FocusRenderer extends MarkdownRenderChild {
         const saved = await close(true, false);
         const now = this.plugin.tasks().find((x) => x.uid === task.uid) || saved || task;
         this.open(now.file);
+      },
+      // ⌘D: the text is saved, a copy lands right under the row and the editor moves into the copy
+      d: async (close) => {
+        await close(true, false);
+        const now = this.plugin.tasks().find((x) => x.uid === task.uid) || task;
+        const [copy] = await this.plugin.duplicateTasks([now]);
+        if (!copy) return;
+        await this.cachedAll([copy.uid]);
+        await this.rerendered();
+        const row = this.rows().find(([e, x]) => x.uid === copy.uid || this.items.get(e)?.task?.uid === copy.uid);
+        const t2 = row && (row[1].isProject ? this.items.get(row[0])?.task : row[1]);
+        const text2 = row?.[0].querySelector(":scope > .ft-text, :scope > .ft-line > .ft-text");
+        if (t2 && text2) this.editInline(t2, text2, null);
       },
       // ⌘5: hand the task off — the card asks when to look at it again
       5: async (close) => {
@@ -3826,6 +3852,34 @@ module.exports = class FocusTasks extends Plugin {
     if (!list.length) return null;
     return this.undoable(t("deletedMany", list.length), list.map((x) => x.file), async () => {
       for (const task of list) await this.trash(task.file);
+    });
+  }
+
+  // ⌘D: each task again, right under itself — the same note with a uid of its own, open whatever
+  // the original was (a copy of a done task is one to do again). One undo takes all the copies back.
+  async duplicateTasks(tasks) {
+    const seen = new Set();
+    const list = tasks.filter((x) => x.file && !seen.has(x.file.path) && seen.add(x.file.path));
+    if (!list.length) return [];
+    return this.track(t("aCopy"), [], async () => {
+      const copies = [];
+      for (const task of list) {
+        const live = this.app.vault.getAbstractFileByPath(task.file.path);
+        if (!live) continue;
+        const name = await this.freeName(live.basename);
+        const file = await this.app.vault.create(normalizePath(`${live.parent?.path || this.tasksFolder}/${name}.md`), await this.app.vault.read(live));
+        const uid = newUid();
+        await this.app.fileManager.processFrontMatter(file, (fm) => {
+          fm.uid = uid;
+          if (fm.status === STATUS_DONE) fm.status = STATUS_OPEN;
+          delete fm.completedDate;
+          if (name !== task.text) fm.title = task.text;   // «X (2)» on disk, «X» on the row
+        });
+        const copy = { ...task, file, uid, status: STATUS_OPEN };
+        await this.seatAfter(copy, task);
+        copies.push(copy);
+      }
+      return copies;
     });
   }
 
