@@ -1110,6 +1110,18 @@ step("the grip selects the row; ↑/↓ walk, Shift extends, Enter edits, Esc sa
   if (!exists(taskPath(b + " x"))) throw new Error("Esc on a wiped row deleted the task");
   await page.key("Escape");
   await selectedAre([]);
+  // with nothing selected ⌘1–5 and Esc are the app's: the pane hands them on (⌘2 = go to tab 2)
+  const handed = await page.eval(`
+    const r = app.workspace.getLeavesOfType('focus-tasks-view').find((l) => l.containerEl.contains(__ft.view()))?.view.renderer;
+    if (!r?.scope) return "no scope";
+    const seen = [];
+    const own = app.scope.handleKey;
+    app.scope.handleKey = function (ev, ctx) { seen.push(ctx.key); return false; };
+    try {
+      for (const key of ["1", "2", "5", "Escape"]) r.scope.handleKey(new KeyboardEvent("keydown", { key, metaKey: key !== "Escape" }), { modifiers: key === "Escape" ? "" : "Meta", key, vkey: key });
+    } finally { app.scope.handleKey = own; }
+    return seen.join(",")`);
+  if (handed !== "1,2,5,Escape") throw new Error("keys with nothing selected must reach the app, got " + handed);
 });
 
 step("⌘2 in the editor sends the row away; ⌘Z brings it back, selected", async () => {

@@ -1318,7 +1318,7 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   // While rows are selected and this tab is active: Mod+1 today, Mod+2 tomorrow, Mod+3 the picker,
-  // Mod+4 no date, Mod+5 «Waiting…» (as in the editor, over Obsidian's «go to tab»), Esc drops the
+  // Mod+4 no date, Mod+5 «Waiting…» (as in the editor); with nothing selected they switch tabs. Esc drops the
   // selection. A menu, a
   // modal or the editor pushes its own scope on top, so their keys come first.
   keys(on) {
@@ -1330,34 +1330,37 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     if (this.scope) return;
     this.scope = new Scope(this.plugin.app.scope);
+    // A handler bound to a key ends Obsidian's search whatever it returns, so a key that is not ours
+    // is handed on by hand: ⌘1…9 then switch tabs, ⌘F searches the note, as everywhere else.
+    const pass = (ev, ctx) => this.plugin.app.scope.handleKey(ev, ctx);
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     const run = { 1: () => this.dateSelection(day(0)), 2: () => this.dateSelection(day(1)), 3: () => this.pickDates(), 4: () => this.dateSelection(null),
       5: () => this.askReturn(this.tasksChosen()) };
     for (const [key, fn] of Object.entries(run)) {
-      this.scope.register(["Mod"], key, () => {
-        if (this.editing || !this.selected.size) return true;   // nothing of ours: let the app have the key
+      this.scope.register(["Mod"], key, (ev, ctx) => {
+        if (this.editing || !this.selected.size) return pass(ev, ctx);   // nothing of ours: the app's key
         fn();
         return false;
       });
     }
     // ⌘Z belongs to whatever is in front. Here it undoes the last change to the list; anywhere else
     // — a note, another pane — this scope is not pushed at all and the key never reaches us.
-    this.scope.register(["Mod"], "z", () => {
+    this.scope.register(["Mod"], "z", (ev, ctx) => {
       // in a note the key is the note's own unless rows are selected: the block is a guest there
-      if (this.editing || (!this.leaf && !this.selected.size)) return true;
+      if (this.editing || (!this.leaf && !this.selected.size)) return pass(ev, ctx);
       this.undo();
       return false;
     });
-    this.scope.register([], "Escape", () => {
-      if (this.editing || !this.selected.size) return true;  // the picker's own Esc, or nothing to clear
+    this.scope.register([], "Escape", (ev, ctx) => {
+      if (this.editing || !this.selected.size) return pass(ev, ctx);  // the picker's own Esc, or nothing to clear
       this.clearSelection();
       return false;
     });
     // With rows selected the keys work on them, as on a selected block in Notion: ↑/↓ walk (Shift
     // extends), Enter edits, ⌫ deletes. Not while something is typed in — the picker's field, say.
     const typing = () => { const a = document.activeElement; return !!a && (a.isContentEditable || /^(INPUT|TEXTAREA)$/.test(a.tagName)); };
-    const own = (fn) => () => {
-      if (this.editing || !this.selected.size || typing()) return true;
+    const own = (fn) => (ev, ctx) => {
+      if (this.editing || !this.selected.size || typing()) return pass(ev, ctx);
       fn();
       return false;
     };
@@ -1368,8 +1371,8 @@ class FocusRenderer extends MarkdownRenderChild {
     this.scope.register([], "Enter", own(() => this.editSelected()));
     this.scope.register(["Mod"], "Enter", own(() => this.openSelected()));
     // ⌘F in the pane finds in the list; in a note with a block it stays the note's own search
-    this.scope.register(["Mod"], "f", () => {
-      if (!this.leaf || this.editing || typing()) return true;
+    this.scope.register(["Mod"], "f", (ev, ctx) => {
+      if (!this.leaf || this.editing || typing()) return pass(ev, ctx);
       this.find();
       return false;
     });
