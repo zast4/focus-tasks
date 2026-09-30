@@ -1,0 +1,991 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Личный ИИ-штаб в Telegram · Даниил Засташков</title>
+<meta name="description" content="Система ИИ-агентов, которая живёт в Telegram, помнит всё о тебе и делает работу сама. 20 вещей, которые не умеет обычный ChatGPT.">
+<meta property="og:type" content="website">
+<meta property="og:title" content="20 вещей, которые не умеет обычный ChatGPT">
+<meta property="og:description" content="Личный ИИ-штаб в Telegram: помнит всё о тебе, работает сам в фоне и достраивается под любую задачу. Собери свой набор.">
+<meta property="og:image" content="https://raw.githack.com/zast4/focus-tasks/site/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:url" content="https://raw.githack.com/zast4/focus-tasks/site/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#0b0d12">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='16' fill='%23121620'/%3E%3Cpath d='M20 34l8 8 16-18' stroke='%235ee0b0' stroke-width='6' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0d12;
+    --bg2: #0e1118;
+    --s1: #12161f;
+    --s2: #171c27;
+    --s3: #1d2331;
+    --line: rgba(255,255,255,.08);
+    --line2: rgba(255,255,255,.14);
+    --text: #eef1f6;
+    --soft: #c3cad6;
+    --muted: #8e97a8;
+    --indigo: #8d9dff;
+    --mint: #5ee0b0;
+    --mint-ink: #07261b;
+    --rose: #f2849a;
+    --tg: #2f7cf6;
+    --radius: 18px;
+    --shadow: 0 1px 0 rgba(255,255,255,.04) inset, 0 12px 40px -12px rgba(0,0,0,.6);
+    --ease: cubic-bezier(.2,.7,.2,1);
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { overflow-x: clip; scroll-behavior: smooth; scroll-padding-top: 84px; -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 17px/1.6 Inter, -apple-system, "SF Pro Text", "Segoe UI", Roboto, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  a { color: inherit; }
+  svg { width: 1em; height: 1em; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+  :focus-visible { outline: 2.5px solid var(--indigo); outline-offset: 3px; border-radius: 10px; }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 clamp(18px, 4vw, 32px); }
+  section { padding: clamp(72px, 10vw, 120px) 0; position: relative; }
+  .eyebrow { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 600; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--mint); margin-bottom: 18px; }
+  .eyebrow::before { content: ""; width: 18px; height: 2px; border-radius: 2px; background: currentColor; }
+  h1, h2, h3 { margin: 0; letter-spacing: -.02em; font-weight: 700; }
+  h2 { font-size: clamp(30px, 4.2vw, 46px); line-height: 1.1; max-width: 860px; }
+  .sub { color: var(--soft); font-size: clamp(17px, 1.6vw, 19px); max-width: 720px; margin: 18px 0 0; }
+  .grad { background: linear-gradient(95deg, var(--indigo) 0%, #9fb2ff 35%, var(--mint) 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent; }
+
+  /* buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 52px; padding: 0 24px;
+    border-radius: 14px; font: 600 16px/1 Inter, system-ui, sans-serif; text-decoration: none; cursor: pointer; border: 0;
+    transition: transform .2s var(--ease), background .2s, box-shadow .2s, color .2s; white-space: nowrap; }
+  .btn svg { font-size: 18px; }
+  .btn-primary { background: var(--text); color: #0b0d12; box-shadow: 0 8px 30px -8px rgba(141,157,255,.45); }
+  .btn-primary:hover { transform: translateY(-1px); background: #fff; }
+  .btn-ghost { background: rgba(255,255,255,.04); color: var(--text); box-shadow: 0 0 0 1px var(--line2) inset; }
+  .btn-ghost:hover { background: rgba(255,255,255,.08); }
+  .btn-tg { background: var(--tg); color: #fff; box-shadow: 0 10px 30px -8px rgba(47,124,246,.6); height: 58px; padding: 0 28px; font-size: 17px; }
+  .btn-tg:hover { transform: translateY(-1px); background: #3c88ff; }
+
+  /* nav */
+  .nav { position: sticky; top: 0; z-index: 50; background: rgba(11,13,18,.72); backdrop-filter: saturate(160%) blur(14px);
+    -webkit-backdrop-filter: saturate(160%) blur(14px); border-bottom: 1px solid transparent; transition: border-color .3s; }
+  .nav.scrolled { border-bottom-color: var(--line); }
+  .nav .wrap { display: flex; align-items: center; gap: 28px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; letter-spacing: -.01em; text-decoration: none; }
+  .brand i { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-style: normal;
+    background: linear-gradient(135deg, #243056, #173c33); box-shadow: 0 0 0 1px var(--line2) inset; color: var(--mint); font-size: 15px; }
+  .nav-links { display: flex; gap: 4px; margin-left: 8px; }
+  .nav-links a { color: var(--muted); text-decoration: none; font-size: 15px; font-weight: 500; padding: 8px 12px; border-radius: 10px; transition: color .2s, background .2s; }
+  .nav-links a:hover { color: var(--text); background: rgba(255,255,255,.05); }
+  .kit { margin-left: auto; display: inline-flex; align-items: center; gap: 10px; height: 40px; padding: 0 8px 0 14px; border-radius: 12px;
+    text-decoration: none; font-size: 15px; font-weight: 600; color: var(--soft); background: rgba(255,255,255,.04);
+    box-shadow: 0 0 0 1px var(--line) inset; transition: background .2s, color .2s, box-shadow .2s; }
+  .kit:hover { color: var(--text); background: rgba(255,255,255,.08); }
+  .kit .num { min-width: 26px; height: 26px; padding: 0 7px; border-radius: 8px; display: grid; place-items: center;
+    background: var(--s3); color: var(--muted); font-size: 14px; transition: background .25s, color .25s; }
+  .kit.has { color: var(--text); box-shadow: 0 0 0 1px rgba(94,224,176,.45) inset; }
+  .kit.has .num { background: var(--mint); color: var(--mint-ink); }
+  .kit.bump .num { animation: bump .45s var(--ease); }
+  @keyframes bump { 40% { transform: scale(1.25); } }
+
+  /* hero */
+  .hero { position: relative; padding: clamp(56px, 8vw, 96px) 0 clamp(64px, 8vw, 104px); overflow: hidden; }
+  .hero::before { content: ""; position: absolute; inset: -20% -10% auto; height: 760px; pointer-events: none;
+    background: radial-gradient(600px 380px at 22% 30%, rgba(141,157,255,.20), transparent 70%),
+                radial-gradient(520px 360px at 78% 45%, rgba(94,224,176,.13), transparent 70%); }
+  .hero .wrap { position: relative; }
+  .hero-grid { display: grid; grid-template-columns: 1.08fr .92fr; gap: clamp(32px, 5vw, 72px); align-items: center; }
+  .hero h1 { font-size: clamp(38px, 5vw, 62px); line-height: 1.02; letter-spacing: -.035em; font-weight: 800; }
+  .hero .lead { font-size: clamp(18px, 1.8vw, 21px); color: var(--soft); margin: 24px 0 34px; max-width: 560px; }
+  .hero .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+  .by { display: flex; align-items: center; gap: 12px; margin-bottom: 26px; color: var(--muted); font-size: 15px; }
+  .by .av { width: 36px; height: 36px; border-radius: 50%; display: grid; place-items: center; font-weight: 700; font-size: 14px;
+    background: linear-gradient(135deg, var(--indigo), var(--mint)); color: #0b0d12; }
+  .by b { color: var(--text); font-weight: 600; }
+  .facts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; margin-top: 56px; border-radius: 16px; overflow: hidden;
+    background: var(--line); box-shadow: 0 0 0 1px var(--line); }
+  .facts div { background: var(--bg2); padding: 18px 20px; }
+  .facts b { display: block; font-size: 26px; letter-spacing: -.02em; font-weight: 700; }
+  .facts span { color: var(--muted); font-size: 14.5px; }
+
+  /* chat mock */
+  .phone { background: linear-gradient(180deg, #141925, #10141c); border-radius: 28px; padding: 14px; box-shadow: 0 0 0 1px var(--line2), 0 40px 80px -30px rgba(0,0,0,.8), 0 0 120px -40px rgba(141,157,255,.35); }
+  .phone-top { display: flex; align-items: center; gap: 10px; padding: 6px 8px 14px; border-bottom: 1px solid var(--line); }
+  .phone-top .dot { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: linear-gradient(135deg, #2b3a6b, #1c4a3d); font-size: 17px; }
+  .phone-top b { font-size: 15px; display: block; line-height: 1.2; }
+  .phone-top span { font-size: 13px; color: var(--mint); }
+  .thread { display: flex; flex-direction: column; gap: 10px; padding: 16px 6px 8px; font-size: 15px; line-height: 1.5; }
+  .m { max-width: 86%; padding: 10px 14px; border-radius: 16px; position: relative; }
+  .m.u { align-self: flex-end; background: var(--tg); color: #fff; border-bottom-right-radius: 6px; }
+  .m.a { align-self: flex-start; background: var(--s3); color: var(--text); border-bottom-left-radius: 6px; box-shadow: 0 0 0 1px var(--line) inset; }
+  .m .t { float: right; font-size: 11.5px; opacity: .6; margin: 8px 0 -4px 12px; line-height: 1; }
+  .m.sys { align-self: center; background: none; color: var(--muted); font-size: 12.5px; padding: 2px 10px; }
+
+  /* catalog */
+  .cat-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; flex-wrap: wrap; }
+  .hint { display: inline-flex; align-items: center; gap: 10px; margin-top: 22px; padding: 10px 14px; border-radius: 12px;
+    background: rgba(94,224,176,.08); color: #bff3df; font-size: 15px; box-shadow: 0 0 0 1px rgba(94,224,176,.22) inset; }
+  .hint svg { color: var(--mint); font-size: 18px; }
+  .tabs { position: sticky; top: 64px; z-index: 20; margin: 40px 0 26px; padding: 10px 0 12px; }
+  .tabs::before { content: ""; position: absolute; top: 0; bottom: 0; left: 50%; width: 100vw; transform: translateX(-50%); background: rgba(11,13,18,.86); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); z-index: -1; opacity: 0; transition: opacity .2s; }
+  .tabs.stuck::before { opacity: 1; }
+  .tabs-in { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 4px; border-radius: 14px; background: var(--s1); box-shadow: 0 0 0 1px var(--line) inset; width: max-content; max-width: 100%; }
+  .tabs-in::-webkit-scrollbar { display: none; }
+  .tabs button { font: 500 15px/1 Inter, system-ui, sans-serif; color: var(--muted); background: none; border: 0; cursor: pointer;
+    height: 40px; padding: 0 14px; border-radius: 10px; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; transition: color .2s, background .2s; }
+  .tabs button:hover { color: var(--text); }
+  .tabs button.on { background: var(--s3); color: var(--text); box-shadow: 0 0 0 1px var(--line2) inset; }
+  .tabs .n { font-size: 12.5px; color: var(--muted); background: rgba(255,255,255,.06); border-radius: 6px; padding: 2px 6px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: linear-gradient(180deg, var(--s1), #10131b); border-radius: var(--radius); padding: 22px; display: flex; flex-direction: column;
+    box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); transition: box-shadow .25s, transform .25s var(--ease); }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line2) inset, var(--shadow); }
+  .card[hidden] { display: none; }
+  .card.custom { background: transparent; box-shadow: 0 0 0 1.5px var(--line2) inset; border: 0; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.015) 0 12px, transparent 12px 24px); }
+  .card-h { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .card .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; flex: none;
+    background: var(--s3); box-shadow: 0 0 0 1px var(--line) inset; }
+  .card h3 { font-size: 18.5px; line-height: 1.25; }
+  .plain { display: flex; gap: 10px; margin: 0 0 16px; font-size: 14.5px; line-height: 1.5; color: var(--muted); }
+  .plain b { color: #b4bccb; font-weight: 600; }
+  .plain .x { flex: none; width: 20px; height: 20px; border-radius: 6px; display: grid; place-items: center; font-size: 10px; margin-top: 1px;
+    color: var(--rose); background: rgba(242,132,154,.12); }
+  .chat { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+  .bubble { padding: 10px 14px; border-radius: 16px; font-size: 15px; line-height: 1.5; }
+  .bubble.me { align-self: flex-end; max-width: 92%; background: var(--tg); color: #fff; border-bottom-right-radius: 6px; }
+  .bubble.bot { background: var(--s3); color: var(--text); border-bottom-left-radius: 6px; box-shadow: 0 0 0 1px var(--line) inset; }
+  .bubble .who { display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--mint); margin-bottom: 4px; }
+  .bubble .who::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--mint); box-shadow: 0 0 10px var(--mint); }
+  .act { align-self: flex-end; display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--soft); padding: 7px 12px;
+    border-radius: 999px; background: rgba(47,124,246,.12); box-shadow: 0 0 0 1px rgba(47,124,246,.35) inset; }
+  .act svg { color: #7fb0ff; fill: #7fb0ff; stroke: none; font-size: 14px; }
+  .uses { list-style: none; padding: 0; margin: 0 0 18px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .uses li { font-size: 12.5px; color: #cdb8ee; background: rgba(199,146,234,.10); padding: 3px 9px; border-radius: 7px; }
+  .pick { margin-top: auto; height: 46px; border-radius: 12px; border: 0; cursor: pointer; font: 600 15px/1 Inter, system-ui, sans-serif;
+    color: var(--text); background: rgba(255,255,255,.05); box-shadow: 0 0 0 1px var(--line2) inset; transition: background .2s, color .2s, box-shadow .2s; }
+  .pick > span { display: inline-flex; align-items: center; gap: 8px; }
+  .pick svg { font-size: 17px; }
+  .pick .pick-on { display: none; }
+  .pick:hover { background: rgba(255,255,255,.09); }
+  .card.sel { box-shadow: 0 0 0 1.5px rgba(94,224,176,.7) inset, 0 12px 40px -14px rgba(94,224,176,.25); }
+  .card.sel .pick { background: var(--mint); color: var(--mint-ink); box-shadow: none; }
+  .card.sel .pick .pick-on { display: inline-flex; }
+  .card.sel .pick .pick-off { display: none; }
+
+  /* usp */
+  .usp { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(28px, 5vw, 64px); align-items: start; }
+  .steps { list-style: none; margin: 34px 0 0; padding: 0; display: grid; gap: 0; }
+  .steps li { position: relative; padding: 0 0 26px 52px; }
+  .steps li:last-child { padding-bottom: 0; }
+  .steps li::before { counter-increment: s; content: counter(s); position: absolute; left: 0; top: 0; width: 34px; height: 34px; border-radius: 10px;
+    display: grid; place-items: center; font-weight: 700; font-size: 15px; background: var(--s3); color: var(--mint); box-shadow: 0 0 0 1px var(--line2) inset; }
+  .steps li:not(:last-child)::after { content: ""; position: absolute; left: 17px; top: 40px; bottom: 6px; width: 1px; background: var(--line2); }
+  .steps { counter-reset: s; }
+  .steps b { display: block; font-size: 17.5px; margin-bottom: 4px; }
+  .steps span { color: var(--soft); font-size: 15.5px; }
+  .panel { background: linear-gradient(180deg, var(--s1), #0f131a); border-radius: 22px; padding: 26px; box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); }
+  .panel + .panel { margin-top: 16px; }
+  .panel h4 { margin: 0 0 14px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; gap: 8px; }
+  .panel.ok h4 { color: var(--mint); }
+  .tags { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tags span { font-size: 14.5px; padding: 7px 12px; border-radius: 10px; background: rgba(255,255,255,.04); box-shadow: 0 0 0 1px var(--line) inset; color: var(--soft); }
+  .panel.ok .tags span { color: #c9f5e4; background: rgba(94,224,176,.08); box-shadow: 0 0 0 1px rgba(94,224,176,.25) inset; }
+  .tags span.more { color: var(--muted); font-style: italic; box-shadow: 0 0 0 1px var(--line) inset; background: none; }
+
+  /* hub + combos */
+  .hub { display: grid; grid-template-columns: 1fr minmax(260px, 340px) 1fr; gap: 18px; align-items: center; margin-top: 48px; }
+  .spokes { display: grid; gap: 12px; }
+  .spoke { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-radius: 14px; background: var(--s1); box-shadow: 0 0 0 1px var(--line) inset; font-size: 15px; color: var(--soft); }
+  .spoke b { color: var(--text); display: block; font-size: 15.5px; }
+  .spoke .e { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--s3); font-size: 18px; flex: none; }
+  .core { position: relative; text-align: center; padding: 34px 24px; border-radius: 26px;
+    background: radial-gradient(120% 90% at 50% 0%, rgba(141,157,255,.22), rgba(94,224,176,.06) 60%, transparent), var(--s1);
+    box-shadow: 0 0 0 1px rgba(141,157,255,.35) inset, 0 30px 80px -30px rgba(141,157,255,.45); }
+  .core .orb { width: 64px; height: 64px; margin: 0 auto 14px; border-radius: 20px; display: grid; place-items: center; font-size: 30px;
+    background: linear-gradient(135deg, #2a3668, #1b4a3e); box-shadow: 0 0 0 1px var(--line2) inset; }
+  .core h3 { font-size: 22px; margin-bottom: 8px; }
+  .core p { margin: 0; color: var(--soft); font-size: 15px; }
+  .combos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 56px; }
+  .combo { padding: 24px; border-radius: var(--radius); background: var(--s1); box-shadow: 0 0 0 1px var(--line) inset; }
+  .chain { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 16px; }
+  .chain span { font-size: 13.5px; padding: 4px 10px; border-radius: 8px; background: var(--s3); color: var(--soft); box-shadow: 0 0 0 1px var(--line) inset; }
+  .chain i { font-style: normal; color: var(--muted); font-size: 13px; }
+  .combo h3 { font-size: 18.5px; margin-bottom: 8px; }
+  .combo p { margin: 0; color: var(--soft); font-size: 15.5px; }
+  .h3-sec { font-size: 22px; margin-top: 72px; }
+
+  /* offer */
+  .offers { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 44px; }
+  .offer { position: relative; text-align: left; padding: 28px; border-radius: 22px; cursor: pointer; border: 0; color: inherit; font: inherit;
+    background: var(--s1); box-shadow: 0 0 0 1px var(--line) inset; transition: box-shadow .2s, background .2s; }
+  .offer:hover { box-shadow: 0 0 0 1px var(--line2) inset; }
+  .offer .radio { position: absolute; top: 26px; right: 26px; width: 24px; height: 24px; border-radius: 50%; box-shadow: 0 0 0 2px var(--line2) inset; display: grid; place-items: center; }
+  .offer .radio::after { content: ""; width: 10px; height: 10px; border-radius: 50%; background: var(--mint-ink); transform: scale(0); transition: transform .2s var(--ease); }
+  .offer[aria-checked="true"] { background: linear-gradient(180deg, rgba(94,224,176,.08), var(--s1)); box-shadow: 0 0 0 1.5px rgba(94,224,176,.7) inset; }
+  .offer[aria-checked="true"] .radio { background: var(--mint); box-shadow: none; }
+  .offer[aria-checked="true"] .radio::after { transform: scale(1); }
+  .offer .tag { display: inline-block; font-size: 12.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+  .offer h3 { font-size: 24px; margin-bottom: 6px; }
+  .offer .who { color: #ffc98f; font-size: 15.5px; margin-bottom: 18px; }
+  .offer ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .offer li { display: flex; gap: 10px; font-size: 15.5px; color: var(--soft); }
+  .offer li svg { color: var(--mint); font-size: 18px; margin-top: 3px; }
+  .models { margin-top: 30px; display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; padding: 22px 24px; border-radius: 18px; background: var(--s1); box-shadow: 0 0 0 1px var(--line) inset; }
+  .models p { margin: 0; flex: 1 1 360px; color: var(--soft); font-size: 15.5px; }
+  .models p b { color: var(--text); }
+  .seg { display: inline-flex; padding: 4px; gap: 4px; border-radius: 12px; background: var(--bg); box-shadow: 0 0 0 1px var(--line) inset; flex-wrap: wrap; }
+  .seg button { font: 500 14.5px/1 Inter, system-ui, sans-serif; color: var(--muted); background: none; border: 0; height: 38px; padding: 0 14px; border-radius: 9px; cursor: pointer; transition: color .2s, background .2s; }
+  .seg button:hover { color: var(--text); }
+  .seg button[aria-checked="true"] { background: var(--mint); color: var(--mint-ink); font-weight: 600; }
+
+  /* audience */
+  .ask { display: grid; grid-template-columns: 1fr 1.2fr; gap: 40px; align-items: center; padding: clamp(28px, 4vw, 44px); border-radius: 26px;
+    background: radial-gradient(90% 120% at 0% 0%, rgba(141,157,255,.14), transparent 60%), var(--s1); box-shadow: 0 0 0 1px var(--line) inset; }
+  .ask h2 { font-size: clamp(26px, 3vw, 34px); }
+  .ask ol { margin: 0; padding: 0; list-style: none; counter-reset: q; display: grid; gap: 14px; }
+  .ask li { counter-increment: q; display: flex; gap: 14px; align-items: flex-start; font-size: 17px; color: var(--soft); }
+  .ask li::before { content: counter(q); flex: none; width: 30px; height: 30px; border-radius: 9px; display: grid; place-items: center;
+    font-weight: 700; font-size: 14px; color: var(--indigo); background: rgba(141,157,255,.12); }
+
+  /* checkout */
+  .checkout { display: grid; grid-template-columns: 1fr 1fr; gap: clamp(24px, 4vw, 48px); padding: clamp(28px, 4vw, 48px); border-radius: 28px;
+    background: radial-gradient(80% 100% at 100% 0%, rgba(47,124,246,.16), transparent 60%), radial-gradient(70% 90% at 0% 100%, rgba(94,224,176,.10), transparent 60%), var(--s1);
+    box-shadow: 0 0 0 1px var(--line2) inset, 0 40px 100px -40px rgba(47,124,246,.35); }
+  .howto { list-style: none; padding: 0; margin: 26px 0 30px; display: grid; gap: 12px; counter-reset: h; }
+  .howto li { counter-increment: h; display: flex; align-items: center; gap: 12px; color: var(--soft); font-size: 16px; }
+  .howto li::before { content: counter(h); width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; flex: none;
+    font-size: 13.5px; font-weight: 700; background: var(--s3); color: var(--mint); box-shadow: 0 0 0 1px var(--line2) inset; }
+  .howto li.done::before { content: "✓"; background: var(--mint); color: var(--mint-ink); box-shadow: none; }
+  .howto a { color: var(--indigo); text-decoration: none; border-bottom: 1px solid rgba(141,157,255,.4); }
+  .note { color: var(--muted); font-size: 14.5px; margin: 14px 0 0; }
+  .kitbox { background: var(--bg2); border-radius: 20px; padding: 22px; box-shadow: 0 0 0 1px var(--line) inset; }
+  .kitbox h4 { margin: 0 0 12px; font-size: 13px; letter-spacing: .1em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+  .kitbox h4 span { color: var(--mint); letter-spacing: 0; text-transform: none; font-size: 14px; }
+  #kitlist { list-style: none; margin: 0; padding: 0; }
+  #kitlist li { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); font-size: 15.5px; animation: in .3s var(--ease); }
+  #kitlist li .e { width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center; background: var(--s3); font-size: 15px; flex: none; }
+  #kitlist li button { margin-left: auto; width: 30px; height: 30px; border-radius: 8px; border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 18px; display: grid; place-items: center; }
+  #kitlist li button:hover { background: rgba(255,255,255,.06); color: var(--text); }
+  .empty { color: var(--muted); font-size: 15px; padding: 6px 0 10px; }
+  .empty a { color: var(--indigo); }
+  .meta { display: grid; gap: 6px; margin-top: 14px; font-size: 14.5px; color: var(--muted); }
+  .meta b { color: var(--soft); font-weight: 600; }
+  .meta a { color: var(--indigo); }
+  .preview { margin-top: 18px; }
+  .preview summary { cursor: pointer; color: var(--muted); font-size: 14px; list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+  .preview summary::-webkit-details-marker { display: none; }
+  .preview summary::before { content: "›"; display: inline-block; transition: transform .2s; font-size: 18px; line-height: 1; }
+  .preview[open] summary::before { transform: rotate(90deg); }
+  .preview pre { margin: 10px 0 0; white-space: pre-wrap; font: 14px/1.55 Inter, system-ui, sans-serif; color: #fff; background: var(--tg);
+    padding: 12px 14px; border-radius: 16px 16px 6px 16px; }
+  @keyframes in { from { opacity: 0; transform: translateY(4px); } }
+
+  footer { padding: 40px 0 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14.5px; }
+  footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
+  footer a { color: var(--soft); }
+
+  /* toast */
+  .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
+    display: inline-flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 14px; font-size: 15px; white-space: nowrap;
+    background: #1d2433; color: var(--text); box-shadow: 0 0 0 1px var(--line2) inset, 0 16px 40px -10px rgba(0,0,0,.7); transition: opacity .25s, transform .25s var(--ease); }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; }
+  .toast a { color: var(--mint); font-weight: 600; text-decoration: none; }
+  .toast svg { color: var(--mint); font-size: 18px; }
+
+  /* reveal */
+  .js .reveal { opacity: 0; transform: translateY(14px); transition: opacity .6s var(--ease), transform .6s var(--ease); }
+  .js .reveal.in { opacity: 1; transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+    .js .reveal { opacity: 1; transform: none; transition: none; }
+    * { animation: none !important; transition: none !important; }
+  }
+
+  @media (max-width: 1020px) {
+    .grid, .combos { grid-template-columns: repeat(2, 1fr); }
+    .hero-grid { grid-template-columns: 1fr; }
+    .hero .phone { max-width: 520px; }
+    .usp, .checkout, .ask { grid-template-columns: 1fr; }
+    .hub { grid-template-columns: 1fr; }
+    .core { order: -1; }
+    .nav-links { display: none; }
+  }
+  @media (max-width: 680px) {
+    body { font-size: 16px; }
+    .grid, .combos, .offers { grid-template-columns: 1fr; }
+    .facts { grid-template-columns: repeat(2, 1fr); }
+    .hero .actions .btn { flex: 1 1 100%; }
+    .btn-tg { width: 100%; }
+    .seg { display: grid; grid-template-columns: 1fr; width: 100%; }
+    .brand { font-size: 16px; }
+    .tabs { margin: 28px -18px 20px; padding: 10px 18px 12px; }
+    .tabs-in { width: auto; }
+  }
+</style>
+</head>
+<body>
+<script>document.documentElement.classList.add('js'); if (navigator.webdriver) document.documentElement.classList.remove('js');</script>
+
+<nav class="nav" id="nav" aria-label="Навигация">
+  <div class="wrap">
+    <a class="brand" href="#top"><i>✓</i>ИИ-штаб</a>
+    <div class="nav-links">
+      <a href="#tools">Что умеет</a>
+      <a href="#usp">Отличие</a>
+      <a href="#links">Связки</a>
+      <a href="#offer">Форматы</a>
+    </div>
+    <a class="kit" id="kit" href="#contact" aria-label="Мой набор"><span class="lbl">Мой набор</span><span class="num" id="kitnum">0</span></a>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap hero-grid">
+    <div>
+      <div class="by"><span class="av">ДЗ</span><span><b>Даниил Засташков</b> · собрал и пользуюсь каждый день</span></div>
+      <h1>20 вещей, которые <span class="grad">не умеет обычный ChatGPT</span></h1>
+      <p class="lead">Моя система из ИИ-агентов живёт в Telegram, помнит всё обо мне, работает сама в фоне и достраивается под любую новую задачу.</p>
+      <div class="actions">
+        <a class="btn btn-primary" href="#tools">Смотреть, что она умеет
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></a>
+        <a class="btn btn-ghost" href="#usp">Чем это лучше ChatGPT</a>
+      </div>
+    </div>
+    <div class="phone" aria-hidden="true">
+      <div class="phone-top"><span class="dot">✓</span><div><b>ИИ-штаб</b><span>в сети</span></div></div>
+      <div class="thread">
+        <div class="m sys">сегодня</div>
+        <div class="m u">Доброе утро<span class="t">08:12</span></div>
+        <div class="m a">Спал 6 ч 40 мин, пульс выше обычного. Три встречи после обеда, так что тяжёлое лучше до 13:00. Предлагаю такой план…<span class="t">08:12</span></div>
+        <div class="m u">Встреча с Лёшей в четверг в 15, дорога 40 минут<span class="t">11:30</span></div>
+        <div class="m a">Готово: встреча и блок «Дорога» с 14:20 в календаре ✓<span class="t">11:30</span></div>
+        <div class="m a">Итог дня: 4 ч проекты, 1 ч созвоны. План выполнен на 80% 👏<span class="t">19:00</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="wrap">
+    <div class="facts">
+      <div><b>20</b><span>готовых инструментов</span></div>
+      <div><b>24/7</b><span>работает сам на сервере</span></div>
+      <div><b>2</b><span>нейросети в связке</span></div>
+      <div><b>1</b><span>чат в Telegram для всего</span></div>
+    </div>
+  </div>
+</header>
+
+<section id="tools">
+  <div class="wrap">
+    <div class="eyebrow">Каталог</div>
+    <h2>Что агент добавляет к обычному чату</h2>
+    <p class="sub">Обычный чат только отвечает. Агент действует в твоих сервисах, видит твои данные, работает в фоне и пишет первым. В каждой карточке видно, где обычный чат останавливается.</p>
+    <div class="hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Жми «Хочу себе» на том, что зацепило. В конце страницы из этого соберётся твой набор.</div>
+
+    <div class="tabs"><div class="tabs-in" role="tablist" id="tabs" aria-label="Фильтр по сферам"><button type="button" role="tab" data-f="all" aria-selected="true" class=on>Все<span class="n">20</span></button><button type="button" role="tab" data-f="health" aria-selected="false">Здоровье<span class="n">2</span></button><button type="button" role="tab" data-f="day" aria-selected="false">День и время<span class="n">4</span></button><button type="button" role="tab" data-f="work" aria-selected="false">Работа<span class="n">4</span></button><button type="button" role="tab" data-f="know" aria-selected="false">Знания<span class="n">4</span></button><button type="button" role="tab" data-f="people" aria-selected="false">Люди<span class="n">3</span></button><button type="button" role="tab" data-f="life" aria-selected="false">Быт и деньги<span class="n">3</span></button></div></div>
+
+    <div class="grid" id="catalog">
+      <article class="card reveal" data-a="health" data-name="План дня по самочувствию">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">😴</span>
+          <h3>План дня по самочувствию</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не видит, как ты спал, и не знает твоих встреч. Ответит общими советами.</span></p>
+        <div class="chat">
+          <div class="bubble me">Доброе утро</div>
+          <div class="bubble bot"><span class="who">Агент</span>Спал 6 ч 40 мин, пульс покоя выше обычного, три встречи после обеда. Реально 3 часа глубокой работы, тяжёлое до 13:00.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>смарт-часы</li><li>календарь</li><li>задачи</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="health" data-name="Память о себе">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🪞</span>
+          <h3>Память о себе</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Встроенная память - несколько строк фактов без структуры.</span></p>
+        <div class="chat">
+          <div class="bubble me">Вот саммари сессии с психологом</div>
+          <div class="bubble bot"><span class="who">Агент</span>Обновил карту личности: что изменилось, какие паттерны повторяются. Все режимы учитывают это дальше.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>общая память</li><li>все режимы</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="day" data-name="Календарь голосом">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🗓</span>
+          <h3>Календарь голосом</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Подскажет, во сколько выйти. В календарь ничего не поставит.</span></p>
+        <div class="chat">
+          <div class="bubble me">Встреча с Лёшей в четверг в 15, дорога 40 минут</div>
+          <div class="bubble bot"><span class="who">Агент</span>Встреча и блок «Дорога» с 14:20 уже в календаре. Напоминание придёт на часы.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>календарь</li><li>смарт-часы</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="day" data-name="Задачи из одной фразы">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">✅</span>
+          <h3>Задачи из одной фразы</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Задача остаётся в переписке. Через неделю её не найти.</span></p>
+        <div class="chat">
+          <div class="bubble me">Надо до пятницы отправить договор Ивану</div>
+          <div class="bubble bot"><span class="who">Агент</span>Задача в проекте «Клиенты» со сроком на пятницу. Уже в твоём списке на неделю.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>общая память</li><li>календарь</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="day" data-name="Куда ушёл день">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">⏱</span>
+          <h3>Куда ушёл день</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не видит твоих таймеров и никогда не пишет первым.</span></p>
+        <div class="chat">
+          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Жмёшь таймер на часах и работаешь</div>
+          <div class="bubble bot"><span class="who">Агент</span>В 19:00 сам присылает итог: 4 ч проекты, 1 ч созвоны, 40 мин рутина. План выполнен на 80%.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>таймер</li><li>задачи</li><li>план дня</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="day" data-name="Работа в фоне">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">⏳</span>
+          <h3>Работа в фоне</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Работает, пока открыта вкладка. Первым не пишет.</span></p>
+        <div class="chat">
+          <div class="bubble me">Разбери архив, отпишись, когда закончишь</div>
+          <div class="bubble bot"><span class="who">Агент</span>Задача идёт на сервере, пока ты гуляешь. Результат придёт в ту же тему.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>сервер 24/7</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="work" data-name="Созвон в задачи">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🎙</span>
+          <h3>Созвон в задачи</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Ждёт, пока ты скачаешь запись и загрузишь её. Задачи переносишь руками.</span></p>
+        <div class="chat">
+          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Просто заканчиваешь созвон. Присылать ничего не нужно</div>
+          <div class="bubble bot"><span class="who">Агент</span>Запись подхватывается сама. Решения и задачи с исполнителями сразу в твоём списке, заметка в карточке проекта и у каждого участника.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>общая память</li><li>задачи</li><li>люди</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="work" data-name="Действия в твоём браузере">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🖱</span>
+          <h3>Действия в твоём браузере</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Может только объяснить, куда нажимать.</span></p>
+        <div class="chat">
+          <div class="bubble me">Заполни заявку на этой странице</div>
+          <div class="bubble bot"><span class="who">Агент</span>Заполняет форму в твоём Chrome, где ты уже вошёл: паспорт и адрес берёт из твоих документов. Перед отправкой спрашивает.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>твой Chrome</li><li>документы</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="work" data-name="Поиск работы">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">💼</span>
+          <h3>Поиск работы</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Сайты с вакансиями не пускают ботов. Сравнить вакансии не с чем.</span></p>
+        <div class="chat">
+          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Кидаешь ссылку на вакансию</div>
+          <div class="bubble bot"><span class="who">Агент</span>Разбор вакансии и компании, место в твоём рейтинге среди всех сохранённых, что подтянуть в резюме.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>браузер на сервере</li><li>общая память</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="work" data-name="Переезд из старых сервисов">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">📥</span>
+          <h3>Переезд из старых сервисов</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Объяснит, как сделать экспорт. Переносить будешь руками.</span></p>
+        <div class="chat">
+          <div class="bubble me">Перенеси мои заметки из Notion и задачи из старого приложения</div>
+          <div class="bubble bot"><span class="who">Агент</span>Сам забирает данные и раскладывает в общую память со ссылками между заметками. Старый сервис остаётся архивом.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>старые сервисы</li><li>задачи</li><li>общая память</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="know" data-name="Инбокс мыслей">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">💭</span>
+          <h3>Инбокс мыслей</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Мысль тонет в ленте чатов вместе с остальными.</span></p>
+        <div class="chat">
+          <div class="bubble me">Идея: сделать подборку книг для команды</div>
+          <div class="bubble bot"><span class="who">Агент</span>Записано в заметку дня. Вечером разложу идеи по проектам.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>общая память</li><li>задачи</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="know" data-name="Ресерч двумя ИИ">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🔎</span>
+          <h3>Ресерч двумя ИИ</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Одна модель, один взгляд. Отчёт остаётся в чате.</span></p>
+        <div class="chat">
+          <div class="bubble me">Сравни три сервиса для учёта клиентов в маленькой команде</div>
+          <div class="bubble bot"><span class="who">Агент</span>Claude и ChatGPT ищут независимо, итог сведён с источниками под твою ситуацию и сохранён. Следующий ресерч опирается на него.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>две подписки</li><li>общая память</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="know" data-name="Наставник по курсу">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🎓</span>
+          <h3>Наставник по курсу</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Каждый новый чат с нуля. Пересказываешь, где остановился.</span></p>
+        <div class="chat">
+          <div class="bubble me">Что у меня дальше по курсу?</div>
+          <div class="bubble bot"><span class="who">Агент</span>Ты закрыл урок 6. Дальше 2 часа практики на твоём проекте. Вот три вопроса для самопроверки.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>конспекты</li><li>журнал обучения</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="know" data-name="Собеседник по книгам">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">📚</span>
+          <h3>Собеседник по книгам</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Книгу загружаешь заново в каждый чат, выводы теряются.</span></p>
+        <div class="chat">
+          <div class="bubble me">Что автор говорит про привычки и как это применить мне?</div>
+          <div class="bubble bot"><span class="who">Агент</span>Сам достаёт текст из твоей библиотеки. Выводы из всех разговоров копятся в заметке книги.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>библиотека книг</li><li>общая память</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="people" data-name="Разбор Telegram-чатов">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">📦</span>
+          <h3>Разбор Telegram-чатов</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Твои чаты не видит. Копируешь переписку вручную кусками.</span></p>
+        <div class="chat">
+          <div class="bubble me">Разбери чат проекта за месяц</div>
+          <div class="bubble bot"><span class="who">Агент</span>Сам читает 2000 сообщений из Telegram. Итог: 6 заметок с решениями, ролями, закупками и дедлайнами.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>Telegram</li><li>общая память</li><li>люди</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="people" data-name="База людей">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">👥</span>
+          <h3>База людей</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не знает ни одного твоего знакомого.</span></p>
+        <div class="chat">
+          <div class="bubble me">Кто из моих знакомых разбирается в налогах?</div>
+          <div class="bubble bot"><span class="who">Агент</span>Трое. Ближе всех Мария: вы общались в мае, она вела ИП. Вот её контакт и о чём вы говорили.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>общая память</li><li>переписки</li><li>созвоны</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="people" data-name="Боты для близких">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">👨‍👩‍👧</span>
+          <h3>Боты для близких</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Каждому своя подписка, установка и настройка.</span></p>
+        <div class="chat">
+          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Мама пишет своему боту в Telegram</div>
+          <div class="bubble bot"><span class="who">Агент</span>У неё свой помощник со своей памятью, отдельно от твоих данных. Ей ничего не нужно устанавливать.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>изолированный контур</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="life" data-name="Охота на Авито в фоне">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🏠</span>
+          <h3>Охота на Авито в фоне</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Авито блокирует ботов и зарубежные адреса. Чат видит только поисковую выдачу.</span></p>
+        <div class="chat">
+          <div class="bubble me">Найди квартиру посуточно на 12-14 октября до 6000, уютную, не в хрущёвке</div>
+          <div class="bubble bot"><span class="who">Агент</span>Сам ходит по Авито с домашнего российского адреса, обходит защиту от ботов. Реальная цена на твои даты, а не «от X», фото по каждому варианту и отбор под твой вкус.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>браузер на сервере</li><li>твои вкусы</li><li>календарь</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="life" data-name="Подборка мест">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">📍</span>
+          <h3>Подборка мест</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Выдумывает рейтинги, ссылки на карты часто битые.</span></p>
+        <div class="chat">
+          <div class="bubble me">Где в субботу поужинать вчетвером недалеко от дома, чтобы было уютно?</div>
+          <div class="bubble bot"><span class="who">Агент</span>Пять мест: проверенная ссылка на Яндекс Карты, рейтинг и число отзывов, вердикт «идти или нет». Выбрал - встреча уже в календаре с дорогой.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>Яндекс Карты</li><li>твои вкусы</li><li>календарь</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="life" data-name="Финансовый советник">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">💰</span>
+          <h3>Финансовый советник</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не видит твоих трат. Цифры вбиваешь сам, каждый раз заново.</span></p>
+        <div class="chat">
+          <div class="bubble me">Потяну ли я аренду за 80 тысяч?</div>
+          <div class="bubble bot"><span class="who">Агент</span>По твоим тратам за 3 месяца запас на 5 месяцев. С арендой 80 он сжимается до трёх. Вот что можно урезать.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>банк</li><li>общая память</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card custom reveal" data-a="all" data-name="Своя задача (опишу в чате)">
+        <header class="card-h"><span class="ico" aria-hidden="true">✨</span><h3>Своя задача</h3></header>
+        <p class="plain" style="color:var(--soft)">Не нашёл нужного? Любую рутину можно превратить в инструмент: опиши её в сообщении, и я прикину, как это собрать.</p>
+        <div class="chat"><div class="bubble me">Хочу, чтобы бот сам делал…</div></div>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить в набор</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section id="usp">
+  <div class="wrap usp">
+    <div class="reveal">
+      <div class="eyebrow">Главное отличие</div>
+      <h2>Не готовая программа, а система, которая растёт под тебя</h2>
+      <p class="sub">Любой сервис, которым ты пользуешься, можно подключить. Новый инструмент сразу видит общую память и работает в связке с остальными. Не ты подстраиваешься под продукт, а он под твои задачи.</p>
+      <ol class="steps">
+        <li><b>Говоришь, что нужно</b><span>«Хочу, чтобы заявки клиентов сами становились задачами» или «пусть разбирает мою почту».</span></li>
+        <li><b>Агент собирает подключение</b><span>Сам подключается к нужному сервису или сайту и проверяет, что всё работает.</span></li>
+        <li><b>Инструмент уже в Telegram</b><span>Обычно за один-два вечера. Дальше дорабатывается словами: «делай вот так».</span></li>
+      </ol>
+    </div>
+    <div class="reveal">
+      <div class="panel ok">
+        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Уже работает у меня</h4>
+        <div class="tags"><span>переезд старых заметок и баз</span><span>учёт времени по проектам</span><span>траты и запас денег</span><span>встречи и свободные окна</span><span>сон и пульс с часов</span><span>поиск по объявлениям</span><span>разбор вакансий</span></div>
+      </div>
+      <div class="panel">
+        <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Можно подключить под тебя</h4>
+        <div class="tags"><span>заявки клиентов сразу в задачи</span><span>разбор почты и черновики ответов</span><span>задачи и сроки команды</span><span>отчёты из таблиц</span><span>умный дом</span><span>заявки с твоего сайта</span><span class="more">и любая рутина в других сервисах</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="links">
+  <div class="wrap">
+    <div class="eyebrow">Связки</div>
+    <h2>Сила появляется, когда инструменты видят друг друга</h2>
+    <p class="sub">Обычный ИИ-чат знает только то, что ты ему сейчас написал. Здесь все инструменты пишут и читают одну базу знаний, поэтому каждый новый делает умнее остальные.</p>
+
+    <div class="hub reveal">
+      <div class="spokes">
+        <div class="spoke"><span class="e">💬</span><div><b>Telegram</b>текст, голос, пересылки</div></div>
+        <div class="spoke"><span class="e">⌚</span><div><b>Смарт-часы</b>сон, пульс, таймеры</div></div>
+        <div class="spoke"><span class="e">🗓</span><div><b>Календарь</b>встречи и свободные окна</div></div>
+      </div>
+      <div class="core">
+        <div class="orb">🗂</div>
+        <h3>Общая память</h3>
+        <p>Задачи, заметки, люди, проекты, книги. Ты видишь и правишь всё сам, помощник читает те же записи.</p>
+      </div>
+      <div class="spokes">
+        <div class="spoke"><span class="e">⏱</span><div><b>Таймер</b>реальное время по проектам</div></div>
+        <div class="spoke"><span class="e">💳</span><div><b>Банк</b>траты и запас денег</div></div>
+        <div class="spoke"><span class="e">🧠</span><div><b>Claude и ChatGPT</b>два мозга на выбор</div></div>
+      </div>
+    </div>
+
+    <h3 class="h3-sec">Связки, которые невозможны по отдельности</h3>
+    <div class="combos">
+      <div class="combo reveal"><div class="chain"><span>сон</span><i>+</i><span>календарь</span><i>+</i><span>задачи</span></div>
+        <h3>План дня по реальным силам</h3><p>Утром помощник видит, как ты спал, сколько встреч и что горит, и собирает день, который ты действительно вытянешь.</p></div>
+      <div class="combo reveal"><div class="chain"><span>созвон</span><i>+</i><span>задачи</span><i>+</i><span>люди</span></div>
+        <h3>После встречи ничего не теряется</h3><p>Договорённости становятся задачами со сроками, а в карточке человека появляется, о чём вы говорили.</p></div>
+      <div class="combo reveal"><div class="chain"><span>таймер</span><i>+</i><span>задачи</span><i>+</i><span>план</span></div>
+        <h3>Честный вечерний итог</h3><p>«Планировал - сделал» по минутам. Через месяц видна твоя реальная норма, и тревога «мало сделал» уходит.</p></div>
+      <div class="combo reveal"><div class="chain"><span>переписка</span><i>+</i><span>база людей</span></div>
+        <h3>Нужный человек за секунду</h3><p>Пересланные чаты пополняют карточки людей. Вопрос «кто поможет с X» находит ответ в твоей же сети.</p></div>
+      <div class="combo reveal"><div class="chain"><span>курс</span><i>+</i><span>заметки</span><i>+</i><span>журнал</span></div>
+        <h3>Наставник помнит, где ты остановился</h3><p>Не надо пересказывать пройденное: помощник видит конспекты и твой прогресс и ведёт дальше.</p></div>
+      <div class="combo reveal"><div class="chain"><span>память о себе</span><i>+</i><span>все режимы</span></div>
+        <h3>Советы под тебя, а не в среднем</h3><p>Финансы, еда, планы и ресерч учитывают твои вкусы, ограничения и цели, потому что знают их из одной базы.</p></div>
+    </div>
+  </div>
+</section>
+
+<section id="offer">
+  <div class="wrap">
+    <div class="eyebrow">Как получить такое себе</div>
+    <h2>Собираем твой штаб за 4 недели</h2>
+    <p class="sub">Берём инструменты, которые тебя зацепили. Неделя на фундамент, дальше по 2-3 инструмента в неделю. Выбери, как тебе удобнее.</p>
+    <div class="offers" role="radiogroup" aria-label="Формат">
+      <button type="button" class="offer reveal" role="radio" aria-checked="false" data-opt="Наставничество (соберу сам с твоей помощью)">
+        <span class="radio" aria-hidden="true"></span>
+        <span class="tag">делаешь сам</span>
+        <h3>Наставничество</h3>
+        <div class="who">Хочу разобраться и собрать своими руками</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Созвон раз в неделю и задания на твоих делах</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Показываю, как устроена моя система</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Через месяц умеешь добавлять инструменты сам</li>
+        </ul>
+      </button>
+      <button type="button" class="offer reveal" role="radio" aria-checked="false" data-opt="Ведение (собери под меня)">
+        <span class="radio" aria-hidden="true"></span>
+        <span class="tag">делаю я</span>
+        <h3>Ведение</h3>
+        <div class="who">Хочу результат, разбираться нет времени</div>
+        <ul>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Собираю выбранные инструменты под тебя</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Дальше раз в месяц добавляем новое</li>
+          <li><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Слежу, чтобы всё работало</li>
+        </ul>
+      </button>
+    </div>
+    <div class="models reveal">
+      <p><b>Нейросети на выбор.</b> Под ключ: модели даю я, с оплатой зарубежных подписок разбираться не нужно. На своих аккаунтах: подключаю твою подписку Claude или ChatGPT. В обоих вариантах нужен только Telegram.</p>
+      <div class="seg" role="radiogroup" aria-label="Нейросети" id="models">
+        <button type="button" role="radio" aria-checked="false" data-v="под ключ, модели от тебя">Под ключ</button>
+        <button type="button" role="radio" aria-checked="false" data-v="на моих аккаунтах">Мои аккаунты</button>
+        <button type="button" role="radio" aria-checked="false" data-v="пока не знаю">Пока не знаю</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="ask" style="padding-top:0">
+  <div class="wrap">
+    <div class="ask reveal">
+      <div>
+        <div class="eyebrow">Вопрос к вам</div>
+        <h2>Помогите понять, что из этого нужно людям</h2>
+      </div>
+      <ol>
+        <li>Какие 2-3 инструмента вы бы взяли себе первыми?</li>
+        <li>Что ближе: собрать самому с наставником или получить готовое?</li>
+        <li>Кого из знакомых это могло бы заинтересовать?</li>
+      </ol>
+    </div>
+  </div>
+</section>
+
+<section id="contact" style="padding-top:0">
+  <div class="wrap">
+    <div class="checkout reveal">
+      <div>
+        <div class="eyebrow">Хочешь такое себе?</div>
+        <h2>Собери свой набор и отправь мне</h2>
+        <ol class="howto">
+          <li id="h1"><span>Отметь в <a href="#tools">каталоге</a>, что хочешь себе</span></li>
+          <li id="h2"><span>Выбери <a href="#offer">формат</a>: сам со мной или под ключ</span></li>
+          <li id="h3"><span>Отправь набор мне в Telegram</span></li>
+        </ol>
+        <a class="btn btn-tg" id="send" href="https://t.me/zastashkov" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" aria-hidden="true" style="fill:#fff;stroke:none"><path d="M21.7 3.3 2.9 10.6c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.4-2.3 4.9 3.6c.9.5 1.5.2 1.8-.8l3.2-15.2c.3-1.3-.5-1.9-1.7-1.1z"/></svg>
+          <span id="sendlbl">Написать @zastashkov</span></a>
+        <p class="note">Откроется чат со мной, где уже написано, что ты выбрал. Останется нажать «Отправить». Дальше покажу систему вживую и вместе прикинем, с чего начать.</p>
+      </div>
+      <div class="kitbox" aria-live="polite">
+        <h4>Твой набор <span id="kitcount"></span></h4>
+        <ul id="kitlist"></ul>
+        <div class="meta" id="kitmeta"></div>
+        <details class="preview"><summary>Показать сообщение</summary><pre id="msg"></pre></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <span>Даниил Засташков · Telegram <a href="https://t.me/zastashkov" target="_blank" rel="noopener">@zastashkov</a></span>
+    <span>Под капотом: Claude и ChatGPT, свой сервер, Telegram-бот и общая база заметок.</span>
+  </div>
+</footer>
+
+<div class="toast" id="toast" role="status"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg><span id="toasttxt"></span><a href="#contact">К набору</a></div>
+
+<script>
+(() => {
+  const USER = 'zastashkov';
+  const $ = (s, r = document) => r.querySelector(s);
+  const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+  const picked = new Map(); // name -> icon
+  let format = null, models = null;
+
+  // nav border on scroll
+  const nav = $('#nav');
+  const onScroll = () => nav.classList.toggle('scrolled', scrollY > 8);
+  addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+  // tabs
+  $('#tabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#tabs button').forEach((x) => { const on = x === b; x.classList.toggle('on', on); x.setAttribute('aria-selected', on); });
+    const f = b.dataset.f;
+    $$('#catalog .card').forEach((c) => { c.hidden = f !== 'all' && c.dataset.a !== f; if (!c.hidden) c.classList.add('in'); });
+    const top = $('#catalog').getBoundingClientRect().top + scrollY - 150;
+    if (scrollY > top) scrollTo({ top, behavior: 'smooth' });
+  });
+
+  // tabs get a backdrop only while stuck under the nav
+  const tabsEl = $('.tabs');
+  const stick = () => tabsEl.classList.toggle('stuck', tabsEl.getBoundingClientRect().top <= 65);
+  addEventListener('scroll', stick, { passive: true }); stick();
+
+  // picks
+  const toast = $('#toast'); let tt;
+  function showToast(text) {
+    $('#toasttxt').textContent = text; toast.classList.add('show');
+    clearTimeout(tt); tt = setTimeout(() => toast.classList.remove('show'), 2200);
+  }
+  function setPicked(card, on) {
+    const name = card.dataset.name;
+    on ? picked.set(name, $('.ico', card).textContent) : picked.delete(name);
+    card.classList.toggle('sel', on);
+    $('.pick', card).setAttribute('aria-pressed', on);
+  }
+  $$('#catalog .card').forEach((card) => {
+    $('.pick', card).addEventListener('click', () => {
+      const on = !picked.has(card.dataset.name);
+      setPicked(card, on);
+      if (on) showToast('Добавлено в набор');
+      update(on);
+    });
+  });
+
+  // radios
+  $$('.offer').forEach((o) => o.addEventListener('click', () => {
+    format = format === o.dataset.opt ? null : o.dataset.opt;
+    $$('.offer').forEach((x) => x.setAttribute('aria-checked', x.dataset.opt === format));
+    update();
+  }));
+  $$('#models button').forEach((m) => m.addEventListener('click', () => {
+    models = models === m.dataset.v ? null : m.dataset.v;
+    $$('#models button').forEach((x) => x.setAttribute('aria-checked', x.dataset.v === models));
+    update();
+  }));
+
+  function message() {
+    const lines = ['Привет! Я с сайта про личный ИИ-штаб.'];
+    if (picked.size) { lines.push('', 'Хочу себе:'); picked.forEach((_, n) => lines.push('• ' + n)); }
+    if (format) lines.push('', 'Формат: ' + format);
+    if (models) lines.push((format ? '' : '\n') + 'Нейросети: ' + models);
+    lines.push('', picked.size ? 'Расскажи подробнее, как это собрать под меня?' : 'Хочу узнать подробнее о системе.');
+    return lines.join('\n');
+  }
+  const plural = (n) => n % 10 === 1 && n % 100 !== 11 ? 'инструмент'
+    : n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20) ? 'инструмента' : 'инструментов';
+
+  function update(bump) {
+    const n = picked.size;
+    const href = 'https://t.me/' + USER + '?text=' + encodeURIComponent(message());
+    $$('a[href^="https://t.me/' + USER + '"]').forEach((a) => a.href = href);
+    // nav counter
+    const kit = $('#kit'); $('#kitnum').textContent = n; kit.classList.toggle('has', n > 0);
+    if (bump) { kit.classList.remove('bump'); void kit.offsetWidth; kit.classList.add('bump'); }
+    // checkout
+    $('#kitcount').textContent = n ? n + ' ' + plural(n) : '';
+    const list = $('#kitlist'); list.innerHTML = '';
+    if (!n) list.innerHTML = '<li class="empty" style="border:0">Пока пусто. Отметь «Хочу себе» на карточках в <a href="#tools">каталоге</a> или просто напиши мне.</li>';
+    picked.forEach((ico, name) => {
+      const li = document.createElement('li');
+      const e = document.createElement('span'); e.className = 'e'; e.textContent = ico;
+      const t = document.createElement('span'); t.textContent = name;
+      const x = document.createElement('button'); x.type = 'button'; x.textContent = '×'; x.setAttribute('aria-label', 'Убрать ' + name);
+      x.addEventListener('click', () => { const c = $$('#catalog .card').find((c) => c.dataset.name === name); if (c) setPicked(c, false); update(); });
+      li.append(e, t, x); list.appendChild(li);
+    });
+    $('#kitmeta').innerHTML =
+      '<div>Формат: ' + (format ? '<b>' + format.split(' (')[0] + '</b>' : '<a href="#offer">не выбран</a>') + '</div>' +
+      (models ? '<div>Нейросети: <b>' + models + '</b></div>' : '');
+    $('#msg').textContent = message();
+    $('#sendlbl').textContent = n ? 'Отправить набор @' + USER : 'Написать @' + USER;
+    $('#h1').classList.toggle('done', n > 0);
+    $('#h2').classList.toggle('done', !!format);
+  }
+
+  // reveal on scroll
+  if (document.documentElement.classList.contains('js') && 'IntersectionObserver' in window) {
+    const io = new IntersectionObserver((es) => es.forEach((e) => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }),
+      { rootMargin: '0px 0px -8% 0px' });
+    $$('.reveal').forEach((el, i) => { el.style.transitionDelay = (i % 3) * 60 + 'ms'; io.observe(el); });
+  }
+  update();
+})();
+</script>
+</body>
+</html>
