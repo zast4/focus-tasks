@@ -145,6 +145,13 @@
     box-shadow: 0 0 0 1px var(--line) inset, var(--shadow); transition: box-shadow .25s, transform .25s var(--ease); }
   .card:hover { transform: translateY(-2px); box-shadow: 0 0 0 1px var(--line2) inset, var(--shadow); }
   .card[hidden] { display: none; }
+  .card.custom { grid-column: 1 / -1; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px 28px; padding: 24px 28px; }
+  .card.custom .card-h { margin: 0; }
+  .card.custom .plain { margin: 0; max-width: 620px; }
+  .card.custom .chat { display: none; }
+  .card.custom .pick { margin: 0; padding: 0 22px; white-space: nowrap; }
+  @media (max-width: 1020px) { .card.custom { grid-template-columns: 1fr; } .card.custom .pick { width: 100%; } }
+
   .card.custom { background: transparent; box-shadow: 0 0 0 1.5px var(--line2) inset; border: 0; background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.015) 0 12px, transparent 12px 24px); }
   .card-h { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
   .card .ico { width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; flex: none;
@@ -427,7 +434,7 @@
     <p class="sub">Обычный чат только отвечает на вопросы. Агент видит твои данные, действует в твоих сервисах, работает в фоне и пишет первым. В каждой карточке сверху видно, где обычный чат останавливается.</p>
     <div class="hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Отмечай «Хочу себе» то, что пригодилось бы тебе. Из отмеченного в конце страницы соберётся твой набор.</div>
 
-    <div class="tabs"><div class="tabs-in" role="tablist" id="tabs" aria-label="Фильтр по сферам"><button type="button" role="tab" data-f="all" aria-selected="true" class=on>Все<span class="n">20</span></button><button type="button" role="tab" data-f="health" aria-selected="false">Здоровье<span class="n">2</span></button><button type="button" role="tab" data-f="day" aria-selected="false">День и время<span class="n">4</span></button><button type="button" role="tab" data-f="work" aria-selected="false">Работа<span class="n">4</span></button><button type="button" role="tab" data-f="know" aria-selected="false">Знания<span class="n">4</span></button><button type="button" role="tab" data-f="people" aria-selected="false">Люди<span class="n">3</span></button><button type="button" role="tab" data-f="life" aria-selected="false">Быт и деньги<span class="n">3</span></button></div></div>
+    <div class="tabs"><div class="tabs-in" role="tablist" id="tabs" aria-label="Фильтр по сферам"><button type="button" role="tab" data-f="all" aria-selected="true" class=on>Все</button><button type="button" role="tab" data-f="health" aria-selected="false">Здоровье<span class="n">2</span></button><button type="button" role="tab" data-f="day" aria-selected="false">День и время<span class="n">4</span></button><button type="button" role="tab" data-f="work" aria-selected="false">Работа<span class="n">5</span></button><button type="button" role="tab" data-f="know" aria-selected="false">Знания<span class="n">4</span></button><button type="button" role="tab" data-f="people" aria-selected="false">Люди<span class="n">3</span></button><button type="button" role="tab" data-f="life" aria-selected="false">Быт и деньги<span class="n">3</span></button></div></div>
 
     <div class="grid" id="catalog">
       <article class="card reveal" data-a="health" data-name="План дня по самочувствию">
@@ -537,6 +544,22 @@
           <div class="bubble bot"><span class="who">Агент</span>Запись подхватывается сама. Решения и задачи с исполнителями сразу в твоём списке, заметки в карточке проекта и у каждого участника.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>общая память</li><li>задачи</li><li>люди</li></ul>
+        <button class="pick" type="button" aria-pressed="false">
+          <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
+          <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
+        </button>
+      </article>
+      <article class="card reveal" data-a="work" data-name="Claude и ChatGPT в одном чате">
+        <header class="card-h">
+          <span class="ico" aria-hidden="true">🔀</span>
+          <h3>Claude и ChatGPT в одном чате</h3>
+        </header>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Привязан к одной модели. Чтобы спросить другую, открываешь другой сервис и пересказываешь всё с начала.</span></p>
+        <div class="chat">
+          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Одной кнопкой передаёшь разговор от Claude к ChatGPT прямо в Telegram</div>
+          <div class="bubble bot"><span class="who">Агент</span>Разговор продолжается с того же места: вторая нейросеть видит всю переписку и твою память. Под каждую тему можно закрепить свою модель, а сложную задачу отдать более сильной.</div>
+        </div>
+        <ul class="uses" aria-label="Связан с"><li>Claude</li><li>ChatGPT</li><li>общая память</li></ul>
         <button class="pick" type="button" aria-pressed="false">
           <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Хочу себе</span>
           <span class="pick-on"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>В наборе</span>
@@ -778,7 +801,7 @@
     <div class="reveal">
       <div class="panel ok">
         <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12.5 4.5 4.5L19 7"/></svg>Уже работает у меня</h4>
-        <div class="tags"><span>переезд старых заметок и баз</span><span>фактическое время блоками в календаре</span><span>траты и запас денег</span><span>встречи и свободные окна</span><span>сон и пульс с часов</span><span>поиск по объявлениям</span><span>разбор вакансий</span><span>библиотека книг с памятью обсуждений</span></div>
+        <div class="tags"><span>переезд старых заметок и баз</span><span>фактическое время блоками в календаре</span><span>траты и запас денег</span><span>встречи и свободные окна</span><span>сон и пульс с часов</span><span>поиск по объявлениям</span><span>разбор вакансий</span><span>библиотека книг с памятью обсуждений</span><span>Claude и ChatGPT с переключением в чате</span></div>
       </div>
       <div class="panel">
         <h4><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Можно подключить под тебя</h4>
@@ -808,7 +831,7 @@
       <div class="spokes">
         <div class="spoke"><span class="e">⏱</span><div><b>Таймер</b>реальное время по проектам</div></div>
         <div class="spoke"><span class="e">💳</span><div><b>Банк</b>траты и запас денег</div></div>
-        <div class="spoke"><span class="e">🧠</span><div><b>Claude и ChatGPT</b>два мозга на выбор</div></div>
+        <div class="spoke"><span class="e">🧠</span><div><b>Claude и ChatGPT</b>переключаешь одной кнопкой в чате</div></div>
       </div>
     </div>
 
