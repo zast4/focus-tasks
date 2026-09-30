@@ -288,6 +288,33 @@
   footer .wrap { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 12px; }
   footer a { color: var(--soft); }
 
+
+  /* audience */
+  .aud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 44px; }
+  .aud div { padding: 22px; border-radius: var(--radius); background: var(--s1); box-shadow: 0 0 0 1px var(--line) inset; }
+  .aud .e { font-size: 26px; display: block; margin-bottom: 12px; }
+  .aud h3 { font-size: 17.5px; margin-bottom: 6px; }
+  .aud p { margin: 0; color: var(--soft); font-size: 15px; line-height: 1.55; }
+
+  /* weeks */
+  .weeks { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 30px; border-radius: 20px; overflow: hidden;
+    background: var(--line); box-shadow: 0 0 0 1px var(--line); gap: 1px; }
+  .weeks div { background: var(--s1); padding: 22px; }
+  .weeks b { display: block; font-size: 12.5px; letter-spacing: .1em; text-transform: uppercase; color: var(--mint); margin-bottom: 8px; }
+  .weeks h3 { font-size: 17px; margin-bottom: 6px; }
+  .weeks p { margin: 0; color: var(--soft); font-size: 14.5px; line-height: 1.55; }
+
+  /* faq */
+  .faq { margin-top: 40px; display: grid; gap: 10px; max-width: 900px; }
+  .faq details { border-radius: 16px; background: var(--s1); box-shadow: 0 0 0 1px var(--line) inset; transition: box-shadow .2s; }
+  .faq details[open] { box-shadow: 0 0 0 1px var(--line2) inset; }
+  .faq summary { list-style: none; cursor: pointer; padding: 18px 56px 18px 22px; font-weight: 600; font-size: 17px; position: relative; }
+  .faq summary::-webkit-details-marker { display: none; }
+  .faq summary::after { content: "+"; position: absolute; right: 22px; top: 50%; transform: translateY(-50%); width: 26px; height: 26px; border-radius: 8px;
+    display: grid; place-items: center; background: var(--s3); color: var(--soft); font-weight: 500; transition: transform .2s; }
+  .faq details[open] summary::after { content: "−"; }
+  .faq p { margin: 0; padding: 0 22px 20px; color: var(--soft); font-size: 16px; }
+
   /* toast */
   .toast { position: fixed; left: 50%; bottom: 24px; z-index: 60; transform: translate(-50%, 20px); opacity: 0; pointer-events: none;
     display: inline-flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 14px; font-size: 15px; white-space: nowrap;
@@ -310,13 +337,14 @@
     .hero-grid { grid-template-columns: 1fr; }
     .hero .phone { max-width: 520px; }
     .usp, .checkout, .ask { grid-template-columns: 1fr; }
+    .aud, .weeks { grid-template-columns: repeat(2, 1fr); }
     .hub { grid-template-columns: 1fr; }
     .core { order: -1; }
     .nav-links { display: none; }
   }
   @media (max-width: 680px) {
     body { font-size: 16px; }
-    .grid, .combos, .offers { grid-template-columns: 1fr; }
+    .grid, .combos, .offers, .aud, .weeks { grid-template-columns: 1fr; }
     .facts { grid-template-columns: repeat(2, 1fr); }
     .hero .actions .btn { flex: 1 1 100%; }
     .btn-tg { width: 100%; }
@@ -338,6 +366,7 @@
       <a href="#usp">Отличие</a>
       <a href="#links">Связки</a>
       <a href="#offer">Форматы</a>
+      <a href="#faq">Вопросы</a>
     </div>
     <a class="kit" id="kit" href="#contact" aria-label="Мой набор"><span class="lbl">Мой набор</span><span class="num" id="kitnum">0</span></a>
   </div>
@@ -346,9 +375,9 @@
 <header class="hero" id="top">
   <div class="wrap hero-grid">
     <div>
-      <div class="by"><span class="av">ДЗ</span><span><b>Даниил Засташков</b> · собрал и пользуюсь каждый день</span></div>
+      <div class="by"><span class="av">ДЗ</span><span><b>Даниил Засташков</b> · собрал для себя и пользуюсь каждый день</span></div>
       <h1>20 вещей, которые <span class="grad">не умеет обычный ChatGPT</span></h1>
-      <p class="lead">Моя система из ИИ-агентов живёт в Telegram, помнит всё обо мне, работает сама в фоне и достраивается под любую новую задачу.</p>
+      <p class="lead">Это ИИ-помощник в Telegram, который знает твои задачи, встречи, людей, здоровье и деньги. Он сам ведёт календарь, разбирает созвоны, ищет по сайтам и присылает итоги, пока ты занят своими делами.</p>
       <div class="actions">
         <a class="btn btn-primary" href="#tools">Смотреть, что она умеет
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M6 13l6 6 6-6"/></svg></a>
@@ -369,20 +398,34 @@
   </div>
   <div class="wrap">
     <div class="facts">
-      <div><b>20</b><span>готовых инструментов</span></div>
-      <div><b>24/7</b><span>работает сам на сервере</span></div>
-      <div><b>2</b><span>нейросети в связке</span></div>
-      <div><b>1</b><span>чат в Telegram для всего</span></div>
+      <div><b>20</b><span>инструментов уже работают</span></div>
+      <div><b>24/7</b><span>на сервере, без открытой вкладки</span></div>
+      <div><b>2</b><span>нейросети: Claude и ChatGPT</span></div>
+      <div><b>5</b><span>человек уже пользуются</span></div>
     </div>
   </div>
 </header>
 
+<section id="who" style="padding-bottom:0">
+  <div class="wrap">
+    <div class="eyebrow">Кому пригодится</div>
+    <h2>Если дел больше, чем помещается в голове</h2>
+    <p class="sub">Штаб собирается под конкретного человека, но чаще всего он выручает в четырёх ситуациях.</p>
+    <div class="aud">
+      <div class="reveal"><span class="e">🚀</span><h3>Свой бизнес или фриланс</h3><p>Много клиентов, созвонов и проектов. Договорённости не теряются, задачи и люди всегда под рукой.</p></div>
+      <div class="reveal"><span class="e">💼</span><h3>Работа в найме</h3><p>Встречи, задачи, обучение и карьера. Помощник держит всё в одном месте и напоминает о главном.</p></div>
+      <div class="reveal"><span class="e">🔋</span><h3>Хочешь наладить режим</h3><p>План дня строится по сну и самочувствию, а вечером видно, куда на самом деле ушло время.</p></div>
+      <div class="reveal"><span class="e">🧩</span><h3>Устал от десятка приложений</h3><p>Заметки, задачи, календарь и поиск сходятся в один чат, где можно просто написать или сказать голосом.</p></div>
+    </div>
+  </div>
+</section>
+
 <section id="tools">
   <div class="wrap">
     <div class="eyebrow">Каталог</div>
-    <h2>Что агент добавляет к обычному чату</h2>
-    <p class="sub">Обычный чат только отвечает. Агент действует в твоих сервисах, видит твои данные, работает в фоне и пишет первым. В каждой карточке видно, где обычный чат останавливается.</p>
-    <div class="hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Жми «Хочу себе» на том, что зацепило. В конце страницы из этого соберётся твой набор.</div>
+    <h2>Что умеет штаб и где сдаётся обычный чат</h2>
+    <p class="sub">Обычный чат только отвечает на вопросы. Агент видит твои данные, действует в твоих сервисах, работает в фоне и пишет первым. В каждой карточке сверху видно, где обычный чат останавливается.</p>
+    <div class="hint"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Отмечай «Хочу себе» то, что пригодилось бы тебе. Из отмеченного в конце страницы соберётся твой набор.</div>
 
     <div class="tabs"><div class="tabs-in" role="tablist" id="tabs" aria-label="Фильтр по сферам"><button type="button" role="tab" data-f="all" aria-selected="true" class=on>Все<span class="n">20</span></button><button type="button" role="tab" data-f="health" aria-selected="false">Здоровье<span class="n">2</span></button><button type="button" role="tab" data-f="day" aria-selected="false">День и время<span class="n">4</span></button><button type="button" role="tab" data-f="work" aria-selected="false">Работа<span class="n">4</span></button><button type="button" role="tab" data-f="know" aria-selected="false">Знания<span class="n">4</span></button><button type="button" role="tab" data-f="people" aria-selected="false">Люди<span class="n">3</span></button><button type="button" role="tab" data-f="life" aria-selected="false">Быт и деньги<span class="n">3</span></button></div></div>
 
@@ -392,10 +435,10 @@
           <span class="ico" aria-hidden="true">😴</span>
           <h3>План дня по самочувствию</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не видит, как ты спал, и не знает твоих встреч. Ответит общими советами.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не знает, как ты спал и что у тебя в календаре. Советует в среднем по больнице.</span></p>
         <div class="chat">
           <div class="bubble me">Доброе утро</div>
-          <div class="bubble bot"><span class="who">Агент</span>Спал 6 ч 40 мин, пульс покоя выше обычного, три встречи после обеда. Реально 3 часа глубокой работы, тяжёлое до 13:00.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Спал 6 ч 40 мин, пульс покоя выше обычного, после обеда три встречи. Сегодня реально 3 часа глубокой работы, самое сложное лучше закончить до 13:00.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>смарт-часы</li><li>календарь</li><li>задачи</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -408,10 +451,10 @@
           <span class="ico" aria-hidden="true">🪞</span>
           <h3>Память о себе</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Встроенная память - несколько строк фактов без структуры.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Встроенная память хранит пару случайных фактов о тебе.</span></p>
         <div class="chat">
-          <div class="bubble me">Вот саммари сессии с психологом</div>
-          <div class="bubble bot"><span class="who">Агент</span>Обновил карту личности: что изменилось, какие паттерны повторяются. Все режимы учитывают это дальше.</div>
+          <div class="bubble me">Вот мои выводы после сессии с психологом</div>
+          <div class="bubble bot"><span class="who">Агент</span>Обновил твою карту личности: что изменилось и какие паттерны повторяются. Дальше это учитывают все режимы: планы, советы, ответы.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>общая память</li><li>все режимы</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -424,10 +467,10 @@
           <span class="ico" aria-hidden="true">🗓</span>
           <h3>Календарь голосом</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Подскажет, во сколько выйти. В календарь ничего не поставит.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Подскажет, во сколько выйти, но в календарь ничего не поставит.</span></p>
         <div class="chat">
           <div class="bubble me">Встреча с Лёшей в четверг в 15, дорога 40 минут</div>
-          <div class="bubble bot"><span class="who">Агент</span>Встреча и блок «Дорога» с 14:20 уже в календаре. Напоминание придёт на часы.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Встреча и блок «Дорога» с 14:20 уже в календаре. Напоминание придёт на телефон и часы.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>календарь</li><li>смарт-часы</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -440,10 +483,10 @@
           <span class="ico" aria-hidden="true">✅</span>
           <h3>Задачи из одной фразы</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Задача остаётся в переписке. Через неделю её не найти.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Задача остаётся в переписке, и через неделю её уже не найти.</span></p>
         <div class="chat">
           <div class="bubble me">Надо до пятницы отправить договор Ивану</div>
-          <div class="bubble bot"><span class="who">Агент</span>Задача в проекте «Клиенты» со сроком на пятницу. Уже в твоём списке на неделю.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Задача в проекте «Клиенты» со сроком в пятницу. Уже стоит в твоём плане на неделю.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>общая память</li><li>календарь</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -472,10 +515,10 @@
           <span class="ico" aria-hidden="true">⏳</span>
           <h3>Работа в фоне</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Работает, пока открыта вкладка. Первым не пишет.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Работает, только пока открыта вкладка, и сам ничего не сообщает.</span></p>
         <div class="chat">
-          <div class="bubble me">Разбери архив, отпишись, когда закончишь</div>
-          <div class="bubble bot"><span class="who">Агент</span>Задача идёт на сервере, пока ты гуляешь. Результат придёт в ту же тему.</div>
+          <div class="bubble me">Разбери архив переписки и напиши, когда закончишь</div>
+          <div class="bubble bot"><span class="who">Агент</span>Задача идёт на сервере, пока ты занят своими делами. Результат придёт в тот же чат, даже если ты давно закрыл Telegram.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>сервер 24/7</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -488,10 +531,10 @@
           <span class="ico" aria-hidden="true">🎙</span>
           <h3>Созвон в задачи</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Ждёт, пока ты скачаешь запись и загрузишь её. Задачи переносишь руками.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Ждёт, пока ты скачаешь запись и загрузишь её. Задачи потом переносишь руками.</span></p>
         <div class="chat">
-          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Просто заканчиваешь созвон. Присылать ничего не нужно</div>
-          <div class="bubble bot"><span class="who">Агент</span>Запись подхватывается сама. Решения и задачи с исполнителями сразу в твоём списке, заметка в карточке проекта и у каждого участника.</div>
+          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Просто заканчиваешь созвон, присылать ничего не нужно</div>
+          <div class="bubble bot"><span class="who">Агент</span>Запись подхватывается сама. Решения и задачи с исполнителями сразу в твоём списке, заметки в карточке проекта и у каждого участника.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>общая память</li><li>задачи</li><li>люди</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -507,7 +550,7 @@
         <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Может только объяснить, куда нажимать.</span></p>
         <div class="chat">
           <div class="bubble me">Заполни заявку на этой странице</div>
-          <div class="bubble bot"><span class="who">Агент</span>Заполняет форму в твоём Chrome, где ты уже вошёл: паспорт и адрес берёт из твоих документов. Перед отправкой спрашивает.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Заполняет форму в твоём Chrome, где ты уже вошёл в аккаунт. Паспорт и адрес берёт из твоих документов, а перед отправкой спрашивает разрешения.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>твой Chrome</li><li>документы</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -520,10 +563,10 @@
           <span class="ico" aria-hidden="true">💼</span>
           <h3>Поиск работы</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Сайты с вакансиями не пускают ботов. Сравнить вакансии не с чем.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Сайты с вакансиями его не пускают, а сравнить новую вакансию не с чем.</span></p>
         <div class="chat">
           <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Кидаешь ссылку на вакансию</div>
-          <div class="bubble bot"><span class="who">Агент</span>Разбор вакансии и компании, место в твоём рейтинге среди всех сохранённых, что подтянуть в резюме.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Разбор вакансии и компании, её место в твоём рейтинге среди всех сохранённых и что подтянуть в резюме именно под неё.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>браузер на сервере</li><li>общая память</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -536,10 +579,10 @@
           <span class="ico" aria-hidden="true">📥</span>
           <h3>Переезд из старых сервисов</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Объяснит, как сделать экспорт. Переносить будешь руками.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Объяснит, как сделать экспорт. Переносить всё будешь руками.</span></p>
         <div class="chat">
           <div class="bubble me">Перенеси мои заметки из Notion и задачи из старого приложения</div>
-          <div class="bubble bot"><span class="who">Агент</span>Сам забирает данные и раскладывает в общую память со ссылками между заметками. Старый сервис остаётся архивом.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Сам забирает данные и раскладывает их в общую память со ссылками между заметками. Старый сервис остаётся архивом, ничего не теряется.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>старые сервисы</li><li>задачи</li><li>общая память</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -552,10 +595,10 @@
           <span class="ico" aria-hidden="true">💭</span>
           <h3>Инбокс мыслей</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Мысль тонет в ленте чатов вместе с остальными.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Мысль тонет в ленте чатов вместе со всеми остальными.</span></p>
         <div class="chat">
-          <div class="bubble me">Идея: сделать подборку книг для команды</div>
-          <div class="bubble bot"><span class="who">Агент</span>Записано в заметку дня. Вечером разложу идеи по проектам.</div>
+          <div class="bubble me">Идея: собрать для команды подборку книг</div>
+          <div class="bubble bot"><span class="who">Агент</span>Записал в заметку дня. Вечером разложу идеи по проектам, и эта окажется рядом с похожими.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>общая память</li><li>задачи</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -568,10 +611,10 @@
           <span class="ico" aria-hidden="true">🔎</span>
           <h3>Ресерч двумя ИИ</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Одна модель, один взгляд. Отчёт остаётся в чате.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Одна модель, один взгляд. Отчёт так и останется в чате.</span></p>
         <div class="chat">
           <div class="bubble me">Сравни три сервиса для учёта клиентов в маленькой команде</div>
-          <div class="bubble bot"><span class="who">Агент</span>Claude и ChatGPT ищут независимо, итог сведён с источниками под твою ситуацию и сохранён. Следующий ресерч опирается на него.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Claude и ChatGPT ищут независимо друг от друга, итог сведён с источниками под твою ситуацию и сохранён. Следующий ресерч опирается на него.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>две подписки</li><li>общая память</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -584,10 +627,10 @@
           <span class="ico" aria-hidden="true">🎓</span>
           <h3>Наставник по курсу</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Каждый новый чат с нуля. Пересказываешь, где остановился.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Каждый новый чат начинается с нуля, и ты пересказываешь, где остановился.</span></p>
         <div class="chat">
           <div class="bubble me">Что у меня дальше по курсу?</div>
-          <div class="bubble bot"><span class="who">Агент</span>Ты закрыл урок 6. Дальше 2 часа практики на твоём проекте. Вот три вопроса для самопроверки.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Ты закрыл урок 6. Дальше 2 часа практики на твоём проекте, а вот три вопроса для самопроверки.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>конспекты</li><li>журнал обучения</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -600,10 +643,10 @@
           <span class="ico" aria-hidden="true">📚</span>
           <h3>Собеседник по книгам</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Книгу загружаешь заново в каждый чат, выводы теряются.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Книгу приходится загружать заново в каждый чат, выводы теряются.</span></p>
         <div class="chat">
           <div class="bubble me">Что автор говорит про привычки и как это применить мне?</div>
-          <div class="bubble bot"><span class="who">Агент</span>Сам достаёт текст из твоей библиотеки. Выводы из всех разговоров копятся в заметке книги.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Сам достаёт текст из твоей библиотеки. Выводы из всех разговоров о книге копятся в её заметке.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>библиотека книг</li><li>общая память</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -616,7 +659,7 @@
           <span class="ico" aria-hidden="true">📦</span>
           <h3>Разбор Telegram-чатов</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Твои чаты не видит. Копируешь переписку вручную кусками.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Твоих чатов не видит. Переписку копируешь вручную кусками.</span></p>
         <div class="chat">
           <div class="bubble me">Разбери чат проекта за месяц</div>
           <div class="bubble bot"><span class="who">Агент</span>Сам читает 2000 сообщений из Telegram. Итог: 6 заметок с решениями, ролями, закупками и дедлайнами.</div>
@@ -635,7 +678,7 @@
         <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не знает ни одного твоего знакомого.</span></p>
         <div class="chat">
           <div class="bubble me">Кто из моих знакомых разбирается в налогах?</div>
-          <div class="bubble bot"><span class="who">Агент</span>Трое. Ближе всех Мария: вы общались в мае, она вела ИП. Вот её контакт и о чём вы говорили.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Трое. Ближе всех Мария: вы общались в мае, она вела ИП. Вот её контакт и о чём вы тогда говорили.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>общая память</li><li>переписки</li><li>созвоны</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -648,10 +691,10 @@
           <span class="ico" aria-hidden="true">👨‍👩‍👧</span>
           <h3>Боты для близких</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Каждому своя подписка, установка и настройка.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Каждому нужна своя подписка, установка и настройка.</span></p>
         <div class="chat">
-          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Мама пишет своему боту в Telegram</div>
-          <div class="bubble bot"><span class="who">Агент</span>У неё свой помощник со своей памятью, отдельно от твоих данных. Ей ничего не нужно устанавливать.</div>
+          <div class="act"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg>Мама пишет своему помощнику в Telegram</div>
+          <div class="bubble bot"><span class="who">Агент</span>У неё свой бот со своей памятью, полностью отдельно от твоих данных. Устанавливать ничего не нужно, только Telegram.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>изолированный контур</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -664,10 +707,10 @@
           <span class="ico" aria-hidden="true">🏠</span>
           <h3>Охота на Авито в фоне</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Авито блокирует ботов и зарубежные адреса. Чат видит только поисковую выдачу.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Авито блокирует ботов и зарубежные адреса, так что чат видит только поисковую выдачу.</span></p>
         <div class="chat">
           <div class="bubble me">Найди квартиру посуточно на 12-14 октября до 6000, уютную, не в хрущёвке</div>
-          <div class="bubble bot"><span class="who">Агент</span>Сам ходит по Авито с домашнего российского адреса, обходит защиту от ботов. Реальная цена на твои даты, а не «от X», фото по каждому варианту и отбор под твой вкус.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Сам ищет на Авито с домашнего российского адреса, и защита от ботов ему не мешает. Показывает цену на твои даты без «от X», фото каждого варианта и отбирает жильё под твой вкус.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>браузер на сервере</li><li>твои вкусы</li><li>календарь</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -680,10 +723,10 @@
           <span class="ico" aria-hidden="true">📍</span>
           <h3>Подборка мест</h3>
         </header>
-        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Выдумывает рейтинги, ссылки на карты часто битые.</span></p>
+        <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Выдумывает рейтинги, а ссылки на карты часто битые.</span></p>
         <div class="chat">
           <div class="bubble me">Где в субботу поужинать вчетвером недалеко от дома, чтобы было уютно?</div>
-          <div class="bubble bot"><span class="who">Агент</span>Пять мест: проверенная ссылка на Яндекс Карты, рейтинг и число отзывов, вердикт «идти или нет». Выбрал - встреча уже в календаре с дорогой.</div>
+          <div class="bubble bot"><span class="who">Агент</span>Пять мест: проверенная ссылка на Яндекс Карты, рейтинг, число отзывов и вердикт «стоит идти или нет». Выбрал место, и встреча уже в календаре с учётом дороги.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>Яндекс Карты</li><li>твои вкусы</li><li>календарь</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -699,7 +742,7 @@
         <p class="plain"><span class="x" aria-hidden="true">✕</span><span><b>Обычный чат:</b> Не видит твоих трат. Цифры вбиваешь сам, каждый раз заново.</span></p>
         <div class="chat">
           <div class="bubble me">Потяну ли я аренду за 80 тысяч?</div>
-          <div class="bubble bot"><span class="who">Агент</span>По твоим тратам за 3 месяца запас на 5 месяцев. С арендой 80 он сжимается до трёх. Вот что можно урезать.</div>
+          <div class="bubble bot"><span class="who">Агент</span>По твоим тратам за 3 месяца запаса хватит на 5 месяцев. С арендой за 80 он сожмётся до трёх. Вот что можно урезать без боли.</div>
         </div>
         <ul class="uses" aria-label="Связан с"><li>банк</li><li>общая память</li></ul>
         <button class="pick" type="button" aria-pressed="false">
@@ -709,7 +752,7 @@
       </article>
       <article class="card custom reveal" data-a="all" data-name="Своя задача (опишу в чате)">
         <header class="card-h"><span class="ico" aria-hidden="true">✨</span><h3>Своя задача</h3></header>
-        <p class="plain" style="color:var(--soft)">Не нашёл нужного? Любую рутину можно превратить в инструмент: опиши её в сообщении, и я прикину, как это собрать.</p>
+        <p class="plain" style="color:var(--soft)">Не нашёл нужного? Почти любую повторяющуюся рутину можно превратить в инструмент. Опиши её в сообщении, и я прикину, как это собрать.</p>
         <div class="chat"><div class="bubble me">Хочу, чтобы бот сам делал…</div></div>
         <button class="pick" type="button" aria-pressed="false">
           <span class="pick-off"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Добавить в набор</span>
@@ -724,12 +767,12 @@
   <div class="wrap usp">
     <div class="reveal">
       <div class="eyebrow">Главное отличие</div>
-      <h2>Не готовая программа, а система, которая растёт под тебя</h2>
-      <p class="sub">Любой сервис, которым ты пользуешься, можно подключить. Новый инструмент сразу видит общую память и работает в связке с остальными. Не ты подстраиваешься под продукт, а он под твои задачи.</p>
+      <h2>Система, которая растёт вместе с тобой</h2>
+      <p class="sub">Готовые ИИ-ассистенты дают фиксированный набор функций. Здесь новый инструмент можно описать словами, и он сразу начнёт работать в связке с остальными: видеть твою память, календарь и задачи.</p>
       <ol class="steps">
         <li><b>Говоришь, что нужно</b><span>«Хочу, чтобы заявки клиентов сами становились задачами» или «пусть разбирает мою почту».</span></li>
-        <li><b>Агент собирает подключение</b><span>Сам подключается к нужному сервису или сайту и проверяет, что всё работает.</span></li>
-        <li><b>Инструмент уже в Telegram</b><span>Обычно за один-два вечера. Дальше дорабатывается словами: «делай вот так».</span></li>
+        <li><b>Агент собирает подключение</b><span>Сам подключается к нужному сервису или сайту, пишет связку и проверяет, что всё работает.</span></li>
+        <li><b>Инструмент уже в Telegram</b><span>Обычно за один-два вечера. Дальше дорабатывается обычными словами: «делай вот так».</span></li>
       </ol>
     </div>
     <div class="reveal">
@@ -749,7 +792,7 @@
   <div class="wrap">
     <div class="eyebrow">Связки</div>
     <h2>Сила появляется, когда инструменты видят друг друга</h2>
-    <p class="sub">Обычный ИИ-чат знает только то, что ты ему сейчас написал. Здесь все инструменты пишут и читают одну базу знаний, поэтому каждый новый делает умнее остальные.</p>
+    <p class="sub">Обычный ИИ-чат знает только то, что ты написал ему прямо сейчас. Здесь все инструменты пишут в одну общую память и читают из неё, поэтому каждый новый делает умнее остальные.</p>
 
     <div class="hub reveal">
       <div class="spokes">
@@ -782,7 +825,7 @@
       <div class="combo reveal"><div class="chain"><span>курс</span><i>+</i><span>заметки</span><i>+</i><span>журнал</span></div>
         <h3>Наставник помнит, где ты остановился</h3><p>Не надо пересказывать пройденное: помощник видит конспекты и твой прогресс и ведёт дальше.</p></div>
       <div class="combo reveal"><div class="chain"><span>память о себе</span><i>+</i><span>все режимы</span></div>
-        <h3>Советы под тебя, а не в среднем</h3><p>Финансы, еда, планы и ресерч учитывают твои вкусы, ограничения и цели, потому что знают их из одной базы.</p></div>
+        <h3>Советы, которые учитывают тебя</h3><p>Финансы, еда, планы и ресерч учитывают твои вкусы, ограничения и цели, потому что знают их из одной базы.</p></div>
     </div>
   </div>
 </section>
@@ -791,7 +834,7 @@
   <div class="wrap">
     <div class="eyebrow">Как получить такое себе</div>
     <h2>Собираем твой штаб за 4 недели</h2>
-    <p class="sub">Берём инструменты, которые тебя зацепили. Неделя на фундамент, дальше по 2-3 инструмента в неделю. Выбери, как тебе удобнее.</p>
+    <p class="sub">Берём инструменты, которые ты отметил, и собираем их под твои дела и привычки. Выбери, как тебе удобнее: разобраться самому со мной рядом или получить готовое.</p>
     <div class="offers" role="radiogroup" aria-label="Формат">
       <button type="button" class="offer reveal" role="radio" aria-checked="false" data-opt="Наставничество (соберу сам с твоей помощью)">
         <span class="radio" aria-hidden="true"></span>
@@ -816,6 +859,12 @@
         </ul>
       </button>
     </div>
+    <div class="weeks reveal">
+      <div><b>Неделя 1</b><h3>Фундамент</h3><p>Бот в Telegram, общая память, календарь и задачи. С первого дня пишешь ему, как живому помощнику.</p></div>
+      <div><b>Неделя 2</b><h3>Первые инструменты</h3><p>Подключаем 2-3 инструмента из твоего набора и подгоняем под твои привычки.</p></div>
+      <div><b>Неделя 3</b><h3>Связки</h3><p>Ещё 2-3 инструмента, и они начинают работать вместе через общую память.</p></div>
+      <div><b>Неделя 4</b><h3>Шлифовка</h3><p>Убираем лишнее и закрепляем привычку. Дальше новое добавляется по одному сообщению.</p></div>
+    </div>
     <div class="models reveal">
       <p><b>Нейросети на выбор.</b> Под ключ: модели даю я, с оплатой зарубежных подписок разбираться не нужно. На своих аккаунтах: подключаю твою подписку Claude или ChatGPT. В обоих вариантах нужен только Telegram.</p>
       <div class="seg" role="radiogroup" aria-label="Нейросети" id="models">
@@ -823,6 +872,22 @@
         <button type="button" role="radio" aria-checked="false" data-v="на моих аккаунтах">Мои аккаунты</button>
         <button type="button" role="radio" aria-checked="false" data-v="пока не знаю">Пока не знаю</button>
       </div>
+    </div>
+  </div>
+</section>
+
+<section id="faq">
+  <div class="wrap">
+    <div class="eyebrow">Частые вопросы</div>
+    <h2>Что обычно спрашивают</h2>
+    <div class="faq">
+      <details class="reveal"><summary>Нужно разбираться в программировании?</summary><p>Нет. Всё общение идёт в Telegram обычными сообщениями и голосом. Новые инструменты тоже описываются словами, код за тебя пишет агент.</p></details>
+      <details class="reveal"><summary>Где хранятся мои данные?</summary><p>У каждого свой отдельный бот и своя память. Твой помощник не видит чужих данных, а другие не видят твоих. В варианте под ключ бот работает на моём сервере в изолированном контуре. Что подключать к системе, решаешь только ты.</p></details>
+      <details class="reveal"><summary>Это работает из России?</summary><p>Да. В варианте под ключ доступ к нейросетям я беру на себя, тебе нужен только Telegram. Если хочешь на своих аккаунтах, подключу твою подписку Claude или ChatGPT.</p></details>
+      <details class="reveal"><summary>Чем это отличается от ChatGPT с памятью?</summary><p>ChatGPT помнит несколько фактов и работает, пока открыта вкладка. Здесь помощник подключён к твоему календарю, задачам, часам и сайтам, работает круглосуточно на сервере и сам пишет первым, когда есть что сказать.</p></details>
+      <details class="reveal"><summary>Нужны ли айфон или смарт-часы?</summary><p>Нет. Хватит Telegram на любом телефоне или компьютере. Часы, банк и другие сервисы подключаются, только если они у тебя есть и ты этого хочешь.</p></details>
+      <details class="reveal"><summary>Сколько это стоит?</summary><p>Зависит от набора инструментов и формата. Отметь, что тебе интересно, и отправь мне: после короткого созвона назову точную стоимость.</p></details>
+      <details class="reveal"><summary>Что будет после 4 недель?</summary><p>Система остаётся твоей и продолжает работать. В ведении мы раз в месяц добавляем новое, и я слежу, чтобы всё работало. После наставничества ты уже умеешь дорабатывать её сам.</p></details>
     </div>
   </div>
 </section>
@@ -848,7 +913,7 @@
     <div class="checkout reveal">
       <div>
         <div class="eyebrow">Хочешь такое себе?</div>
-        <h2>Собери свой набор и отправь мне</h2>
+        <h2>Собери свой набор и напиши мне</h2>
         <ol class="howto">
           <li id="h1"><span>Отметь в <a href="#tools">каталоге</a>, что хочешь себе</span></li>
           <li id="h2"><span>Выбери <a href="#offer">формат</a>: сам со мной или под ключ</span></li>
@@ -857,7 +922,7 @@
         <a class="btn btn-tg" id="send" href="https://t.me/zastashkov" target="_blank" rel="noopener">
           <svg viewBox="0 0 24 24" aria-hidden="true" style="fill:#fff;stroke:none"><path d="M21.7 3.3 2.9 10.6c-1.3.5-1.3 1.2-.2 1.6l4.8 1.5 1.8 5.6c.2.6.1.9.8.9.5 0 .7-.2 1-.5l2.4-2.3 4.9 3.6c.9.5 1.5.2 1.8-.8l3.2-15.2c.3-1.3-.5-1.9-1.7-1.1z"/></svg>
           <span id="sendlbl">Написать @zastashkov</span></a>
-        <p class="note">Откроется чат со мной, где уже написано, что ты выбрал. Останется нажать «Отправить». Дальше покажу систему вживую и вместе прикинем, с чего начать.</p>
+        <p class="note">Откроется чат со мной, где уже написано, что ты выбрал. Останется нажать «Отправить». Отвечу в течение дня, покажу систему вживую и вместе прикинем, с чего начать.</p>
       </div>
       <div class="kitbox" aria-live="polite">
         <h4>Твой набор <span id="kitcount"></span></h4>
