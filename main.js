@@ -47,7 +47,7 @@
 const {
   Plugin, PluginSettingTab, Setting, ItemView, Modal, SuggestModal, FuzzySuggestModal, Notice, Menu,
   MarkdownRenderChild, MarkdownRenderer, Component, Keymap, moment, setIcon, prepareSimpleSearch, prepareFuzzySearch,
-  Platform, Scope, normalizePath, requestUrl,
+  Platform, Scope, normalizePath, requestUrl, parseLinktext,
 } = require("obsidian");
 
 const VIEW_TYPE = "focus-tasks-view";
@@ -693,6 +693,14 @@ class FocusRenderer extends MarkdownRenderChild {
     if (!project && this.plugin.classify(file)?.project) project = file;
     if (project) await this.plugin.ensureStepsBlock(file, project);
     return leaf.openFile(file, eState ? { eState } : undefined);
+  }
+
+  // A link from a task's text: its note, or — a link to nothing yet — a new note, as Obsidian does.
+  async openLink(href, source, e = null) {
+    const { path, subpath } = parseLinktext(href);
+    const file = this.plugin.app.metadataCache.getFirstLinkpathDest(path, source);
+    if (file) return this.open(file, e, subpath ? { subpath } : null);
+    return this.plugin.app.workspace.openLinkText(href, source, this.leaf ? "tab" : !!(e && Keymap.isModEvent(e)));
   }
 
   // Every draggable row maps to what it shows: {type: "area" | "area-title" | "project" | "task", ...}.
@@ -1633,6 +1641,21 @@ class FocusRenderer extends MarkdownRenderChild {
     await MarkdownRenderer.render(this.plugin.app, task.text, text, task.file.path, this.inner);
     const para = text.querySelector("p");
     if (para) para.replaceWith(...para.childNodes);
+    // A [[link]] in the text opens its note. In a note's reading view Obsidian answers that click
+    // itself; in the pane nobody does, and the link was dead. Opened the way a task's note is (never
+    // over the pane itself), with the page preview on hover as anywhere else.
+    for (const a of text.querySelectorAll("a.internal-link")) {
+      const href = a.getAttr("data-href") || a.getAttr("href");
+      if (!href) continue;
+      a.addEventListener("click", (e) => {
+        e.preventDefault();
+        if (picking(e)) return;   // Shift/⌘-click picks the row, as anywhere on it
+        e.stopPropagation();
+        this.openLink(href, task.file.path, e);
+      });
+      a.addEventListener("mouseover", (e) => this.plugin.app.workspace.trigger("hover-link", {
+        event: e, source: "preview", hoverParent: this.inner, targetEl: a, linktext: href, sourcePath: task.file.path }));
+    }
     // the link is the words, not the cell: the rendered text is wrapped so a click can tell them apart
     if (task.described) {
       const link = createSpan({ cls: "ft-text-link" });

@@ -1158,6 +1158,19 @@ step("⌘2 in the editor sends the row away; ⌘Z brings it back, selected", asy
   await selectedAre([]);
 });
 
+step("a [[link]] in a task's text opens its note from the pane, in a tab of its own", async () => {
+  await page.eval(`if (!app.vault.getAbstractFileByPath('Notes/Linked.md')) { if (!app.vault.getAbstractFileByPath('Notes')) await app.vault.createFolder('Notes'); await app.vault.create('Notes/Linked.md', 'Linked note.'); } return true;`);
+  await plugin(`await p.createTask('Read [[Linked]] today', { area: '💪Sport', project: null }, ${J(TODAY)}); return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.all('li.ft-task a.internal-link', __ft.view()).find((a) => a.textContent === 'Linked')`), "the link on screen");
+  await settle();
+  await click(`__ft.at(__ft.all('li.ft-task a.internal-link', __ft.view()).find((a) => a.textContent === 'Linked'))`, "the link");
+  await until(async () => (await activePath()) === "Notes/Linked.md", "the linked note opened");
+  if (await page.eval(`return !!document.querySelector('.focus-tasks-view .is-editing')`)) throw new Error("a click on the link started an edit");
+  if (!(await page.eval(`return app.workspace.getLeavesOfType('focus-tasks-view').length`))) throw new Error("the note opened over the pane");
+  await page.eval(`for (const l of app.workspace.getLeavesOfType('markdown')) if (l.view.file?.path === 'Notes/Linked.md') l.detach(); return true;`);
+});
+
 step("⌘D copies the selected task right under it and selects the copy; in the editor it moves into the copy; ⌘Z takes a copy back", async () => {
   await plugin(`await p.createTask('Twin me', { area: '💪Sport', project: null }, ${J(TODAY)}); return true;`);
   await toPane();
