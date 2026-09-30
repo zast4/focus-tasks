@@ -83,7 +83,7 @@ const DEFAULTS = {
 const STRINGS = {
   en: {
     viewTitle: "Focus", open: "Open Focus", focusEmpty: "Nothing due today",
-    noAreas: "No areas yet — create the first one", restTitle: "Other areas", findPlaceholder: "Find an area, a project or a task…", cmdFind: "Find in the list", findGone: "Not in the list any more", focusTitle: "Focus", focusOnly: "Show the focus alone: its areas open, everything else folded", openTasks: "{0} open", all: "All", hide: "Hide",
+    noAreas: "No areas yet — create the first one", restTitle: "Other areas", findPlaceholder: "Find an area, a project or a task…", cmdFind: "Find in the list", findGone: "Not in the list any more", focusTitle: "Focus", focusOnly: "Show the focus alone: its areas open, «All» and the ⏳ piles off", openTasks: "{0} open", all: "All", hide: "Hide",
     newArea: "+ Area", areaFromNote: "+ Area from a note", foldAll: "Collapse all", unfoldAll: "Expand all",
     openCount: "open {0}", inFocus: ", in focus {0}", addToArea: "Task in this area", empty: "Empty",
     addTask: "Add a task", showUpcoming: "Show upcoming", hideUpcoming: "Hide upcoming",
@@ -170,7 +170,7 @@ const STRINGS = {
   },
   ru: {
     viewTitle: "Фокус", open: "Открыть Фокус", focusEmpty: "В фокусе пусто",
-    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", findPlaceholder: "Найти область, проект или задачу…", cmdFind: "Найти в списке", findGone: "Этого больше нет в списке", focusTitle: "Фокус", focusOnly: "Показать только фокус: его области развернуть, остальное свернуть", openTasks: "открыто: {0}", all: "Все", hide: "Скрыть",
+    noAreas: "Областей пока нет — создай первую", restTitle: "Остальные области", findPlaceholder: "Найти область, проект или задачу…", cmdFind: "Найти в списке", findGone: "Этого больше нет в списке", focusTitle: "Фокус", focusOnly: "Показать только фокус: его области развернуть, «Все» и отложку скрыть", openTasks: "открыто: {0}", all: "Все", hide: "Скрыть",
     newArea: "+ Область", areaFromNote: "+ Область из заметки", foldAll: "Свернуть всё", unfoldAll: "Развернуть всё",
     openCount: "открыто {0}", inFocus: ", в фокусе {0}", addToArea: "Задача в область", empty: "Пусто",
     addTask: "Добавить задачу", showUpcoming: "Показать будущее", hideUpcoming: "Скрыть будущее",
@@ -842,15 +842,17 @@ class FocusRenderer extends MarkdownRenderChild {
     if (handle) this.mark(handle);
   }
 
-  async focusOnly(areas, rest, wide) {
+  // «Focus» clicked: the focus alone, as «All» turned off does it — the other areas and every ⏳ pile
+  // go, the focus areas open; «Done» and «Waiting» close too.
+  async focusOnly(areas, rest) {
     const p = this.plugin;
     for (const a of areas) {
       delete p.data.folded["area:" + a.name];
       delete p.data.opened["future:" + a.name];
-      if (wide) p.data.opened["futureoff:" + a.name] = true;   // in «All» the pile is open unless closed
     }
     for (const a of rest) delete p.data.opened["area:" + a.name];
     p.saveFolds();
+    p.app.saveLocalStorage("focus-tasks-all", null);
     p.app.saveLocalStorage("focus-tasks-done", null);
     p.app.saveLocalStorage("focus-tasks-waiting", null);
     await this.rerendered();
@@ -944,7 +946,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // every other area folds, the closed and waiting blocks close.
     if (areas.length) {
       const head = el.createDiv({ cls: "ft-rest-title ft-focus-title", text: t("focusTitle"), attr: { "aria-label": t("focusOnly") } });
-      head.onclick = () => this.focusOnly(areas, rest, everything);
+      head.onclick = () => this.focusOnly(areas, rest);
     }
     for (const area of areas) await this.area(el, area, false, everything);
     if (everything) {

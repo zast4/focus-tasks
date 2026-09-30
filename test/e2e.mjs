@@ -1485,7 +1485,7 @@ step("⌘F finds a task hidden in a folded pile, opens what hides it, scrolls to
   await settle();
 });
 
-step("a click on «Focus» opens every focus area and folds everything else", async () => {
+step("a click on «Focus» opens every focus area and hides the rest: «All» and the ⏳ piles off", async () => {
   await toPane();
   const state = await plugin(`
     window.__ftDoneWas = p.doneShown();
@@ -1499,8 +1499,9 @@ step("a click on «Focus» opens every focus area and folds everything else", as
     return { focus: areas.map((a) => a.name), rest: rest.map((a) => a.name) };`);
   await settle();
   await click(`__ft.at(__ft.view().querySelector('.ft-focus-title'))`, "the «Focus» title");
-  await until(() => plugin(`return ${J(state.focus)}.every((n) => !p.data.folded['area:' + n]) && ${J(state.rest)}.every((n) => !p.data.opened['area:' + n]) && !p.doneShown()`),
-    "focus areas open, the rest folded, the closed block shut");
+  await until(() => plugin(`return ${J(state.focus)}.every((n) => !p.data.folded['area:' + n]) && ${J(state.rest)}.every((n) => !p.data.opened['area:' + n]) && !p.doneShown() && !p.everything()`),
+    "focus areas open, the rest folded, «All» off, the closed block shut");
+  if (await page.eval(`return !!__ft.view().querySelector('.ft-rest-title:not(.ft-focus-title)') || __ft.all('.ft-future-block', __ft.view()).length > 0`)) throw new Error("other areas or a ⏳ pile still on screen");
   await plugin(`const was = JSON.parse(window.__ftFoldsWas); p.data.folded = was.folded; p.data.opened = was.opened; p.saveFolds();
     p.setEverything(false); p.setDoneShown(window.__ftDoneWas); return true;`);
   await settle();
