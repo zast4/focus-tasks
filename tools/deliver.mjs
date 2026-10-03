@@ -2,6 +2,7 @@
 // Puts a build into the vault and says, inside the code itself, which one it is.
 //
 //   node tools/deliver.mjs --mode test      # hand it over for a look; the stable one stays a click away
+//   node tools/deliver.mjs --mode test --stage-only  # prepare the spare without changing the running plugin
 //   node tools/deliver.mjs --mode stable    # merged: both modes become the same build
 //
 // Two places are written:
@@ -28,8 +29,10 @@ const arg = (name, fallback = null) => {
 };
 
 const mode = arg("mode");
+const stageOnly = process.argv.includes("--stage-only");
+if (stageOnly && mode !== "test") throw new Error("--stage-only is for a test candidate");
 if (!["stable", "test"].includes(mode)) {
-  console.error("usage: deliver.mjs --mode stable|test [--vault <path>] [--stable-ref <ref>]");
+  console.error("usage: deliver.mjs --mode stable|test [--stage-only] [--vault <path>] [--stable-ref <ref>]");
   process.exit(2);
 }
 const vault = arg("vault", path.join(process.env.HOME, "vaults/Vault"));
@@ -77,13 +80,15 @@ const put = (dir, as) => {
 // and neither button has anywhere to go.
 const modes = mode === "stable" ? ["stable", "test"] : ["test"];
 for (const as of modes) put(path.join(vault, ROOT, as), as);
-for (const file of FILES) {
+for (const file of stageOnly ? [] : FILES) {
   if (file === "main.js") atomic(path.join(plugin, file), baked(mode));
   else atomic(path.join(plugin, file), fs.readFileSync(path.join(HERE, file)));
 }
 
 // What the older scheme left beside the plugin: unread now, and Sync keeps trying to carry it.
-fs.rmSync(path.join(plugin, "build.json"), { force: true });
-fs.rmSync(path.join(plugin, "builds"), { recursive: true, force: true });
+if (!stageOnly) {
+  fs.rmSync(path.join(plugin, "build.json"), { force: true });
+  fs.rmSync(path.join(plugin, "builds"), { recursive: true, force: true });
+}
 
 console.log(`${mode}: ${commit} ${subject}${mode === "test" && queue ? ` (+${queue} over ${stableRef})` : ""}`);

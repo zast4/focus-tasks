@@ -746,7 +746,7 @@ test("a block in a project's note shows that project; `project:` in the block na
   });
   const marathon = app.vault.getAbstractFileByPath("Areas/Marathon.md");
   eq(plugin.blockPage("", "Areas/Marathon.md")?.project, marathon, "no text, in the project's note: that project");
-  eq(plugin.blockPage("", "Areas/Sport.md"), null, "in the area's note: the whole list");
+  eq(plugin.blockPage("", "Areas/Sport.md")?.area?.path, "Areas/Sport.md", "in the area's note: that area's page");
   eq(plugin.blockPage("project: [[Marathon]]", "Notes/Dashboard.md")?.project, marathon, "named by link");
   eq(plugin.blockPage("project: Marathon", "Notes/Dashboard.md")?.project, marathon, "named by name");
   // the page reads every pile of the project, in the focus or not
@@ -1201,7 +1201,7 @@ test("a task linked to its project by path is not called lost", async () => {
   eq(names(plugin.orphans()), [], "it has a home: the project names its area");
 });
 
-test("the checkbox decides from the note on disk, not from what the screen remembers", async () => {
+test("an old unchecked row never reopens a task another device already completed", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Sport");
     taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
@@ -1209,7 +1209,7 @@ test("the checkbox decides from the note on disk, not from what the screen remem
   const stale = plugin.tasks()[0];            // read while the task was open
   await plugin.setFields(stale, { status: "done", completedDate: TODAY });  // another device finished it
   await plugin.toggle(stale);                  // the user taps the box they saw as empty
-  eq(frontmatter(app, "Tasks/Run.md").status, "open", "the tap takes the note as it is now: done → open");
+  eq(frontmatter(app, "Tasks/Run.md").status, "done", "checking an old row is an idempotent completion intent");
 });
 
 test("a repeating task is not finished as a whole when nothing can complete the occurrence", async () => {

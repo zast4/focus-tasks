@@ -80,8 +80,8 @@ export class Page {
     return this.send("Input.dispatchMouseEvent", { type, x, y, button: "left", buttons, clickCount: 1, modifiers });
   }
 
-  async click({ x, y }, modifiers = 0) {
-    await this.front();
+  async click({ x, y }, modifiers = 0, bringToFront = true) {
+    if (bringToFront) await this.front();
     await this.mouse("mouseMoved", x, y, 0, modifiers);
     await this.mouse("mousePressed", x, y, 1, modifiers);
     await this.mouse("mouseReleased", x, y, 0, modifiers);
@@ -89,8 +89,8 @@ export class Page {
   }
 
   // A right click: the page gets a contextmenu event, as from a real mouse.
-  async rightClick({ x, y }) {
-    await this.front();
+  async rightClick({ x, y }, bringToFront = true) {
+    if (bringToFront) await this.front();
     await this.mouse("mouseMoved", x, y, 0);
     for (const [type, buttons] of [["mousePressed", 2], ["mouseReleased", 0]]) {
       await this.send("Input.dispatchMouseEvent", { type, x, y, button: "right", buttons, clickCount: 1 });

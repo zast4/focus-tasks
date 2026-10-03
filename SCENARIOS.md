@@ -1,124 +1,85 @@
-# How the list is used, and what proves it works
+# Scenarios and ZFG invariants
 
-The plugin exists to run one system: **ZFG** — a short focus of what is due today, an «отложка» of what
-has no date, and areas as the only top-level containers. Everything below is written as a day in that
-system, followed by the test that holds it. Three suites:
+[Русские сценарии и рабочий цикл ZFG](SCENARIOS.ru.md).
 
-| suite | what it drives | run |
+Focus is currently relevant work. `scheduled` is the day to start or look again;
+`due` is a deadline and does not substitute for that day. Ordinary dated work is
+relevant for its whole day. Waiting with an hour returns at that precise moment.
+Four or five areas is a ZFG working norm, never a cap that hides additional work.
+
+## Scenario matrix
+
+M = `test/model.mjs`; A = `test/audit.mjs`; E = `test/e2e.mjs`;
+P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
+
+| Situation | Expected visible/persisted result | Coverage |
 | --- | --- | --- |
-| `test/model.mjs` | the data layer against a fake vault (no Obsidian) | `node test/model.mjs` |
-| `test/e2e.mjs` | a real Obsidian window, real mouse and keyboard | `node test/e2e.mjs` |
-| `test/mobile.mjs` | the same, in Obsidian's mobile emulation, with touch | `node test/mobile.mjs` |
+| Open Focus in the morning | Only relevant areas/steps; undated and future work remains retrievable | M, E |
+| Capture inside a focus area/project | Local note with a fresh uid and today's day | M, E, P |
+| Capture in an upcoming pile | An undated note in that same area/project | M, E, P |
+| Add inside a project note | Steps view, undated local addition, closed history folded | M, E |
+| Open an area's own note | All its projects and tasks, undated local addition, local closed history | A, E |
+| Link a custom note to an area/project | Name opens that note; menu can open the task container | M, E |
+| Make an existing note an area | Preserve prose/properties; add the local view once; Undo restores the original | A, E |
+| Enter while editing | Save text and open the next row at the same level/date | M, E, P |
+| Escape while editing | Keep the previously saved state and leave the row selected | E |
+| A date shortcut removes an edited row from its list | Save text and move the row immediately, preserving the next editing position | E |
+| Date/selection shortcuts without an editor or selection | Pass to Obsidian, including Cmd+1..9 tab switching | E; native Mac acceptance |
+| Cmd+D while editing/selecting | New open note per task with fresh identity; copies selected/editable; one Undo | A, E |
+| Duplicate previously waiting/done/cancelled work | Copy is open, original is unchanged; recorded execution history is not copied | A |
+| Change day on a timed task | Preserve its existing hour from disk | A, E |
+| Remove its hour or day | Explicit hour removal retains day; clearing day clears both | A, E |
+| Invalid day/hour in a card | No silent fallback; invalid input remains available to correct | E |
+| Scroll another pane | Do not commit a date card attached to this pane | E |
+| Save/rename fails | Keep text/card usable; persist no false successful transition | A, E |
+| Mark done, then reopen | Persist status and completion day; display day's history; reopen only explicitly | M, E, P |
+| Another device has already completed an unchecked row | Stale check must not reopen it or replace its completion date | A, M |
+| Last project step is completed | Project has a place to add the next step; explicit user action closes the project | M, E |
+| Project's own scheduled date changes | Date belongs to project; step dates are preserved | M, E |
+| Waiting before/at/after return | Separate shelf before; relevant in Focus at/after; never auto-completed | M, E, C |
+| Take Waiting back early | Current open work; obsolete future Calendar reminder removed | M, E, C |
+| Find folded/undated/future/waiting work | Reveal the containing area/project/pile and select the result | M, E |
+| Select range/group, change date, drag, delete | Operate on intended task identities; project row selection means project | M, E |
+| Drag within an area/project | Persist ordering of the intended visible list | M, E, P |
+| Drag across containers | Update area/project and appropriate scheduled day; keep Waiting return | M, E |
+| Move a whole project to another area | All child area references and container links move; one Undo restores them | A, M, E |
+| Rename task/project | Preserve uid, file identity, full title and incoming links; Undo reverses the rename | A, M, E |
+| Make a task into a project | Preserve description; checklist becomes steps; date goes to the first relevant step | M, E |
+| Delete task/project/area | Scope matches command; children with replacement/moved identities survive; Undo is available | A, M, E |
+| Undo after an external edit/delete/create/order change | Preserve the external work; report skipped/conflicted restoration | A, M |
+| Slow/partial/concurrent writes | Separate gestures are serialized; partial owned writes stay undoable | A, M, S |
+| Malformed YAML, CRLF, BOM, nested/custom properties | Read safely or refuse; preserve description bytes and unknown field values | A, M |
+| UID removed/replaced externally | Refuse a stale destructive/update action rather than change identity | A, M |
+| Optional TaskNotes recurring checkbox | Complete one instance through its real API; preserve series/uid/area; Undo must not touch companion edits or earlier unrelated work | A, M, E with TaskNotes |
+| One area/project/file name collides with another | No overwrite, lost identity or accidental project resolution | M, A |
+| Midnight, dated completion, exact Waiting hour, explicit timezone offset | Current relevance and displayed local day/hour agree | M, A, E; actual sleep/wake acceptance |
+| All, upcoming toggles, collapse/expand, Focus reset | All remains complete; Focus hides upcoming/rest work; folding is per device | M, E, P |
+| Embedded view, Live Preview, links, pane close/reload | Same task state; ordinary navigation; no orphan editor, picker or shortcut scope | E |
+| Russian/English settings, folder, companion/build switching | Valid settings; real companion configuration; clear running build identity | M, E |
+| Phone at 320/390/430 px | Project above step; action has width; no horizontal overflow; touch capture/drag/menu | P |
+| Phone offline capture and reload | Note exists locally immediately and survives reload | P; actual iPhone/Sync acceptance |
+| Timed backlog task becomes relevant | Scheduled day enters Focus; separate cloud event notifies at its hour | A, E, C |
+| Timed Waiting becomes relevant | Same event identity, exact return moment, no completion automation | M, E, C |
+| Calendar rename/reschedule/complete/cancel/clear | Update/delete only the owned event without duplicates | C, disposable iCloud probe |
+| Calendar offline, missing file, malformed note, duplicate uid | Retry/protect; Sync grace; past first-arrival is marked missed | C |
+| Remote Calendar replacement/write/delete race | ETag condition refuses overwriting/deleting a foreign event | C |
+| Large vault/random histories | Every active note is discoverable; uid, body and custom properties survive | S |
+| Bot reads the same notes | Waiting status/hour and start-day semantics agree with the plugin | host scripts tests |
 
-`bash ~/ai-hub/scripts/ticktick/tests/run.sh` covers the scripts that read and write the same notes.
+## The weekly ZFG loop
 
-## The day
+Capture into an area or project. Put relevant work in Focus by scheduled day. Review
+undated backlog regularly; pull current work into focus or give it a future date.
+Waiting names a day/moment for another look. Date age remains the stuck-work signal.
+Complete a task yourself; decide yourself whether an empty project is finished.
 
-**Morning: what is due.** The focus lists only areas with a task dated today or earlier; four or five
-areas at a time is the ZFG norm, and the list must not pad that with anything else. An area with
-nothing due is not in the focus at all — it waits under «All».
-→ *model: «morning: only the areas with something due today are in the focus», «an area with nothing
-due today is out of the focus and in «All»»*
+Calendar records notification time; Timery records time actually spent. Those are
+separate from task completion. An alarm is not proof that work was done.
 
-**Adding during the day.** A task arrives from the phone, from the bot or from «+» on an area. It
-lands in that area with today's date (in the upcoming block, without one) and the note is written at
-once, so the next device sees it.
-→ *model: «two tasks with the same text get their own notes»; e2e: «a click on «Empty» types a task»,
-«+ on a project makes steps that point at it»; mobile: ««+» on an area adds a task with the on-screen
-keyboard»*
+## Boundaries
 
-**Moving work.** Tomorrow, a date from the picker, or no date at all — the last one is what sends a
-task to the отложка. Several selected rows take one date together. A row can be worked on as a whole,
-without touching its text: the grip (or Esc from the editor) selects it, the keys then date it, walk
-the list, edit or delete it — and ⌘Z takes back the last change, from the editor too while nothing
-is typed, because a date set by ⌘2 was otherwise stuck behind the browser's text undo.
-→ *model: «moving a task to tomorrow takes it out of today», «sending a task to someday clears its
-date», «several selected tasks are deleted together and come back together»; e2e: «⌘2 tomorrow, ⌘4
-no date», «the grip of a selected row drags them all; ⌘1–4 date them all», «the grip selects the row;
-↑/↓ walk, Shift extends, Enter edits, Esc saves and reselects», «⌘2 in the editor sends the row away;
-⌘Z brings it back, selected», «⌫ on a selection deletes the rows; Undo brings them back»; mobile:
-«the date picker fits the screen and sets a date by tap», «a tap on the grip opens the row's menu»*
-
-**Stuck work.** A task keeps the date it was first given: its age in the focus is the signal. Two days
-late or more, the row says how many days, not only in red.
-→ *model: «a task stuck for two weeks is still in the focus, dated in the past»*
-
-**Evening: what got done.** Everything checked off today stays where it lives — a step under its own
-project, a loose task at the bottom of its area — beneath a hairline, and the green ✓N on that row
-counts it and folds it away. One pile at the bottom of the area made you hunt for which project a
-row came from, and a second grey row under the list read like a footer. Tomorrow they are gone from the list —
-the dates they carry are what the weekly throughput counts.
-→ *model: «evening: everything checked off today is counted in its area, and gone tomorrow», «a step
-of a project checked off today keeps its area in the focus»; e2e: «the box completes the task: status,
-the day, and the area's ✓ brings it back»*
-
-**A project.** A project is a note; its steps are tasks pointing at it. Only a dated step puts a
-project in the focus; a project whose steps are all future lives behind the ⏳N of its area.
-
-**A project finished today.** Checking off its last step must not take the project off the screen: I
-would lose both the sight of finishing it and the place to put what comes next. So it keeps its row
-until the day is out — the name steps back, «done N» in green stands where the count was, and its «+»
-opens the next step right there. One new step and it is an ordinary project again. Tomorrow it is
-gone from the focus and waits behind the ⏳N of its area.
-→ *model: «a project whose steps are all done today keeps its place, marked done», «a project
-finished on an earlier day is gone from the focus», «a project with a step left open is not finished,
-however much was done today», «a new task in a project finished today brings it back to life»;
-e2e: «the last step of a project checked off: the project stays, marked done, and takes a new step»*
-
-**A task that grew.** A task is a service note, not a place to keep a plan: when it has one, it becomes
-a project. Its text becomes the project's name, its description the project's note, a checklist in that
-description its steps. A task that was in the focus stays there as the project's first step; an undated
-one leaves no twin row behind.
-→ *model: «a task with a description becomes a project and stays in the focus as its first step», «a
-task whose description was a checklist becomes a project with those steps», «an undated task that
-becomes a project leaves no twin row behind»; e2e: ««Make it a project»»*
-
-**Weekly review.** The scripts read the same notes: focus rows with ids, what was completed and when,
-the areas. Nothing in the plugin may change the shape they read.
-→ *scripts: `tests/test_obsidian_tasks.py` (27 tests), and the whole suite, 155*
-
-## What must never happen
-
-**A task disappears.** Every open task is either in its area, in the upcoming block, in «All», or — if
-it has no area and no project — in «Without an area» at the bottom. There is no fifth place.
-→ *model: «fuzz: whatever is in the vault, every open task is somewhere on screen» (40 random vaults),
-«a task with neither an area nor a project is not lost silently»*
-
-**The focus fills up with what is not due.** Nothing dated in the future may appear above the fold.
-→ *model: «fuzz: the focus never shows a task that is not due yet» (30 random vaults)*
-
-**A write loses what another writer put there.** The plugin's own fields are written into the
-frontmatter; everything else in the note — TaskNotes' recurrence and time entries, the body, unknown
-keys — survives. A decision to complete or reopen is taken from the note as it is on disk.
-→ *model: «writing a field keeps everything else in the note, lists included», «the checkbox decides
-from the note on disk, not from what the screen remembers», «a task renamed by another device is still
-written to»*
-
-**A repeating task is ended by one tick.** When a note has `recurrence`, only TaskNotes knows how to
-close a single occurrence; without it the tick is refused rather than writing `status: done`.
-→ *model: «a repeating task is not finished as a whole when nothing can complete the occurrence»*
-
-**Something is deleted with no way back.** A task, a project or an area goes to the trash with one
-«Undo» that restores every note it touched — and refuses to overwrite anything written there since.
-→ *model: «a deleted task comes back with the same uid», «deleting an area takes its tasks, and undo
-brings everything back», «undo does not wipe what was written in the meantime»*
-
-**The order a user arranged is lost.** The dragged order lives in `data.json` by `uid`, so renames and
-edits keep it; a note renamed from outside keeps its place and its fold state.
-→ *model: «a dragged order is kept by uid and survives a rename», «renaming a project note from
-outside keeps its place and its fold», «the saved order does not grow duplicates»*
-
-**A phone cannot do what a mouse can.** Every target is at least 24 px, the grip is always visible, a
-tap opens the menu, a finger drags without opening Obsidian's sidebar, and nothing runs off the side
-of the screen.
-→ *mobile: all 13 steps*
-
-## Deliberately not there
-
-- **Repeats, reminders, time tracking.** TaskNotes does them on the same notes; the schema is its own
-  so that it can. The plugin stays the ZFG view on top.
-- **An inbox.** A task belongs to an area; «Without an area» is a repair queue, not a place to keep
-  work.
-- **Bulk «move everything overdue to today».** The age of a task in the focus is the ZFG signal that
-  it is stuck; a button that erases that signal every morning is the opposite of the system.
-- **Sorting modes.** The order is manual, then the nearest date, then the name.
+Run desktop, desktop with Tasks, desktop with TaskNotes, and mobile sequentially:
+mobile emulation is app-wide. Model/audit/calendar tests can run independently.
+See `AUDIT.md` for reproduced failures and limits, `CALENDAR_INTEGRATION.md` for the
+cloud state machine and physical-device acceptance. No recurrence engine, new Inbox,
+tags, automatic completion or second time tracker is added by this audit.

@@ -1,0 +1,385 @@
+"""No network, real YAML and ICS. Failure injection covers reconciliation and ownership."""
+import copy
+import datetime as dt
+import tempfile
+import unittest
+import contextlib
+import hashlib
+import io
+import json
+from unittest.mock import patch
+from pathlib import Path
+from types import SimpleNamespace
+
+from icalendar import Calendar
+from caldav.lib.url import URL
+
+from apple_calendar import ICloud, OWNER, OwnershipConflict, Reminder, Snapshot, event_ical, reconcile, save_state, scan, main
+from install_macos import job
+
+NOW = dt.datetime(2030, 1, 2, 12, tzinfo=dt.timezone.utc)
+
+
+def reminder(uid="one", at=None, waiting=False, path="Задачи/One.md"):
+    return Reminder(uid, path, "A task with commas, ; and\nnewlines", at or NOW + dt.timedelta(days=2), waiting, "Test Vault")
+
+
+class MemoryCalendar:
+    def __init__(self):
+        self.items, self.calls = {}, []
+        self.fail = False
+
+    def upsert(self, r):
+        if self.fail:
+            raise ConnectionError("secret URL must not escape")
+        self.calls.append(("upsert", r.uid))
+        self.items[r.uid] = r
+
+    def verify(self, r):
+        if self.fail:
+            raise ConnectionError("connection")
+        return self.items.get(r.uid) == r
+
+    def delete(self, r):
+        if self.fail:
+            raise ConnectionError("connection")
+        self.calls.append(("delete", r.uid))
+        self.items.pop(r.uid, None)
+
+
+class ReconcileTests(unittest.TestCase):
+    def setUp(self):
+        self.remote = MemoryCalendar()
+        self.state = {"tasks": {}}
+        self.r = reminder()
+        self.snapshot = Snapshot(desired={self.r.uid: self.r}, seen={self.r.uid})
+
+    def run_at(self, snapshot=None, now=NOW):
+        return reconcile(snapshot or self.snapshot, self.state, self.remote, now=now)
+
+    def test_repeated_poll_is_idempotent(self):
+        for _ in range(50):
+            self.run_at()
+        self.assertEqual(self.remote.calls, [("upsert", "one")])
+
+    def test_reschedule_updates_same_uid(self):
+        self.run_at()
+        r = reminder(at=NOW + dt.timedelta(days=4))
+        self.run_at(Snapshot(desired={r.uid: r}, seen={r.uid}))
+        self.assertEqual(len(self.remote.items), 1)
+        self.assertEqual(self.remote.items["one"].at, r.at)
+
+    def test_waiting_uses_same_event_identity(self):
+        self.run_at()
+        r = reminder(waiting=True)
+        self.run_at(Snapshot(desired={r.uid: r}, seen={r.uid}))
+        self.assertEqual(r.event_uid, self.r.event_uid)
+        self.assertTrue(self.remote.items["one"].waiting)
+
+    def test_done_or_time_removed_deletes_owned_event(self):
+        self.run_at()
+        self.run_at(Snapshot(seen={"one"}))
+        self.assertEqual(self.remote.items, {})
+        self.assertEqual(self.state["tasks"], {})
+
+    def test_sync_gap_is_not_a_deletion(self):
+        self.run_at()
+        self.run_at(Snapshot(), now=NOW + dt.timedelta(seconds=10))
+        self.run_at(now=NOW + dt.timedelta(seconds=30))
+        self.assertIn("one", self.remote.items)
+        self.assertNotIn("missingSince", self.state["tasks"]["one"])
+
+    def test_missing_file_deleted_after_grace(self):
+        self.run_at()
+        self.run_at(Snapshot())
+        self.run_at(Snapshot(), now=NOW + dt.timedelta(seconds=121))
+        self.assertEqual(self.remote.items, {})
+
+    def test_corrupt_renamed_note_blocks_missing_cleanup(self):
+        self.run_at()
+        s = Snapshot(errors=["unreadable-task"], blocked_paths={"Задачи/Renamed.md"})
+        self.run_at(s)
+        self.run_at(s, now=NOW + dt.timedelta(days=1))
+        self.assertIn("one", self.remote.items)
+
+    def test_duplicate_identity_is_quarantined(self):
+        self.run_at()
+        self.run_at(Snapshot(seen={"one"}, duplicates={"one"}))
+        self.assertIn("one", self.remote.items)
+
+    def test_offline_failure_is_retried_and_not_acknowledged(self):
+        self.remote.fail = True
+        self.run_at()
+        self.assertEqual(self.state["tasks"], {})
+        self.assertEqual(self.state["errors"], ["ConnectionError"])
+        self.remote.fail = False
+        self.run_at()
+        self.assertEqual(self.state["tasks"]["one"]["status"], "synced")
+
+    def test_failed_delete_keeps_state_for_retry(self):
+        self.run_at()
+        self.remote.fail = True
+        self.run_at(Snapshot(seen={"one"}))
+        self.assertIn("one", self.state["tasks"])
+        self.remote.fail = False
+        self.run_at(Snapshot(seen={"one"}))
+        self.assertEqual(self.state["tasks"], {})
+
+    def test_missed_reminder_never_turns_into_a_false_success(self):
+        self.r = reminder(at=NOW - dt.timedelta(hours=1))
+        self.snapshot = Snapshot(desired={"one": self.r}, seen={"one"})
+        for _ in range(10):
+            self.run_at()
+        self.assertEqual(self.state["tasks"]["one"]["status"], "missed")
+        self.assertEqual(self.remote.calls, [])
+        self.snapshot.desired["one"] = reminder(at=NOW + dt.timedelta(hours=1))
+        self.run_at()
+        self.assertEqual(self.state["tasks"]["one"]["status"], "synced")
+
+    def test_remote_deleted_event_recreated_at_verification(self):
+        self.run_at()
+        self.remote.items.clear()
+        self.run_at(now=NOW + dt.timedelta(minutes=11))
+        self.assertEqual(len(self.remote.calls), 2)
+
+    def test_rescheduling_a_synced_future_reminder_to_the_past_removes_old_alarm_and_marks_missed(self):
+        self.run_at()
+        self.snapshot.desired['one'] = reminder(at=NOW-dt.timedelta(minutes=1))
+        self.run_at()
+        self.assertEqual(self.state['tasks']['one']['status'], 'missed')
+        self.assertEqual(self.remote.items, {})
+
+    def test_failed_removal_when_rescheduling_into_past_keeps_old_state_for_retry(self):
+        self.run_at()
+        self.snapshot.desired['one'] = reminder(at=NOW-dt.timedelta(minutes=1))
+        self.remote.fail = True
+        self.run_at()
+        self.assertEqual(self.state['tasks']['one']['status'], 'synced')
+        self.assertEqual(self.state['errors'], ['ConnectionError'])
+        self.remote.fail = False
+        self.run_at()
+        self.assertEqual(self.state['tasks']['one']['status'], 'missed')
+        self.assertEqual(self.remote.items, {})
+
+    def test_offline_during_periodic_verification_keeps_last_acknowledgement(self):
+        self.run_at()
+        self.remote.fail = True
+        self.run_at(now=NOW + dt.timedelta(minutes=11))
+        self.assertEqual(self.state["tasks"]["one"]["checkedAt"], NOW.isoformat())
+        self.assertEqual(self.state["errors"], ["ConnectionError"])
+
+
+class ScanTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.vault = Path(self.tmp.name)
+        (self.vault / "Задачи").mkdir()
+
+    def write(self, name="One", extra="", newline="\n", uid="one"):
+        text = f'---\ntype: задача\nuid: {uid}\nstatus: open\nscheduled: 2030-01-04T16:30\n{extra}---\nDescription untouched\n'
+        (self.vault / "Задачи" / (name + ".md")).write_bytes(text.replace("\n", newline).encode())
+
+    def test_real_yaml_crlf_and_body_untouched(self):
+        self.write(extra='unknown:\n  nested: [a, b]\n', newline="\r\n")
+        before = (self.vault / "Задачи/One.md").read_bytes()
+        out = scan(self.vault)
+        self.assertEqual(out.desired["one"].at.hour, 13)
+        self.assertEqual(out.errors, [])
+        self.assertEqual((self.vault / "Задачи/One.md").read_bytes(), before)
+
+    def test_duplicate_uids_never_create_events(self):
+        self.write()
+        self.write("Copy")
+        out = scan(self.vault)
+        self.assertEqual(out.desired, {})
+        self.assertEqual(out.duplicates, {"one"})
+
+    def test_bad_yaml_protects_previous_path(self):
+        self.write(extra="invalid: [\n")
+        self.assertIn("Задачи/One.md", scan(self.vault).blocked_paths)
+
+    def test_missing_folder_is_not_an_empty_snapshot(self):
+        with self.assertRaises(ValueError):
+            scan(self.vault, "Missing")
+
+    def test_folder_cannot_escape_vault(self):
+        with self.assertRaises(ValueError):
+            scan(self.vault, "../")
+
+    def test_day_without_clock_does_not_make_a_calendar_event(self):
+        self.write()
+        p = self.vault / "Задачи/One.md"
+        p.write_text(p.read_text().replace("2030-01-04T16:30", "2030-01-04"))
+        self.assertEqual(scan(self.vault).desired, {})
+
+    def test_timezone_offset_is_preserved(self):
+        self.write()
+        p = self.vault / "Задачи/One.md"
+        p.write_text(p.read_text().replace("2030-01-04T16:30", "2030-01-04T16:30-05:00"))
+        self.assertEqual(scan(self.vault).desired["one"].at.hour, 21)
+
+    def test_archived_folder_is_explicitly_out_of_bridge_scope(self):
+        p=self.vault/'Задачи/Архив';p.mkdir();(p/'Broken.md').write_text('---\ninvalid: [\n---\n')
+        self.assertEqual(scan(self.vault).errors,[])
+
+    def test_dst_gap_and_ambiguous_hour_require_an_explicit_offset(self):
+        for raw in ('2030-03-10T02:30','2030-11-03T01:30'):
+            self.write();p=self.vault/'Задачи/One.md';p.write_text(p.read_text().replace('2030-01-04T16:30',raw))
+            out=scan(self.vault,timezone='America/New_York');self.assertEqual(out.desired,{});self.assertTrue(out.errors)
+
+    def test_completion_cancellation_and_archiving_suppress_event(self):
+        for extra in ("status: done\n", "status: cancelled\n", "status: someday\n", "tags: [archived]\n"):
+            # Duplicate YAML keys are not produced here.
+            self.write()
+            p = self.vault / "Задачи/One.md"
+            p.write_text(p.read_text().replace("status: open\n", "" if extra.startswith("status:") else "status: open\n").replace("---\nDescription", extra + "---\nDescription"))
+            self.assertEqual(scan(self.vault).desired, {})
+
+
+class IcsTests(unittest.TestCase):
+    def test_prepared_job_is_disabled_and_keeps_credentials_out_of_arguments(self):
+        data,label=job(Path('/tmp/Vault with spaces'),Path('/tmp/python'),"Focus Tasks",Path('/tmp/external.env'))
+        self.assertTrue(data['Disabled'])
+        self.assertTrue(data['RunAtLoad'])
+        self.assertIn(str(Path('/tmp/Vault with spaces').resolve()),data['ProgramArguments'])
+        self.assertNotIn('CALDAV_PASSWORD',str(data))
+        self.assertEqual(job(Path('/tmp/Vault with spaces'),Path('/tmp/python'),"Focus Tasks",Path('/tmp/external.env'),True)[1],label)
+
+    def test_event_has_precise_time_owned_alarm_and_opens_note(self):
+        for waiting in (False, True):
+            r = reminder(waiting=waiting)
+            ev = Calendar.from_ical(event_ical(r)).walk("VEVENT")[0]
+            self.assertEqual(str(ev["uid"]), r.event_uid)
+            self.assertEqual(str(ev[OWNER]), r.uid)
+            self.assertEqual(ev.decoded("dtstart"), r.at)
+            self.assertEqual(str(ev["transp"]), "TRANSPARENT")
+            self.assertIn("obsidian://open?", str(ev["url"]))
+            alarm = ev.walk("VALARM")[0]
+            self.assertTrue(alarm["uid"])
+            self.assertEqual(alarm.decoded("trigger"), dt.timedelta(0))
+
+    def test_calendar_link_uses_obsidian_unicode_paths(self):
+        import dataclasses
+        import unicodedata
+        from urllib.parse import urlparse, parse_qs
+        r = reminder()
+        r = dataclasses.replace(r, vault=unicodedata.normalize("NFD", "Хранилище й"),
+                                path=unicodedata.normalize("NFD", "Задачи/Проверить й.md"))
+        ev = Calendar.from_ical(event_ical(r)).walk("VEVENT")[0]
+        query = parse_qs(urlparse(str(ev["url"])).query)
+        self.assertEqual(query, {"vault": ["Хранилище й"], "file": ["Задачи/Проверить й.md"]})
+
+    def test_state_is_complete_atomic_json(self):
+        with tempfile.TemporaryDirectory() as folder:
+            state = {"tasks": {"one": {"status": "synced"}}}
+            p = Path(folder) / "status.json"
+            save_state(p, state)
+            import json
+            self.assertEqual(json.loads(p.read_text()), state)
+            self.assertEqual(len(list(Path(folder).iterdir())), 1)
+
+
+class HostFailureTests(unittest.TestCase):
+    def test_connect_failure_is_visible_without_losing_last_acknowledgement(self):
+        with tempfile.TemporaryDirectory() as folder:
+            vault = Path(folder)
+            (vault / 'Задачи').mkdir()
+            binding = hashlib.sha256((str(vault.resolve()) + '\nFocus Tasks').encode()).hexdigest()
+            state_path = vault / 'Internals/FocusTasks/calendar-status.json'
+            previous = {'binding': binding, 'tasks': {'one': {'status': 'synced', 'checkedAt': NOW.isoformat()}}}
+            save_state(state_path, previous)
+            with patch('sys.argv', ['bridge', '--vault', str(vault), '--execute']), \
+                 patch('apple_calendar.lease', return_value=contextlib.nullcontext()), \
+                 patch('apple_calendar.connect', side_effect=ConnectionError('private account URL')):
+                with self.assertRaises(ConnectionError):
+                    main()
+            state = json.loads(state_path.read_text())
+            self.assertEqual(state['tasks'], previous['tasks'])
+            self.assertEqual(state['errors'], ['ConnectionError'])
+            self.assertTrue(state['enabled'])
+            self.assertNotIn('private account URL', state_path.read_text())
+
+    def test_preparing_disabled_job_stops_an_old_launchctl_override(self):
+        from install_macos import main as install_main
+        with tempfile.TemporaryDirectory() as folder:
+            home = Path(folder)
+            interpreter, env = home / 'python', home / 'calendar.env'
+            interpreter.touch(); env.write_text('CALDAV_PASSWORD=test-only-password-never-plist')
+            argv = ['install', '--vault', str(home), '--python', str(interpreter), '--env-file', str(env), '--execute']
+            with patch('sys.argv', argv), patch('install_macos.Path.home', return_value=home), \
+                 patch('install_macos.subprocess.run') as call, contextlib.redirect_stdout(io.StringIO()):
+                install_main()
+            actions = [x.args[0][1] for x in call.call_args_list]
+            self.assertEqual(actions, ['bootout', 'disable'])
+            self.assertNotIn('bootstrap', actions)
+            self.assertNotIn('test-only-password-never-plist', next((home / 'Library/LaunchAgents').glob('*.plist')).read_text())
+
+
+class HttpClient:
+    def __init__(self):
+        self.raw, self.etag, self.race, self.drop_alarm = None, '"1"', False, False
+        self.headers = []
+
+    def request(self, url, method="GET", body="", headers=None):
+        if method == "DELETE":
+            self.headers.append(headers)
+            if self.race:
+                return SimpleNamespace(status=412)
+            self.raw = None
+            return SimpleNamespace(status=204)
+        return SimpleNamespace(status=200 if self.raw else 404, raw=self.raw, headers={"ETag": self.etag})
+
+    def put(self, url, body, headers=None):
+        self.headers.append(headers)
+        if self.race:
+            return SimpleNamespace(status=412)
+        self.raw = body
+        if self.drop_alarm:
+            cal = Calendar.from_ical(body)
+            cal.walk("VEVENT")[0].subcomponents = []
+            self.raw = cal.to_ical()
+        return SimpleNamespace(status=201)
+
+
+class OwnershipTests(unittest.TestCase):
+    def setUp(self):
+        self.client = HttpClient()
+        self.transport = ICloud(SimpleNamespace(client=self.client, url=URL("https://example.invalid/test/")))
+        self.r = reminder()
+
+    def test_create_update_delete_use_conditional_requests(self):
+        self.transport.upsert(self.r)
+        self.assertEqual(self.client.headers[-1]["If-None-Match"], "*")
+        self.transport.upsert(self.r)
+        self.assertEqual(self.client.headers[-1]["If-Match"], '"1"')
+        self.transport.delete(self.r)
+        self.assertEqual(self.client.headers[-1]["If-Match"], '"1"')
+
+    def test_foreign_event_never_overwritten_or_deleted(self):
+        self.client.raw = event_ical(reminder(uid="someone-else"))
+        for fn in (self.transport.upsert, self.transport.delete):
+            with self.assertRaises(OwnershipConflict):
+                fn(self.r)
+        self.assertEqual(self.client.headers, [])
+
+    def test_create_race_refused(self):
+        self.client.race = True
+        with self.assertRaises(OwnershipConflict):
+            self.transport.upsert(self.r)
+
+    def test_update_and_delete_race_refused(self):
+        self.client.raw = event_ical(self.r)
+        self.client.race = True
+        for fn in (self.transport.upsert, self.transport.delete):
+            with self.assertRaises(OwnershipConflict):
+                fn(self.r)
+
+    def test_missing_alarm_readback_is_not_success(self):
+        self.client.drop_alarm = True
+        with self.assertRaises(RuntimeError):
+            self.transport.upsert(self.r)
+
+
+if __name__ == "__main__":
+    unittest.main()

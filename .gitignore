@@ -6,3 +6,5 @@ test/shots/
 test/dbg.mjs
 test/dbgclick.mjs
 test/dbgdrag.mjs
+__pycache__/
+.venv*/

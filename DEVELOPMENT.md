@@ -7,7 +7,7 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
 
 He uses this plugin every day, so new work must never land in his vault on its own.
 
-- `notes-model` — the branch his vault runs. Only a merge puts anything here.
+- `shipped` identifies the code the vault actually runs. `notes-model` is the stable integration branch and may lag that verified tag.
 - `next` — where all new work goes. Commit freely, run the suites, do not deploy.
 - tag `shipped` — the last commit that reached his vault. Everything after it is unreported.
 
@@ -42,6 +42,7 @@ Internals/FocusTasks/stable/…  test/…   ← the two builds it can be switche
 
 ```sh
 node tools/deliver.mjs --mode test     # hand it over for a look; the stable one stays a click away
+node tools/deliver.mjs --mode test --stage-only # prepare a candidate; keep the running build
 node tools/deliver.mjs --mode stable   # merged: both modes become this build
 ```
 
@@ -65,74 +66,20 @@ and do not reopen one that turned done while you were working.
 
 ## Layout of main.js
 
-- **Strings** — `STRINGS.en` / `STRINGS.ru`, `t(key, ...args)`; every visible label goes through it.
-- **Pure helpers** — `parseLine` (a checkbox line → text, focus date, its emoji), `insertBlock`
-  (lines at the end of a section; a missing section is added; an empty one gets a blank line under
-  its heading), `blockAt` / `reindent` (a task with its nested lines), `toggleLine` (done without
-  the Tasks plugin), `parseDay` (date input of the picker).
-- **DatePicker**, **TargetModal**, **NotePicker**, **NameModal**, **ConfirmModal**.
-- **FocusRenderer** (`MarkdownRenderChild`) — the whole view. Used by the pane (`FocusView`,
-  `ItemView`) and by the ```` ```focus-tasks``` ```` code block.
-  - `render()` is serialized (`busy` / `again`) and deferred while editing (`editing`) or dragging
-    (`held`); `build()` renders off-screen and swaps in one go, so the scroll doesn't jump.
-  - `hold()` pins a button on screen for a moment after «All» / fold-all (Obsidian moves the scroll
-    after a re-render).
-  - Drag: pointer events on the grip, listened on `window` (a row that re-renders mid-drag must not
-    leave the drag hanging); a click without moving opens the row's menu.
-  - Selection: `select` (Shift / Cmd-click, on mousedown), `paint` (after every render the selection
-    follows its tasks by note + line), `chosen` (screen order); the grip of a selected row drags the
-    group, `editDate`, `selectionMenu` and `keys` (a `Scope` with Mod+1…4 and Esc, pushed while rows are
-    selected and the list's tab is active, so Obsidian's «go to tab» elsewhere is untouched) date it. The row map `items` is swapped together with the
-    DOM (`fresh` while building), so a click during a render still finds its row.
-  - `check`: a box marks its row at once and ignores further clicks until the list is re-read (a
-    second click would undo the first); a failed write puts the row back. `toggle` holds one toggle
-    per line in the plugin, so the same task clicked in two views does not toggle twice.
-  - `checkboxLeftovers()` counts `- [ ]` lines in the area notes; the view shows the 0.1.0 upgrade
-    hint when there are no task notes at all.
-  - a project with `finished` (everything in it checked off today) renders as a header only, `is-done`
-    + «done N», no body — its «+» still adds the next step, which makes it ordinary again.
-  - `askReturn` + `setRunning`: `status: in-progress` — started and out of his hands. Sending a task
-    off is a question, not a toggle: `askReturn` opens the picker as a card («Вернуться к задаче», a
-    plain calendar, today by default, the hour in two keyboard-only segments, `min` = today, no
-    «clear»), and only an answer writes anything — `setRunning(list, true, day, at)` puts the status
-    and `scheduled` in one change (`YYYY-MM-DD` or `YYYY-MM-DDTHH:mm`). Cancel the card and the task
-    is untouched.
-    **Running is not a list of its own.** «Not today» is one answer whoever holds the task, so a
-    running task waits where the upcoming ones wait: `area.future.loose` / `bucket.later`, behind the
-    same «⏳N», sorted by its own date. `area.running` / `bucket.running` only count them — to keep an
-    area that holds nothing else in the focus (`areas.filter(a => a.focus || a.done.length ||
-    a.running)`, or the counter and the way back would vanish with it) and to say «из них запущено N»
-    on the chip. The ▷ on the row is the whole visible difference. `backDue(task)` decides waiting or
-    back: the day, or the exact moment when an hour was named. Nothing in the vault changes at 16:00,
-    so the list watches the clock itself: `pending` is every waiting task **as the model sees it**
-    (taking it from the rendered rows meant a folded group was not watched at all), `setAlarm()` fires
-    a timeout on the nearest moment to the second, and a 30-second sweep behind it covers a machine
-    that slept through the timeout. `wake()` skips the redraw while a card or a drag is open. ▷ is on **every** row (`is-offer`, shown on hover): on an ordinary one it opens the
-    card, on a running one it hands the task back into today's focus, dropping the hour. Clicking the
-    date of a running task opens the card again; clearing its day any other way (`setDate(task, null)`)
-    hands it back too. `obsidian_tasks.py` keeps such tasks out of the bot's focus reports until the
-    day arrives (`running_ahead()`, day part only).
-  - `priorityItems(menu, task|tasks)` + `setPriority`: the levels of TaskNotes' `priority`, and
-    `null` to take the mark off; reachable from the dot itself, the row's menu and a selection's.
-  - `chip(head, …)`: a counter that folds a part of a row — «⏳N» upcoming (`steps-later:<path>`,
-    closed by default) and «✓N» closed today (`done:<path>` / `done:<area>`, open by default). On a
-    project it also unfolds the project, or the rows it opens would stay hidden.
-  - `completed(box, done, key, inProject)`: the closed work of the day under a hairline, with no
-    heading of its own — inside its project for a step, at the bottom of the area for a loose task
-    (then the row names no project). Its rows are not tracked, so selection and drag skip them.
-  - Rows are a grid: the box lives in `.ft-box`, a cell one line tall (`--ft-line`), and is centred in
-    it — themes size checkboxes in the checkbox's own em, so a computed margin misses by a few pixels.
-  - Inline editing: `editor()` (contenteditable, Enter / Esc / blur, Mod+digit hotkeys via a `Scope`),
-    `editInline`, `rowAfter`, `draft`, `renameProject`, `projectRow`.
-  - `open(file)` never replaces the pane itself with the note.
-- **FocusSettingTab**.
-- **Plugin** — settings + `data` (`folded`, `opened`, `order`) in `data.json`; «All» per device in
-  local storage; `classify` / `notes` / `fileTasks` / `collect` (the model); task edits (`change` — rewrites the task's line
-  wherever it is now, from the line as the note has it, and `watch` warns when the note is saved over
-  the change a moment later; `replace`, `setDate`,
-  `setDates`, `moveTasks`, `remove` with undo, `rename`, `insertAfter`, `addLine`, `toggle`); areas and projects
-  (`createArea`, `createProject`, `renameProject`, `deleteProject` / `deleteArea`, linked notes:
-  `linked`, `setLinked`, `pickNote`, `areaFromNote`, `projectFromNote`).
+- Pure helpers parse/format dates, classify statuses, split exact frontmatter fences and
+  create readable names and independent UIDs.
+- DatePicker supports day-only auto-save and explicit hour/minute cards. Invalid input
+  and failed writes preserve the card. Scrolling unrelated panes cannot commit it.
+- FocusRenderer draws global Focus/All/Waiting/closed views and local project/area blocks;
+  owns selection, shortcuts, editing, menus, touch drag and their lifecycle.
+- FocusTasks reads canonical task notes, indexes containers, and serializes mutations.
+  `track` explicitly joins only calls with the transaction token. `frontOwned` and
+  `processOwned` record exact bytes inside atomic vault callbacks for safe Undo.
+- Undo checks file identity/content and order conflicts, reverses owned renames through
+  Obsidian, preserves external writes and does not resurrect external deletion.
+- Settings explain the running build, optional TaskNotes and Calendar acknowledgement.
+- `bridge/` owns one-way Apple Calendar notification reconciliation outside Obsidian.
+  Credentials and Python environments stay outside the vault and repository.
 
 ### TaskNotes in one click
 
@@ -151,11 +98,8 @@ Other tools read the same notes, so keep these stable:
   (`project` / `проект`) makes it a **project**, anything else an area;
 - a **task** = a note of its own in the tasks folder (`Задачи` by default) with `type: задача`:
   - `uid` — its identity, never changes (a rename or a move keeps it);
-  - `status`: `open` / `in-progress` / `done` / `cancelled` / `someday`; `in-progress` is TaskNotes'
-    own built-in status, so a task sent off reads the same in both plugins, and `obsidian_tasks.py`
-    keeps it out of every focus report (`OUT_OF_FOCUS`). The plugin never writes `in-progress` without
-    a `scheduled` day: that day is the one the task comes back on, and it is the only date in this
-    model allowed to carry an hour (`2026-09-24T16:30`); everything else is planned by the day;
+  - `status`: `open` / `waiting` / `done` / `cancelled` / `someday`. `waiting` means
+    look again on the scheduled day/hour. TaskNotes' `in-progress` is active work;
   - `area` — the area's name, `projects` — a list with a wikilink to the project's note (absent = a
     loose task; we keep one project per task, the list is TaskNotes' shape);
   - `scheduled` — the date the focus goes by (`task.date` is its day, `task.at` the hour when one was
@@ -203,7 +147,12 @@ open -a Obsidian --args --remote-debugging-port=9222   # any vault open
 npm install
 node test/model.mjs                                    # the data layer, no Obsidian needed
 node test/e2e.mjs                                      # --keep leaves the vault open
-node test/mobile.mjs                                   # the same in mobile emulation, with touch
+node test/mobile.mjs                                   # mobile emulation, with touch
+node --test test/audit.mjs test/archive-repair.mjs test/delivery.mjs # failures/concurrency/delivery
+node --test test/stress.mjs                              # histories + 10,000 tasks
+node test/e2e.mjs --with-tasks                           # actual installed Tasks
+node test/e2e.mjs --with-tasknotes                        # actual installed TaskNotes
+python -m unittest discover -s bridge -p test_calendar.py # calendar Python environment required
 ```
 
 `test/model.mjs` runs `main.js` in node against a fake Obsidian (`test/harness.mjs`): a vault in
@@ -217,8 +166,11 @@ switch it deliberately, or the desktop run silently tests the phone build) and d
 touch events on a 390×844 screen.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
+The Russian scenario matrix and ZFG loop are in `SCENARIOS.ru.md`.
 
-It must pass (48/48) before a release, together with the model suite (126) and the phone suite (15). On failure the vault stays open and screenshots go to
+Every scenario must pass before delivery, in standalone and actual companion configurations.
+Model, audit, stress, calendar and phone suites are required too. Report counts from the run.
+On failure the vault stays open and screenshots go to
 `test/shots/`. What the test learned the hard way:
 
 - input reaches a window only while it is in front — every click/key calls `Page.bringToFront`;
@@ -228,7 +180,9 @@ It must pass (48/48) before a release, together with the model suite (126) and t
   after the list has held still, and wait for the exact row state you expect;
 - settings open in a window of their own (Obsidian 1.13) — read them through `app.setting.activeTab`.
 
-Not covered: the phone (layout, touch drag).
+Phone layout/touch and offline persistence are tested in mobile emulation. Actual iPhone keyboard,
+two-device Sync, native Mac hotkeys and Watch alarms need physical-device acceptance.
+See `AUDIT.md`, `SCENARIOS.md` and `CALENDAR_INTEGRATION.md`.
 
 ## Release
 

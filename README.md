@@ -48,12 +48,12 @@ What you can do in the view:
 
 | | |
 |---|---|
-| Complete a task | click its checkbox; for the rest of the day it stays where it lives — a step inside its project, a loose task at the bottom of its area — under a hairline, and the green ✓N on that row folds it away (its box brings it back) |
+| Complete a task | click its checkbox; the closed task stays in its area's Done block for the day; its checkbox reopens it. An area without open focus work leaves Focus and remains available through All and Done |
 | See what is ahead in a project | the ⏳ on the project's row (under the pointer; the count is in its tooltip) opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
 | A robot's mark | the list shows no priorities; the one dot it draws is `priority: low`, what a script or a bot leaves on a task it added and you have not looked at — a click on the dot (or «Take the robot's mark off» in the menu) removes it |
 | A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note, not to its step. Set, it alone decides whether the project is in the focus (due) or in the area's ⏳ pile with all of its steps; the steps keep their days |
-| Finish a project | check off its last step: the project keeps its row until the day is out, marked «done N», and its «+» adds the next step |
+| Finish a project's current steps | check off its last step: within a visible area the empty project row remains for the day, marked «done N», and its «+» adds the next step. This does not automatically close the project |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** saves and leaves the row selected (a wiped row keeps its text) |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date, **⌘/Ctrl+5** «Waiting…» (the card asks when to look again), **⌘/Ctrl+Enter** saves and opens the task as a note, **⌘/Ctrl+⌫** deletes the task (Undo in the notice) and moves the editor to the row above; a day that takes the row out of its list sends it off at once and moves the editor to the next row |
 | Undo | **⌘/Ctrl+Z** in the list takes back the last change (a tick, a date, a move, a delete) and selects the rows it touched; while editing, with nothing typed yet, it does the same — typed text keeps the editor's own undo |
@@ -73,6 +73,23 @@ What you can do in the view:
 Deleted areas and projects go to the trash (as set in *Files and links → Deleted files*); a deleted
 task can be restored from the notice that appears.
 
+## Local pages, phone capture and Calendar reminders
+
+An area's own note can contain a `focus-tasks` block showing all of that area's projects
+and tasks. It is added once when the area is opened. Additions inside area/project pages
+start undated. A linked custom note can use `area: [[Area note]]` in the block.
+
+On a phone, project context sits above its first action so both names have room. Capture
+is local immediately; uploading an offline iPhone note still requires Obsidian Sync.
+
+TaskNotes is optional. The plugin reads and writes task notes independently.
+If used, recurring-instance completion is delegated to TaskNotes; undo that occurrence
+in TaskNotes. Focus Undo preserves changes owned by the companion.
+Apple Calendar notification support uses the optional host bridge in [the integration guide](CALENDAR_INTEGRATION.md).
+An explicit scheduled hour creates a short reminder event; dates alone do not create
+alarms. Change the day without losing the hour; clear the clock to remove the reminder.
+An event notification and a native Apple Reminders checkbox are different integrations.
+
 ## Settings
 
 | Setting | Default | |
@@ -87,8 +104,8 @@ task can be restored from the notice that appears.
 | Date format | `DD.MM.YY` | any moment.js format |
 | TaskNotes | — | install the companion plugin and point it at these tasks (see above) |
 
-Folded state, «opened» areas and the drag order are saved in the plugin's `data.json` (synced with
-the vault); «All» is remembered per device.
+Settings and drag order are saved in `data.json`. Folding, opened piles and All are
+remembered per device, so a phone cannot unfold the Mac's list through Sync.
 
 ## Upgrading from 0.1.0
 
@@ -209,8 +226,8 @@ passes (`--keep` leaves it).
   Ставится в один клик: **Настройки → Focus Tasks → TaskNotes**.
 
 В фокус область попадает из-за сегодняшней работы: задача на сегодня, просроченная или запущенная.
-Галочка держит область на месте до конца дня только если отмечена была работа из фокуса - задача
-из отложки, закрытая походя, свою область в сегодняшний список не затаскивает (её видно в «Все»).
+Область без открытой работы в фокусе уходит из Фокуса. Сделанное доступно через «Сделано»
+и «Все»; галочка выполненной задачи возвращает её в работу.
 
 Отмеченная задача до конца дня остаётся там, где живёт: шаг - внутри своего проекта, разовая -
 внизу своей области, под тонкой линией (галочка возвращает её в работу). Зелёная ✓N на строке
@@ -250,9 +267,9 @@ passes (`--keep` leaves it).
 фокусе ли проект: наступила - проект в фокусе с тем, что у него есть; впереди - ждёт в ⏳ отложке
 области со всеми шагами.
 
-Проект, в котором сегодня закрыли последнюю задачу, тоже не исчезает: до конца дня он стоит
-на своём месте, вместо счётчика — зелёное «сделано N», а «+» рядом заводит следующий шаг.
-Одна новая задача — и это снова обычный проект.
+В видимой области проект, в котором сегодня закрыли последнюю задачу, до конца дня стоит
+на своём месте с зелёным «сделано N», а «+» рядом заводит следующий шаг.
+Последний выполненный шаг не закрывает сам проект автоматически.
 
 Открыть: иконка на ленте или команда **Focus Tasks: Открыть Фокус**, либо блок ` ```focus-tasks``` `
 в любой заметке. Клик по тексту — правка на месте (Enter — сохранить и новая строка ниже, Esc —
@@ -292,6 +309,20 @@ Shift+клик выделяет все задачи от последней кл
 Установка руками: распаковать `focus-tasks-<версия>.zip` в `<хранилище>/.obsidian/plugins/`
 (получится папка `focus-tasks`), перезапустить Obsidian и включить плагин в
 *Настройки → Сторонние плагины*.
+
+### Страницы областей, телефон и напоминания
+
+В заметке области блок `focus-tasks` показывает её проекты и задачи. Он добавляется один
+раз при открытии области. Новые задачи внутри области или проекта появляются без даты.
+На телефоне название проекта стоит над первым шагом, текст задачи получает отдельную строку.
+Офлайн-задача сохраняется на устройство сразу; доставка через Sync требует запущенного Obsidian.
+
+TaskNotes для работы списка не нужен. Если используются повторы, их выполнение
+делегируется TaskNotes; отменять выполнение такого повтора нужно в нём.
+Apple Calendar подключается отдельным мостом:
+[как устроено подключение](CALENDAR_INTEGRATION.md). У задачи со временем появляется короткое
+событие с уведомлением. Обычная дата не создаёт ночных уведомлений. Перенос дня сохраняет
+час; удаление часа убирает напоминание. Это событие Calendar, отдельное от задачи Apple Reminders.
 
 ## License
 

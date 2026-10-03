@@ -16,6 +16,19 @@ import { Page, PORT, J, sleep, ymd, until } from "./cdp.mjs";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const KEEP = args.includes("--keep");
+const companionPath = (flag, id) => {
+  const i = args.indexOf(flag);
+  if (i < 0) return null;
+  return args[i + 1] && !args[i + 1].startsWith('--') ? path.resolve(args[i + 1])
+    : path.join(process.env.HOME, 'vaults/Vault/.obsidian/plugins', id);
+};
+const companions = [
+  { id: 'obsidian-tasks-plugin', source: companionPath('--with-tasks', 'obsidian-tasks-plugin') },
+  { id: 'tasknotes', source: companionPath('--with-tasknotes', 'tasknotes'), settings: {
+    taskIdentificationMethod: 'property', taskPropertyName: 'type', taskPropertyValue: 'задача', tasksFolder: 'Задачи',
+    starterNoteCreated: true, // existing installation, not its asynchronous first-install tour
+  } },
+].filter(c => c.source);
 const NAME = "focus-tasks-e2e";
 const VAULT = path.join(ROOT, "test", NAME);
 const SHOTS = path.join(ROOT, "test", "shots");
@@ -29,8 +42,11 @@ const YESTERDAY = ymd(new Date(Date.now() - 864e5));
 // Finders that run in the page; each returns the centre of an element (scrolled into view) or null.
 const HELPERS = `
 window.__ftLast = Date.now();
-new MutationObserver(() => { window.__ftLast = Date.now(); })
-  .observe(document.querySelector('.focus-tasks-pane'), { subtree: true, childList: true, characterData: true });
+// Build switching replaces the pane. Observe its stable parent and filter live
+// pane mutations, rather than watching the detached container from the first build.
+new MutationObserver(records => {
+  if(records.some(r=>r.target.closest?.('.focus-tasks-pane') || [...r.addedNodes,...r.removedNodes].some(n=>n.matches?.('.focus-tasks-pane')||n.querySelector?.('.focus-tasks-pane'))))window.__ftLast=Date.now();
+}).observe(document.body, { subtree: true, childList: true, characterData: true });
 window.__ft = {
   view() { return [...document.querySelectorAll('.focus-tasks-pane .focus-tasks-view')].find((e) => e.getClientRects().length); },
   all(sel, root) { return [...(root || document).querySelectorAll(sel)].filter((e) => e.getClientRects().length); },
@@ -41,6 +57,7 @@ window.__ft = {
   text(sel, n) { return this.all(sel).find((e) => e.textContent.trim() === n); },
   at(el, dy = 0.5) {
     if (!el) return null;
+    window.__ftTarget = el;
     // a hover-only control is out of the layout until the pointer is over its row; the mouse is about
     // to be there, so it is shown where the hover would show it
     // — and with it every other hover-only control of that row, so the layout is the hovered one
@@ -50,7 +67,7 @@ window.__ft = {
         if (!c.getClientRects().length) c.style.display = 'inline-flex';
       el.style.display = 'inline-flex';
     }
-    el.scrollIntoView({ block: 'center' });
+    el.scrollIntoView({ block: 'center', behavior: 'instant' });
     const r = el.getBoundingClientRect();
     return { x: r.left + r.width / 2, y: r.top + r.height * dy };
   },
@@ -74,17 +91,27 @@ const data = () => JSON.parse(read(".obsidian/plugins/focus-tasks/data.json") ||
 
 // The list re-renders a moment after a file changes; positions are read once it holds still.
 const settle = () => until(() => page.eval(`return Date.now() - __ftLast > 700`), "the list to settle");
-const pos = async (expr, what) => {
+const pos = async (expr, what, requireHit = false) => {
+  await page.front();
   // bringing the window to front may give the focus back to the last note tab
-  if (!(await page.eval(`return !!__ft.view()`))) { await toPane(); await sleep(300); }
+  if (expr.includes('__ft.task(') || !(await page.eval(`return !!__ft.view()`))) { await toPane(); await sleep(300); }
   await settle();
-  const p = await page.eval(`return ${expr};`);
+  let p = await page.eval(`window.__ftTarget=null; return ${expr};`);
   if (!p) throw new Error(`not on screen: ${what || expr}`);
+  // scrollIntoView queues a scroll event; it must finish before a newly opened
+  // card starts listening for scroll. Hover can also change a row's geometry.
+  await page.mouse('mouseMoved', p.x, p.y, 0);
+  p = await page.eval(`await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r))); window.__ftTarget=null; return ${expr};`);
+  if (!p) throw new Error(`lost before click: ${what || expr}`);
+  // A notice (especially Undo) can cover a date in the upper-right corner.
+  // Wait for the actual target to be hittable; clicking its old coordinates lies.
+  if (requireHit) p = await until(()=>page.eval(`window.__ftTarget=null;const point=${expr};const el=window.__ftTarget;if(!point)return null;const hit=document.elementFromPoint(point.x,point.y);return hit&&(el?(hit===el||el.contains(hit)):!hit.closest('.notice-container,.modal-container'))?point:null;`),'the click target is uncovered: '+(what||expr),15000);
+  if(expr.includes("'.ft-date'")) await page.eval(`const e=document.elementFromPoint(${p.x},${p.y});window.__auditPoint={point:${J(p)},target:e?.outerHTML.slice(0,300),active:app.workspace.activeLeaf?.view?.getState(),width:innerWidth,height:innerHeight};return true;`);
   return p;
 };
-const click = async (expr, what, modifiers = 0) => page.click(await pos(expr, what), modifiers);
+const click = async (expr, what, modifiers = 0) => page.click(await pos(expr, what, true), modifiers, false);
 // a row's menu is a right click (a plain click on the grip selects the row)
-const menuOn = async (expr, what) => page.rightClick(await pos(expr, what));
+const menuOn = async (expr, what) => page.rightClick(await pos(expr, what, true), false);
 const SHIFT = 8, CMD = process.platform === "darwin" ? 4 : 2;
 const selected = async () => {
   if (!(await page.eval(`return !!__ft.view()`))) await toPane();  // a key may bring a note tab to the front
@@ -114,7 +141,7 @@ const modalInput = async (sel = ".modal input.ft-input") => {
 const fileHas = (rel, re, what) => until(() => (typeof re === "string" ? read(rel)?.includes(re) : re.test(read(rel) || "")), what || `${rel} ~ ${re}`);
 const fileLacks = (rel, re, what) => until(() => { const s = read(rel); return s !== null && !(typeof re === "string" ? s.includes(re) : re.test(s)); }, what || `${rel} !~ ${re}`);
 const activePath = () => page.eval(`return app.workspace.getActiveFile()?.path || null`);
-function toPane() { return page.eval(`const l = app.workspace.getLeavesOfType('focus-tasks-view')[0]; app.workspace.setActiveLeaf(l, { focus: true }); app.workspace.revealLeaf(l); return true;`); }
+function toPane() { return page.eval(`const l = app.workspace.getLeavesOfType('focus-tasks-view')[0]; app.workspace.setActiveLeaf(l, { focus: true }); await app.workspace.revealLeaf(l); return true;`); }
 const plugin = (body) => page.eval(`const p = app.plugins.plugins['focus-tasks']; ${body}`);
 
 // --- task notes ---------------------------------------------------------------------------------
@@ -167,6 +194,7 @@ const steps = [];
 const step = (name, fn) => steps.push({ name, fn });
 
 step("opens with an onboarding and the area buttons", async () => {
+  await toPane(); // an optional companion can open its own startup tab
   await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .ft-onboarding')`), "onboarding");
   const foot = await page.eval(`return __ft.all('.ft-foot-button', __ft.view()).map((b) => b.textContent.trim())`);
   if (J(foot) !== J(["+ Area"])) throw new Error("footer: " + J(foot));
@@ -2002,6 +2030,188 @@ step("delete an area: its projects and tasks go with it", async () => {
   await until(() => page.eval(`return !__ft.area('Sport')`), "Sport off screen");
 });
 
+step("an area's own note shows only its projects and all its tasks, and adds an undated task locally", async () => {
+  const file = await page.eval(`
+    const p = app.plugins.plugins['focus-tasks'];
+    const note = await p.createArea('Audit Area');
+    const project = await p.createProject({ name: 'Audit Area', note }, 'Audit Project');
+    await p.createTask('Audit loose task', { area: 'Audit Area' }, null);
+    await p.createTask('Audit project step', { area: 'Audit Area', project: project.basename, projectFile: project }, ${J(TOMORROW)});
+    await p.ensureAreaBlock(note);
+    const leaf = app.workspace.getLeaf('tab');
+    await leaf.setViewState({ type: 'markdown', state: { file: note.path, mode: 'preview' } });
+    app.workspace.setActiveLeaf(leaf, { focus: true });
+    return note.path;`);
+  await until(() => page.eval(`const e=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return e?.textContent.includes('Audit loose task')&&e?.textContent.includes('Audit project step');`), 'the local area page and parsed steps');
+  const state = await page.eval(`const e = [...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length); return { text: e.textContent, areas: e.querySelectorAll('.ft-area-title').length };`);
+  if (!state.text.includes('Audit loose task') || !state.text.includes('Audit project step') || state.areas !== 1)
+    throw new Error('wrong area page: ' + J(state));
+  const header = await page.eval(`const e = [...document.querySelectorAll('.ft-area-page .ft-area-title')].find(e=>e.getClientRects().length); e.scrollIntoView({block:'center'}); const r=e.getBoundingClientRect(); return {x:r.left+r.width/2,y:r.top+r.height/2};`);
+  await page.send('Input.dispatchMouseEvent', {type:'mouseMoved',x:header.x,y:header.y});
+  await page.click(await until(() => page.eval(`const e = [...document.querySelectorAll('.ft-area-page .ft-area-title .ft-plus')].find(e=>e.getClientRects().length); if(!e)return null; const r = e.getBoundingClientRect(); return { x: r.left+r.width/2, y:r.top+r.height/2 };`), 'the real hover reveals area add'));
+  await editing();
+  await page.type('Added inside area');
+  await page.key('Enter');
+  await page.key('Escape');
+  await taskIs('Added inside area', { area: 'Audit Area', scheduled: null });
+  if ((read(file).match(/```focus-tasks/g) || []).length !== 1) throw new Error('the area block duplicated itself');
+  await toPane();
+});
+
+step("a failed date write keeps the task in its editor with the original day", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks']; await p.createTask('Audit write failure', {area:'Audit Area'}, ${J(TODAY)}); await p.setOpen('area:Audit Area', true); return true;`);
+  await until(() => page.eval(`return !!__ft.task('Audit write failure')`), 'the task');
+  await click(`__ft.at(__ft.task('Audit write failure').querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`window.__auditWriteAttempts=0; window.__auditProcess = app.vault.process; app.vault.process = async function(file, fn) {
+    if(file.basename === 'Audit write failure') {__auditWriteAttempts++;throw new Error('injected disk failure');}
+    return __auditProcess.call(app.vault, file, fn);
+  }; return true;`);
+  try {
+    await page.key('Meta+2');
+    await sleep(600);
+    await taskIs('Audit write failure', { scheduled: TODAY });
+    if(!await page.eval(`return __auditWriteAttempts>0;`))throw new Error('the shortcut never attempted the injected disk write');
+    if (!await page.eval(`return document.querySelector('.is-editing')?.textContent === 'Audit write failure'`)) throw new Error('a failed write closed the editor');
+  } finally { await page.eval(`app.vault.process=__auditProcess; delete window.__auditProcess; return true;`); }
+  await page.key('Escape');
+});
+
+step("a failed rename preserves the typed text and lets the editor retry", async () => {
+  await click(`__ft.at(__ft.task('Audit write failure').querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.caretToEnd(); window.__auditRename=app.fileManager.renameFile; app.fileManager.renameFile=async function(file,path) {
+    if(file.basename==='Audit write failure') throw new Error('injected rename failure');
+    return __auditRename.call(this,file,path);
+  }; return true;`);
+  await page.type(' retry');
+  try {
+    await page.key('Enter');
+    await until(() => page.eval(`return document.querySelector('.is-editing')?.textContent === 'Audit write failure retry'`), 'the text is kept for retry');
+    await taskIs('Audit write failure', { title: 'Audit write failure retry' });
+  } finally { await page.eval(`app.fileManager.renameFile=__auditRename; delete window.__auditRename; return true;`); }
+  await page.key('Enter');
+  await taskIs('Audit write failure retry', { scheduled: TODAY });
+  await page.key('Escape');
+});
+
+step("Undo of an edited title restores the note and its incoming links", async () => {
+  await page.eval(`await app.vault.create('Notes/Audit link.md','Context [[Audit write failure retry]]'); return true;`);
+  await click(`__ft.at(__ft.task('Audit write failure retry').querySelector('.ft-text'))`);
+  await editing();
+  await page.eval(`__ft.caretToEnd(); return true;`);
+  await page.type(' renamed');
+  await page.key('Enter');
+  await taskIs('Audit write failure retry renamed', { scheduled: TODAY });
+  await page.key('Escape');
+  await page.key('Meta+z');
+  await taskIs('Audit write failure retry', { scheduled: TODAY });
+  await until(() => read('Notes/Audit link.md')?.includes('[[Audit write failure retry]]'), 'incoming link restored');
+});
+
+step("a backlog task can get an Apple Calendar reminder with one precise time", async () => {
+  await page.eval(`window.__auditClickTrace=[];for(const name of ['pointerdown','click','scroll'])document.addEventListener(name,e=>{__auditClickTrace.push({name,target:e.target.className,at:Date.now(),picker:!!document.querySelector('.ft-picker'),views:[...app.plugins.plugins['focus-tasks'].views].map(v=>({edit:!!v.editing,active:v.leaf===app.workspace.activeLeaf,visible:!!v.containerEl.getClientRects().length}))});__auditClickTrace=__auditClickTrace.slice(-20);},true);new MutationObserver(records=>{for(const r of records)for(const n of [...r.addedNodes,...r.removedNodes])if(n.classList?.contains('ft-picker'))__auditClickTrace.push({name:[...r.addedNodes].includes(n)?'picker-add':'picker-remove',at:Date.now()});}).observe(document.body,{childList:true});return true;`);
+  await page.eval(`const p=app.plugins.plugins['focus-tasks']; p.settings.language='en';p.applyLanguage();await p.saveAll();await p.createTask('Audit reminder',{area:'Audit Area'},null); await p.setEverything(true); await p.setOpen('area:Audit Area',true); return true;`);
+  await until(()=>page.eval(`return !!__ft.task('Audit reminder')`),'reminder task');
+  await menuOn(`__ft.at(__ft.task('Audit reminder'))`);
+  await menu('Remind in Apple Calendar…');
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh')`),'reminder time');
+  await click(`__ft.at(document.querySelector('.ft-picker-input'))`);
+  await page.eval(`document.querySelector('.ft-picker-input').select();return true;`); await page.type(ddmmyy(TOMORROW));
+  await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`);
+  await page.type('16'); await page.type('30'); await page.key('Tab');
+  await taskIs('Audit reminder',{scheduled:TOMORROW+'T16:30',status:'open'});
+  await until(()=>page.eval(`return !document.querySelector('.ft-picker')`),'saved reminder');
+});
+
+step("changing the reminder day preserves its hour; clearing the hour is explicit", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks']; await p.setDate(p.tasks().find(x=>x.text==='Audit reminder'),${J(TODAY)}); return true;`);
+  await taskIs('Audit reminder',{scheduled:TODAY+'T16:30'});
+  await until(()=>page.eval(`const d=__ft.task('Audit reminder')?.querySelector('.ft-date');return d?.classList.contains('is-today')&&d.textContent.includes('16:30');`),'the updated day and preserved hour are visible');
+  await click(`__ft.at(__ft.task('Audit reminder').querySelector('.ft-date'))`);
+  try {await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh')`),'existing reminder time');}
+  catch(e){throw new Error(e.message+'; trace='+JSON.stringify(await page.eval(`return {point:__auditPoint,events:__auditClickTrace,picker:document.querySelector('.ft-picker')?.outerHTML.slice(0,500),active:app.workspace.activeLeaf?.view?.getState()};`)));}
+  await page.eval(`const anchor=__ft.task('Audit reminder');const other=[...document.querySelectorAll('.markdown-preview-view')].find(e=>!e.contains(anchor));if(other)other.dispatchEvent(new Event('scroll'));return true;`);
+  await sleep(200);
+  if(!await page.eval(`return !!document.querySelector('.ft-picker .is-hh')`))throw new Error('another pane committed this date card');
+  await page.eval(`document.querySelector('.ft-picker .is-hh').value='';document.querySelector('.ft-picker .is-mm').value=''; return true;`);
+  await click(`__ft.at(document.querySelector('.ft-picker-input'))`);
+  await page.key('Enter');
+  await taskIs('Audit reminder',{scheduled:TODAY});
+  await until(()=>page.eval(`return !document.querySelector('.ft-picker') && !__ft.task('Audit reminder')?.querySelector('.ft-date')?.textContent.includes('16:30')`),'the cleared clock is reflected by the finished card and row');
+});
+
+step("invalid typed dates cannot silently save the old date", async () => {
+  await click(`__ft.at(__ft.task('Audit reminder').querySelector('.ft-date'))`);
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker-input')`),'date card');
+  await page.eval(`document.querySelector('.ft-picker-input').select();return true;`); await page.type('31.02.2030'); await page.key('Enter');
+  await until(()=>page.eval(`return document.querySelector('.ft-picker-input')?.classList.contains('is-invalid')`),'invalid input');
+  await taskIs('Audit reminder',{scheduled:TODAY});
+  await page.key('Escape');
+});
+
+step("a same-day past reminder hour is refused and can be corrected", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.createTask('Audit past reminder',{area:'Audit Area'},${J(TODAY)});return true;`);
+  await until(()=>page.eval(`return !!__ft.task('Audit past reminder')`),'the reminder fixture');
+  await menuOn(`__ft.at(__ft.task('Audit past reminder'))`); await menu('Remind in Apple Calendar…');
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh')`),'the clock card');
+  await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`); await page.type('00');await page.type('00');await page.key('Tab');
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh.is-invalid')`),'past hour rejected');
+  await taskIs('Audit past reminder',{scheduled:TODAY});
+  await click(`__ft.at(document.querySelector('.ft-picker-input'))`);await page.eval(`document.querySelector('.ft-picker-input').select();return true;`);await page.type(ddmmyy(TOMORROW));await page.key('Enter');
+  await taskIs('Audit past reminder',{scheduled:TOMORROW+'T00:00'});
+  await until(()=>page.eval(`return !document.querySelector('.ft-picker')`),'corrected reminder saved');
+});
+
+step("a date card keeps its value and stays open when the disk write fails", async () => {
+  await click(`__ft.at(__ft.task('Audit reminder').querySelector('.ft-date'))`);
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker-input')`),'date card');
+  await page.eval(`window.__auditProcess=app.vault.process; app.vault.process=async function(file,fn){if(file.basename==='Audit reminder')throw new Error('injected write failure');return __auditProcess.call(app.vault,file,fn);};return true;`);
+  try {
+    await page.eval(`document.querySelector('.ft-picker-input').select();return true;`); await page.type(ddmmyy(TOMORROW)); await page.key('Enter'); await sleep(500);
+    await taskIs('Audit reminder',{scheduled:TODAY});
+    if(!await page.eval(`return !!document.querySelector('.ft-picker-input')`))throw new Error('failed save discarded the card');
+  } finally {await page.eval(`app.vault.process=__auditProcess;delete window.__auditProcess;return true;`);}
+  await page.key('Enter');
+  await taskIs('Audit reminder',{scheduled:TOMORROW});
+});
+
+step("midnight refresh brings tomorrow into Focus even with no Waiting tasks", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];for(const task of p.tasks().filter(x=>x.status==='waiting'))await p.setWaiting(task,false);await p.createTask('Audit midnight',{area:'Audit Area'},${J(TOMORROW)});await p.setEverything(false);await p.setOpen('area:Audit Area',true);return true;`);
+  await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return p.tasks().some(x=>x.text==='Audit midnight'&&x.date===${J(TOMORROW)})&&[...p.views].filter(v=>v.leaf).every(v=>!v.busy&&v.daySeen===${J(TODAY)});`),'tomorrow is indexed and the current-day render is finished');
+  await settle();
+  if(await page.eval(`return !!__ft.task('Audit midnight')`))throw new Error('tomorrow entered today');
+  await page.eval(`window.__auditNow=Date.now;Date.now=()=>__auditNow()+86400000;for(const v of app.plugins.plugins['focus-tasks'].views)v.wake();return true;`);
+  try {await until(()=>page.eval(`return !!__ft.task('Audit midnight')`),'tomorrow becomes current at midnight');}
+  finally {await page.eval(`Date.now=__auditNow;delete window.__auditNow;app.plugins.plugins['focus-tasks'].refresh();return true;`);}
+});
+
+step("a Waiting hour becomes relevant without a file edit or a manual refresh", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setWaitingShown(false);const d=moment().add(2,'minutes');const task=await p.createTask('Audit timed return',{area:'Audit Area'},${J(TODAY)});await p.setWaiting(task,true,d.format('YYYY-MM-DD'),d.format('HH:mm'));return true;`);
+  await taskIs('Audit timed return',{status:'waiting'});
+  await until(()=>page.eval(`return !__ft.task('Audit timed return')&&[...app.plugins.plugins['focus-tasks'].views].some(v=>v.leaf&&!v.busy&&v.pending?.some(t=>t.text==='Audit timed return'));`),'the stored Waiting task has left Focus and is registered for timed return');
+  await settle();
+  if(await page.eval(`return !!__ft.task('Audit timed return')`))throw new Error('Waiting returned too soon');
+  await page.eval(`window.__auditNow=Date.now;Date.now=()=>__auditNow()+180000;for(const v of app.plugins.plugins['focus-tasks'].views)v.wake();return true;`);
+  try {await until(()=>page.eval(`return !!__ft.task('Audit timed return')`),'Waiting becomes current at its hour');}
+  finally {await page.eval(`Date.now=__auditNow;delete window.__auditNow;app.plugins.plugins['focus-tasks'].refresh();return true;`);}
+});
+
+step("configured companion plugins actually run in this test vault", async () => {
+  const live = await page.eval(`return Object.keys(app.plugins.plugins);`);
+  for (const c of companions) if (!live.includes(c.id)) throw new Error('missing companion: '+c.id);
+  if (!companions.length && live.includes('tasknotes')) throw new Error('the standalone run unexpectedly depends on TaskNotes');
+  if (live.includes('tasknotes')) {
+    await page.eval(`await app.plugins.plugins.tasknotes.api.lifecycle.ready(); const p=app.plugins.plugins['focus-tasks']; const task=await p.createTask('Audit recurring bridge',{area:'Audit Area'},${J(TODAY)}); await app.fileManager.processFrontMatter(task.file,fm=>{fm.recurrence=${J('DTSTART:'+TODAY.replaceAll('-','')+';FREQ=DAILY')};}); return true;`);
+    await until(()=>page.eval(`return !!(await app.plugins.plugins.tasknotes.cacheManager.getTaskInfo(${J(taskPath('Audit recurring bridge'))}))?.recurrence;`),'TaskNotes indexes the recurring fixture');
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'];p.forgetScan();await p.toggle(p.tasks().find(x=>x.text==='Audit recurring bridge'));return true;`);
+    await taskIs('Audit recurring bridge',{status:'open',scheduled:TOMORROW});
+    if (!fm('Audit recurring bridge').complete_instances?.includes(TODAY)) throw new Error('TaskNotes did not complete the intended occurrence');
+    if (!fm('Audit recurring bridge').uid || fm('Audit recurring bridge').area !== 'Audit Area') throw new Error('TaskNotes lost Focus identity or area');
+    await page.eval(`await app.fileManager.trashFile(app.vault.getAbstractFileByPath(${J(taskPath('Audit recurring bridge'))})); return true;`);
+  }
+});
+
 step("commands are registered", async () => {
   const ids = await page.eval(`return Object.keys(app.commands.commands).filter((k) => k.startsWith('focus-tasks:')).sort()`);
   const want = ["add-area", "add-task", "area-from-note", "find", "fold-all", "open", "steps-blocks", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
@@ -2023,6 +2233,16 @@ function buildVault() {
   const plug = path.join(VAULT, ".obsidian/plugins/focus-tasks");
   fs.mkdirSync(plug, { recursive: true });
   for (const f of ["main.js", "manifest.json", "styles.css"]) fs.copyFileSync(path.join(ROOT, f), path.join(plug, f));
+  for (const c of companions) {
+    const dir = path.join(VAULT, '.obsidian/plugins', c.id);
+    fs.mkdirSync(dir, { recursive: true });
+    for (const file of ['main.js', 'manifest.json', 'styles.css']) {
+      const source = path.join(c.source, file);
+      if (fs.existsSync(source)) fs.copyFileSync(source, path.join(dir, file));
+      else if (file !== 'styles.css') throw new Error(`missing companion file: ${source}`);
+    }
+    if (c.settings) fs.writeFileSync(path.join(dir, 'data.json'), J(c.settings));
+  }
   fs.writeFileSync(path.join(VAULT, ".obsidian/app.json"), J({ nativeMenus: false, trashOption: "local", promptDelete: false, alwaysUpdateLinks: true }));
   fs.mkdirSync(path.join(VAULT, "Notes"));
   fs.writeFileSync(path.join(VAULT, "Notes/Running log.md"), "# Running log\n\nWeek 1: 12 km.\n");
@@ -2072,6 +2292,11 @@ async function openVault() {
     p.settings.areaFrontmatter = 'kind: focus-area';
     p.settings.projectFrontmatter = 'parents:\\n  - "[[{areaNote}]]"';
     await p.saveAll();
+    for (const id of ${J(companions.map(c => c.id))}) {
+      await app.plugins.enablePluginAndSave(id);
+      if (!app.plugins.plugins[id]) throw new Error('companion failed to load: ' + id);
+      if (id === 'tasknotes') await app.plugins.plugins[id].api.lifecycle.ready();
+    }
     // what is folded or opened is per device and outlives the vault: a run must not inherit it
     p.data.folded = {}; p.data.opened = {}; p.saveFolds();
     await app.commands.executeCommandById('focus-tasks:open');
@@ -2094,7 +2319,8 @@ let failed = 0;
 try {
   await openVault();
   console.log(`Focus Tasks e2e in ${NAME}`);
-  for (const [i, s] of steps.entries()) {
+  const runSteps=args.includes('--audit-only') ? steps.slice(steps.findIndex(s=>s.name.startsWith("an area's own note"))) : steps;
+  for (const [i, s] of runSteps.entries()) {
     try {
       await s.fn();
       console.log(`  ✓ ${s.name}`);
@@ -2117,5 +2343,5 @@ try {
   page?.ws.close();
   main?.ws.close();
 }
-console.log(failed ? `\nFAILED` : `\nall ${steps.length} steps passed`);
+console.log(failed ? `\nFAILED` : `\nall ${args.includes('--audit-only') ? steps.length-steps.findIndex(s=>s.name.startsWith("an area's own note")) : steps.length} steps passed`);
 process.exit(failed ? 1 : 0);

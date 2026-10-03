@@ -8,59 +8,24 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as yamlParse, stringify as yamlStringify } from "yaml";
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 
-// --- YAML: the subset Obsidian's frontmatter uses -------------------------------------------
+// --- Real YAML, shared by fixtures and the Obsidian module stub -----------------------------
 
 export function parseYaml(text) {
-  const out = {};
-  let key = null;
-  for (const raw of text.split("\n")) {
-    if (!raw.trim() || raw.trim().startsWith("#")) continue;
-    const item = raw.match(/^\s+-\s+(.*)$/);
-    if (item && key) { (out[key] = out[key] || []).push(scalar(item[1])); continue; }
-    const m = raw.match(/^([^:\s][^:]*):\s*(.*)$/);
-    if (!m) { key = null; continue; }
-    const name = m[1].trim();
-    const value = m[2].trim();
-    if (!value) { key = name; out[name] = []; continue; }
-    key = null;
-    out[name] = value.startsWith("[") ? inline(value) : scalar(value);
-  }
-  for (const [k, v] of Object.entries(out)) if (Array.isArray(v) && !v.length) delete out[k];
-  return out;
+  const parsed = yamlParse(text, { maxAliasCount: 100 });
+  return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
 }
-
-const scalar = (v) => {
-  const raw = String(v).trim();
-  if (raw.startsWith('"')) { try { return JSON.parse(raw); } catch { /* fall through */ } }
-  const s = raw.replace(/^["'](.*)["']$/s, "$1");
-  if (s === "true") return true;
-  if (s === "false") return false;
-  if (/^-?\d+$/.test(s)) return Number(s);
-  return s;
-};
-const inline = (v) => v.slice(1, -1).split(",").map((x) => scalar(x)).filter((x) => x !== "");
 
 export function stringifyYaml(obj) {
-  const line = (k, v) => {
-    if (Array.isArray(v)) return [`${k}:`, ...v.map((x) => `  - ${quote(x)}`)].join("\n");
-    return `${k}: ${quote(v)}`;
-  };
-  return Object.entries(obj).map(([k, v]) => line(k, v)).join("\n") + "\n";
+  return yamlStringify(obj, { lineWidth: 0 });
 }
-const quote = (v) => {
-  const s = String(v);
-  if (typeof v !== "string") return s;
-  return /^[\w .,\/_\-\p{L}\p{N}\p{Emoji_Presentation}]*$/u.test(s) && !/^[\s>\[{#&*!|%@`]/.test(s) && s !== "" ? s : JSON.stringify(s);
-};
 
 const splitFront = (text) => {
-  if (!text.startsWith("---\n")) return [null, text];
-  const end = text.indexOf("\n---", 3);
-  if (end < 0) return [null, text];
-  return [text.slice(4, end), text.slice(end + 4).replace(/^\n/, "")];
+  const match = /^\uFEFF?---\r?\n([\s\S]*?)\r?\n---(?=\r?\n|$)/.exec(text);
+  return match ? [match[1], text.slice(match[0].length).replace(/^\r?\n/, "")] : [null, text];
 };
 
 // --- the fake app ----------------------------------------------------------------------------
@@ -155,7 +120,8 @@ class FakeMetadataCache {
     const sections = [];
     if (front !== null) sections.push({ type: "yaml" });
     if (body.trim()) sections.push({ type: "paragraph" });
-    return front === null ? { sections } : { frontmatter: parseYaml(front), sections };
+    try { return front === null ? { sections } : { frontmatter: parseYaml(front), sections }; }
+    catch { return { sections }; }
   }
   // As Obsidian resolves: the full path, then a path ending in the link («b/Plan»), then the name;
   // nothing for a link that matches nothing.
@@ -256,7 +222,7 @@ function obsidianStub(app) {
     SuggestModal: class {}, FuzzySuggestModal: class {}, Menu: class { addItem() { return this; } addSeparator() {} showAtMouseEvent() {} },
     MarkdownRenderChild: class extends Component {}, MarkdownRenderer: { render: async () => {} },
     Keymap: { isModEvent: () => false }, setIcon: noop, prepareSimpleSearch: () => () => true,
-    Platform: { isMobile: false, isMacOS: true }, Scope: class { register() {} },
+    Platform: { isMobile: false, isMacOS: true }, Scope: class { register() {} }, parseYaml, stringifyYaml,
     normalizePath: (p) => p.replace(/\/+/g, "/").replace(/^\/|\/$/g, "") || "/",
     createFragment: (fn) => { const f = { appendText: noop, createEl: () => ({}) }; fn(f); return f; },
   };

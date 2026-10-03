@@ -268,6 +268,61 @@ step("a picture of the list on a phone, for the record", async () => {
   await page.shot(path.join(SHOTS, "phone.png"));
 });
 
+step("project context is above its first step on 320, 390 and 430px screens", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks']; p.data.opened['steps:Areas/Ремонт.md']=false; p.saveFolds(); p.refresh(); return true;`);
+  for (const width of [320, 390, 430]) {
+    await page.send('Emulation.setDeviceMetricsOverride', { width, height: HEIGHT, deviceScaleFactor: 2, mobile: true });
+    await sleep(300);
+    const state=await page.eval(`const row=__m.project('Ремонт'); const caption=row?.querySelector('.ft-mobile-project-caption'); const text=row?.querySelector('.ft-text');
+      if(!caption||!text) return null; const c=caption.getBoundingClientRect(), t=text.getBoundingClientRect();
+      return { captionBottom:c.bottom, taskTop:t.top, textWidth:t.width, rowRight:row.getBoundingClientRect().right, screen:innerWidth };`);
+    if (!state || state.captionBottom>state.taskTop+2 || state.textWidth<100 || state.rowRight>state.screen)
+      throw new Error('project layout at '+width+': '+J(state));
+  }
+  await page.send('Emulation.setDeviceMetricsOverride', { width: WIDTH, height: HEIGHT, deviceScaleFactor: 2, mobile: true });
+  await page.shot(path.join(SHOTS, 'focus-tasks-mobile-projects.png'));
+});
+
+step("offline capture writes the task immediately and survives a plugin reload", async () => {
+  await page.send('Network.enable');
+  await page.send('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
+  try {
+    await tapOn(`__m.areaTitle('🧤Рутина').querySelector('.ft-plus')`, 'add offline');
+    await until(() => page.eval(`return !!document.querySelector('.ft-text.is-editing')`), 'offline editor');
+    await page.type('Офлайн покупка');
+    await page.key('Enter');
+    await page.key('Escape');
+    await taskIs('Офлайн покупка', { area:'🧤Рутина', scheduled:TODAY, status:'open' });
+    const uid=fm('Офлайн покупка').uid;
+    await page.eval(`await app.plugins.disablePlugin('focus-tasks'); await app.plugins.enablePlugin('focus-tasks'); return true;`);
+    await taskIs('Офлайн покупка', { uid, status:'open' });
+    await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .focus-tasks-view')`), 'offline view after reload');
+  } finally { await page.send('Network.emulateNetworkConditions', { offline:false, latency:0, downloadThroughput:-1, uploadThroughput:-1 }); }
+});
+
+step("phone area and project pages accept undated tasks offline", async () => {
+  await page.send('Network.enable');
+  await page.send('Network.emulateNetworkConditions', { offline:true, latency:0, downloadThroughput:0, uploadThroughput:0 });
+  try {
+    for (const local of [
+      { path:'Areas/Рутина.md', root:'.ft-area-page', text:'Офлайн внутри области', area:'🧤Рутина' },
+      { path:'Areas/Ремонт.md', root:'.ft-page', text:'Офлайн внутри проекта', area:'🏡Дом', project:'[[Ремонт]]' },
+    ]) {
+      await page.eval(`const p=app.plugins.plugins['focus-tasks']; const file=app.vault.getAbstractFileByPath(${J(local.path)}); await p.${local.project?'ensureStepsBlock':'ensureAreaBlock'}(file);const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+      await until(()=>page.eval(`return [...document.querySelectorAll(${J(local.root)})].some(e=>e.getClientRects().length && e.querySelector('.ft-plus'));`),'visible local page');
+      await tapOn(`([...document.querySelectorAll(${J(local.root)})].find(e=>e.getClientRects().length))?.querySelector('.ft-plus')`,'local add offline');
+      await until(()=>page.eval(`return [...document.querySelectorAll('.ft-text.is-editing')].some(e=>e.getClientRects().length);`),'local offline editor');
+      await page.type(local.text); await page.key('Enter'); await page.key('Escape');
+      await taskIs(local.text,{area:local.area,scheduled:null,...(local.project?{projects:local.project}:{})});
+    }
+    await page.eval(`await app.plugins.disablePlugin('focus-tasks');await app.plugins.enablePlugin('focus-tasks');await app.commands.executeCommandById('focus-tasks:open');return true;`);
+    await taskIs('Офлайн внутри области',{scheduled:null,status:'open'});
+    await taskIs('Офлайн внутри проекта',{scheduled:null,status:'open',projects:'[[Ремонт]]'});
+  } finally {
+    await page.send('Network.emulateNetworkConditions', {offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+  }
+});
+
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));

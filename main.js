@@ -47,7 +47,7 @@
 const {
   Plugin, PluginSettingTab, Setting, ItemView, Modal, SuggestModal, FuzzySuggestModal, Notice, Menu,
   MarkdownRenderChild, MarkdownRenderer, Component, Keymap, moment, setIcon, prepareSimpleSearch, prepareFuzzySearch,
-  Platform, Scope, normalizePath, requestUrl, parseLinktext,
+  Platform, Scope, normalizePath, requestUrl, parseLinktext, parseYaml, stringifyYaml,
 } = require("obsidian");
 
 const VIEW_TYPE = "focus-tasks-view";
@@ -88,7 +88,7 @@ const STRINGS = {
     openCount: "open {0}", inFocus: ", in focus {0}", addToArea: "Task in this area", empty: "Empty",
     addTask: "Add a task", showUpcoming: "Show upcoming", hideUpcoming: "Hide upcoming",
     addStep: "Step in this project", drag: "Drag", collapse: "Collapse", expand: "Expand",
-    pageNoProject: "This note is not a project of the list: no steps to show", pageMissing: "No project “{0}” in the list",
+    pageNoProject: "This note is not a project of the list: no steps to show", pageMissing: "No project “{0}” in the list", areaPageMissing: "Area “{0}” is not in the list", saveFailed: "Could not save. Your text is kept in the row; try again.",
     cmdStepsBlocks: "Steps block in every project note", stepsBlocksAdded: "Steps block added to {0} notes", stepsBlocksNone: "Every project note already has its steps block",
     noStep: "no step yet", moreSteps: "{0} more — show them", hideSteps: "Hide the other steps", projectDone: "Project done",
     projectDoneNotice: "“{0}” is done", projectBack: "“{0}” is open again", doneButton: "Done", doneEmpty: "Nothing closed today yet", aProjectDone: "closing a project",
@@ -138,6 +138,9 @@ const STRINGS = {
     buildBadge: "test", buildBadgeHelp: "A test build is running. Its stable one is one click away, in the settings.",
     returnWhen: "Look at it again", returnHint: "tomorrow or later",
     returnTooSoon: "The day to come back cannot be in the past",
+    reminder: "Remind in Apple Calendar…", reminderCaption: "Remind in Apple Calendar", reminderInfo: "A timed event will remind you after the task syncs.",
+    reminderClock: "Choose a time for the reminder", repeatUndo: "Undo this recurring occurrence in TaskNotes.", calendarTitle: "Apple Calendar reminders", calendarOff: "Not connected yet. A date with a time can be prepared in a task.",
+    calendarOn: "Connected. Dates with a time appear as reminder events after syncing.", calendarProblem: "Reminders have not synced yet. Check the calendar connection.",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
@@ -175,7 +178,7 @@ const STRINGS = {
     openCount: "открыто {0}", inFocus: ", в фокусе {0}", addToArea: "Задача в область", empty: "Пусто",
     addTask: "Добавить задачу", showUpcoming: "Показать будущее", hideUpcoming: "Скрыть будущее",
     addStep: "Шаг в проект", drag: "Перетащить", collapse: "Свернуть", expand: "Развернуть",
-    pageNoProject: "Эта заметка - не проект списка: шагов нет", pageMissing: "Проекта «{0}» в списке нет",
+    pageNoProject: "Эта заметка - не проект списка: шагов нет", pageMissing: "Проекта «{0}» в списке нет", areaPageMissing: "Области «{0}» в списке нет", saveFailed: "Не удалось сохранить. Текст остался в строке - попробуй ещё раз.",
     cmdStepsBlocks: "Блок шагов во все заметки проектов", stepsBlocksAdded: "Блок шагов добавлен в заметок: {0}", stepsBlocksNone: "Блок шагов уже есть во всех заметках проектов",
     noStep: "пока пусто", moreSteps: "ещё {0} — показать", hideSteps: "Скрыть остальные шаги", projectDone: "Проект выполнен",
     projectDoneNotice: "«{0}» выполнен", projectBack: "«{0}» снова открыт", doneButton: "Сделано", doneEmpty: "Сегодня ещё ничего не закрыто", aProjectDone: "закрытие проекта",
@@ -225,6 +228,9 @@ const STRINGS = {
     buildBadge: "тест", buildBadgeHelp: "Работает тестовая сборка. Стабильная - в один клик, в настройках.",
     returnWhen: "Вернуться к задаче", returnHint: "завтра или позже",
     returnTooSoon: "День возврата не может быть в прошлом",
+    reminder: "Напомнить в Apple Calendar…", reminderCaption: "Напомнить в Apple Calendar", reminderInfo: "Событие со временем напомнит после синхронизации задачи.",
+    reminderClock: "Укажи время напоминания", repeatUndo: "Отмени выполнение этого повтора в TaskNotes.", calendarTitle: "Напоминания Apple Calendar", calendarOff: "Пока не подключён. Дату со временем можно подготовить в задаче.",
+    calendarOn: "Подключён. Даты со временем попадают в календарь после синхронизации.", calendarProblem: "Напоминания пока не синхронизированы. Проверь подключение календаря.",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
@@ -284,7 +290,13 @@ const parseTime = (text) => {
 };
 const inFocus = (task) => task.date && task.date <= today();
 // A running task is given the moment it comes back — a day, and the time of day when one was named.
-const timeOf = (value) => String(value ?? "").match(/T(\d{2}:\d{2})/)?.[1] || null;
+const timeOf = (value) => {
+  const text=String(value ?? "");
+  if (value instanceof Date || /[T ].*(?:Z|[+-]\d{2}:\d{2})$/.test(text)) {
+    const date=moment(value); return date.isValid() ? date.format("HH:mm") : null;
+  }
+  return parseTime(text.match(/[T ](\d{2}:\d{2})/)?.[1]);
+};
 const backDue = (task) => !!task.date && (task.at
   ? `${task.date}T${task.at}` <= moment().format("YYYY-MM-DDTHH:mm")
   : task.date <= today());
@@ -293,7 +305,8 @@ const waitingBack = (task) => task.status === STATUS_WAITING && !backDue(task);
 // A date as the plugin reads it: «2026-09-22», «2026-09-22T18:30+03:00» and a Date all mean that day.
 const day = (value) => {
   if (value === null || value === undefined || value === "") return null;
-  const text = value instanceof Date ? moment(value).format("YYYY-MM-DD") : String(value).trim();
+  const zone = value instanceof Date || /[T ].*(?:Z|[+-]\d{2}:\d{2})$/.test(String(value));
+  const text = zone ? moment(value).format("YYYY-MM-DD") : String(value).trim();
   return text.match(/^(\d{4}-\d{2}-\d{2})/)?.[1] || text;
 };
 // The line that says which build is running: «Стабильная · 23.09 19:40 · заголовок коммита».
@@ -314,7 +327,9 @@ const isHead = (l) => /^#{1,6}\s/.test(l);
 const headText = (l) => l.replace(/^#+\s*/, "").trim();
 const indentOf = (l) => l.match(/^\s*/)[0].replace(/\t/g, "    ").length;
 const collator = () => (a, b) => a.localeCompare(b, LANG);
-const newUid = () => "ft-" + Date.now().toString(36).slice(-5) + Math.random().toString(36).slice(2, 5);
+let uidSequence = 0;
+const newUid = () => "ft-" + (globalThis.crypto?.randomUUID?.()
+  || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++uidSequence}`);
 // The list a task is dragged within: the steps of its project, or the loose tasks of its area.
 const listOf = (task) => (task.project ? "project:" + task.project : "area:" + task.area);
 // `tags: [archived]`, `tags: archived` or `#archived`: the note is in the archive.
@@ -366,10 +381,8 @@ function showMenu(menu, e) {
 
 // A note split into its frontmatter block (with the fences) and what follows.
 function splitNote(text) {
-  if (!text.startsWith("---\n")) return ["", text];
-  const end = text.indexOf("\n---", 3);
-  if (end < 0) return ["", text];
-  return [text.slice(0, end + 4), text.slice(end + 4).replace(/^\n/, "")];
+  const match = /^\uFEFF?---\r?\n[\s\S]*?\r?\n---(?=\r?\n|$)/.exec(text);
+  return match ? [match[0], text.slice(match[0].length).replace(/^\r?\n/, "")] : ["", text];
 }
 
 // Lines at the end of `section` (a heading's text); a missing section is added at the bottom.
@@ -395,10 +408,11 @@ class DatePicker {
   // earliest day that answers it at all, `clear: false` takes away «no date» where having none would
   // make no sense, and `time` adds the two fields for an hour of that day.
   constructor(anchor, value, onPick, onCancel, opts = {}) {
-    Object.assign(this, { value, onPick, onCancel, min: opts.min || null, tooEarly: opts.tooEarly || null });
+    Object.assign(this, { value, onPick, onCancel, min: opts.min || null, tooEarly: opts.tooEarly || null, timeRequired: !!opts.timeRequired, futureClock: !!opts.futureClock });
     this.month = moment(value || opts.min || today()).startOf("month");
     this.el = document.body.createDiv({ cls: "ft-picker" });
     if (opts.title) this.el.createDiv({ cls: "ft-picker-caption", text: opts.title });
+    if (opts.info) this.el.createDiv({ cls: "ft-picker-info", text: opts.info });
     const field = this.el.createDiv({ cls: "ft-picker-field" });
     this.input = field.createEl("input", { type: "text", cls: "ft-picker-input", attr: { placeholder: opts.hint || t("pickerPlaceholder") } });
     this.input.value = value ? moment(value).format("DD.MM.YY") : "";
@@ -426,7 +440,7 @@ class DatePicker {
       this.mm.oninput = () => digits(this.mm);
       for (const el of [this.hh, this.mm]) {
         el.onfocus = () => el.select();
-        el.onblur = () => { if (el.value) el.value = String(Math.min(Number(el.value), cap(el))).padStart(2, "0"); };
+        el.onblur = () => { if (el.value) el.value = el.value.padStart(2, "0"); };
         el.onkeydown = (e) => {
           e.stopPropagation();
           if (e.key === "Escape") { e.preventDefault(); this.close(); return; }
@@ -440,6 +454,10 @@ class DatePicker {
     this.head = this.el.createDiv({ cls: "ft-picker-head" });
     this.grid = this.el.createDiv({ cls: "ft-picker-grid" });
     if (opts.clear !== false) this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("clearDate") }).onclick = () => this.pick(null);
+    if (opts.reminder) this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("reminder"), cls: "ft-picker-reminder" }).onclick = () => {
+      this.close();
+      opts.reminder();
+    };
     this.draw();
     this.place(anchor);
     this.input.onkeydown = (e) => {
@@ -452,7 +470,10 @@ class DatePicker {
     this.input.oninput = () => this.input.removeClass("is-invalid");
     this.outside = (e) => { if (!this.el.contains(e.target)) this.commit(); };
     this.keys = (e) => { if (e.key === "Escape") { e.preventDefault(); this.close(); } };
-    this.scrolled = (e) => { if (!this.el.contains(e.target)) this.commit(); };
+    // Scrolling another note pane cannot commit this card. Only the card's own anchor moves it.
+    this.scrolled = e => {
+      if (!this.el.contains(e.target) && (e.target === document || e.target === window || e.target.contains?.(anchor))) this.commit();
+    };
     // The click that opened the picker is still travelling, so listening starts a tick later — and
     // only if the picker is still open by then, or the listeners would outlive it.
     setTimeout(() => {
@@ -516,7 +537,7 @@ class DatePicker {
 
   // What the fields add up to, whichever key ended the run.
   submit() {
-    const day = parseDay(this.input.value) || this.value;
+    const day = this.input.value.trim() ? parseDay(this.input.value) : this.value;
     if (!day || !this.allowed(day)) {
       this.input.addClass("is-invalid");
       if (day && this.tooEarly) new Notice(this.tooEarly);
@@ -527,24 +548,38 @@ class DatePicker {
 
   // The hour rides along with the day: empty hours simply mean «that whole day», and minutes left
   // empty on a filled hour mean o'clock. Returns false when the fields hold something unreadable.
-  pick(day) {
+  async pick(day) {
+    if (this.busy || this.closed) return false;
     let at = null;
-    if (this.hh && this.hh.value.trim()) {
+    if (day && this.hh && (this.timeRequired || this.hh.value.trim() || this.mm.value.trim())) {
       at = parseTime(`${this.hh.value}:${this.mm.value.trim() || "00"}`);
       if (!at) { this.hh.addClass("is-invalid"); return false; }
+      if (this.futureClock && moment(`${day}T${at}`).valueOf() <= Date.now()) {
+        this.hh.addClass("is-invalid");
+        new Notice(this.tooEarly || t("returnTooSoon"));
+        return false;
+      }
     }
-    this.close(true);
-    this.onPick(day, at);
-    return true;
+    this.busy = true;
+    try {
+      if (await this.onPick(day, at) === false) return false;
+      this.close(true);
+      return true;
+    } catch (e) {
+      new Notice(t("saveFailed"));
+      console.warn("Focus Tasks: cannot save the picked date", e);
+      return false;
+    } finally { this.busy = false; }
   }
 
   // Walking away from the card is an answer too: what stands in the fields is applied. Typing a day
   // and an hour and then clicking elsewhere used to throw both away — the one gesture nobody reads
   // as «cancel». Escape is what cancels.
-  commit() {
+  async commit() {
     if (this.closed) return;
-    const day = parseDay(this.input.value) || this.value;
-    if (!day || !this.allowed(day) || !this.pick(day)) this.close();
+    const day = this.input.value.trim() ? parseDay(this.input.value) : this.value;
+    if (!day || !this.allowed(day)) { this.input.addClass("is-invalid"); return; }
+    await this.pick(day);
   }
 
   close(picked) {
@@ -690,8 +725,10 @@ class FocusRenderer extends MarkdownRenderChild {
     // a project's note is its page: the steps block at the bottom is put there the first time the
     // note is opened from the list. `project`: the one whose name was clicked — the note it is
     // linked to gets a block naming that project (two projects may share one note)
-    if (!project && this.plugin.classify(file)?.project) project = file;
-    if (project) await this.plugin.ensureStepsBlock(file, project);
+    const own = this.plugin.classify(project || file);
+    if (!project && own?.project) project = file;
+    if (project && own?.project) await this.plugin.ensureStepsBlock(file, project);
+    else if (own && !own.project) await this.plugin.ensureAreaBlock(file, project || file);
     return leaf.openFile(file, eState ? { eState } : undefined);
   }
 
@@ -763,6 +800,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // Closing the pane (or switching a note out of preview) must take everything this view opened with
   // it: the editor's hotkeys, the picker and its document listeners, a drag left mid-air.
   onunload() {
+    this.unloaded = true;
     clearTimeout(this.timer);
     clearTimeout(this.menuTimer);
     this.keys(false);
@@ -879,7 +917,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // and throw the scroll back to the top on every change.
   async build() {
     if (this.blockSrc !== null) this.page = this.plugin.blockPage(this.blockSrc, this.sourcePath);
-    if (this.page) return this.buildPage();
+    if (this.page) return this.page.area ? this.buildAreaPage() : this.buildPage();
     const p = this.plugin;
     const everything = p.everything();
     const areas = await p.collect(false);
@@ -1041,6 +1079,7 @@ class FocusRenderer extends MarkdownRenderChild {
     this.containerEl.addClass("focus-tasks-view");
     this.containerEl.replaceChildren(...el.childNodes);
     this.items = this.fresh;
+    this.daySeen = today();
     this.keepPlace(anchor);
     this.paint();
     this.hold();
@@ -1050,6 +1089,49 @@ class FocusRenderer extends MarkdownRenderChild {
   // rows as in the list — today's, then the pile of what is not today (dimmed), then a line that
   // takes the next step, and the closed ones folded under «✓ Done · N». The note above the block is
   // the project's own: what it is about, its links; this is where the work stands.
+  async buildAreaPage() {
+    const p = this.plugin;
+    const file = this.page.area;
+    const name = p.classify(file)?.area;
+    const area = (await p.collect(true)).find((a) => a.name === name);
+    this.fresh = new WeakMap();
+    this.pending = area ? area.waiting : [];
+    this.setAlarm();
+    this.folds = [];
+    const old = this.inner;
+    this.inner = this.addChild(new Component());
+    const el = createDiv();
+    const box = el.createDiv({ cls: "ft-area-page ft-area is-rest" });
+    this.shown = { areas: area ? [area.name] : [], tasks: {} };
+    if (!area) {
+      box.createDiv({ cls: "ft-empty", text: t("areaPageMissing", name || file.basename) });
+      return this.swap(el, old);
+    }
+    this.shown.tasks["area:" + area.name] = area.rows.map(seatKey);
+    for (const b of area.projects) this.shown.tasks["project:" + b.file.basename] = b.tasks.map((x) => x.uid);
+    this.track(box, { type: "area", area });
+    const head = box.createDiv({ cls: "ft-area-title ft-area-page-head" });
+    this.track(head, { type: "area-title", area });
+    head.createSpan({ cls: "ft-page-name", text: area.name });
+    const target = { area: area.name, project: null, noDate: true };
+    const last = () => [...box.querySelectorAll(":scope > ul.ft-list > li")].pop() || head;
+    this.plus(head, t("addToArea"), async () => target, last);
+    this.more(head, (menu) => this.areaMenu(menu, area));
+    if (area.rows.length) await this.list(box, area.rows, { area, all: true, pile: "all" });
+    const add = box.createDiv({ cls: "ft-empty ft-empty-add", text: "+ " + t("addTask") });
+    add.onclick = () => this.draft(last(), target);
+    const done = p.tasks().filter((x) => x.status === STATUS_DONE && x.area === area.name)
+      .sort((x, y) => String(y.doneDate || "").localeCompare(String(x.doneDate || "")) || collator()(x.text, y.text));
+    if (done.length) {
+      const key = "area-page-done:" + file.path;
+      const open = p.isShown(key, true);
+      const toggle = box.createDiv({ cls: "ft-page-done", text: `${t("doneButton")} · ${done.length}` });
+      toggle.onclick = () => p.toggleShown(key, true);
+      if (open) await this.completed(box.createDiv({ cls: "ft-done-today" }), done);
+    }
+    this.swap(el, old);
+  }
+
   async buildPage() {
     const p = this.plugin;
     const path = this.page.project?.path;
@@ -1067,7 +1149,8 @@ class FocusRenderer extends MarkdownRenderChild {
     const box = el.createDiv({ cls: "ft-page" });
     if (!b) {
       this.shown = { areas: [], tasks: {} };
-      box.createDiv({ cls: "ft-empty", text: this.page.missing ? t("pageMissing", this.page.missing) : t("pageNoProject") });
+      box.createDiv({ cls: "ft-empty", text: this.page.kind === "area" ? t("areaPageMissing", this.page.missing || "")
+        : this.page.missing ? t("pageMissing", this.page.missing) : t("pageNoProject") });
       return this.swap(el, old);
     }
     this.shown = { areas: [area.name], tasks: { ["project:" + b.file.basename]: [...b.tasks, ...b.later].map((x) => x.uid) } };
@@ -1432,9 +1515,9 @@ class FocusRenderer extends MarkdownRenderChild {
     if (this.editing) return;
     this.clearSelection();
     this.card(el, () => new DatePicker(el, project.date || null, async (day) => {
+      await this.plugin.setProjectDate(project.file, day);
       this.editing = false;
       this.picker = null;
-      await this.plugin.setProjectDate(project.file, day);
       this.render();
     }, () => {
       this.editing = false;
@@ -1934,8 +2017,9 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // Redraw as soon as one of the waiting tasks is due, and not a moment later.
   wake() {
-    if (this.editing || this.held) return;   // a card or a drag is open: it would be pulled away
-    if ((this.pending || []).some(backDue)) this.render();
+    if (this.editing || this.held) { this.again = true; return; }
+    if (this.daySeen !== today() || (this.pending || []).some(backDue)) this.render();
+    else this.setAlarm(); // a distant return has entered the next hour since the last render
   }
 
   // The nearest moment something is due back, to the second. Nothing within the hour — the sweep
@@ -1970,10 +2054,10 @@ class FocusRenderer extends MarkdownRenderChild {
     const was = one && one.status === STATUS_WAITING && one.date >= min ? one.date : today();
     this.anchor = list[0];
     this.card(anchor, () => new DatePicker(anchor, was, async (chosen, at) => {
+      if (chosen && await this.plugin.setWaiting(list, true, chosen, at) === false) return false;
       this.editing = false;
       this.picker = null;
       this.clearSelection();
-      if (chosen) await this.plugin.setWaiting(list, true, chosen, at);
       this.render();
     }, () => {
       this.editing = false;
@@ -1983,7 +2067,7 @@ class FocusRenderer extends MarkdownRenderChild {
     }, {
       title: t("returnWhen"), hint: t("returnHint"), tooEarly: t("returnTooSoon"), min, clear: false,
       // the hour is the one running task's own; several rows start from a blank hour
-      time: true, at: one && one.status === STATUS_WAITING ? one.at : null,
+      time: true, futureClock: true, at: one && one.status === STATUS_WAITING ? one.at : null,
     }));
   }
 
@@ -1998,19 +2082,46 @@ class FocusRenderer extends MarkdownRenderChild {
     if (tasks.every((x) => x.status === STATUS_WAITING)) return this.askReturn(tasks, el);
     const days = [...new Set(tasks.map((x) => x.date || null))];
     this.anchor = task;
-    this.card(el, () => new DatePicker(el, days.length === 1 ? days[0] : null, async (day) => {
+    const timed = tasks.length === 1 && !!task.at;
+    this.card(el, () => new DatePicker(el, days.length === 1 ? days[0] : null, async (day, at) => {
+      const change = tasks.filter((x) => (x.date || null) !== day || timed && x.at !== at);
+      if (change.length && await (timed ? this.plugin.setScheduled(task, day, at) : this.plugin.setDates(change, day)) === false) return false;
       this.editing = false;
       this.picker = null;
       this.clearSelection();
-      const change = tasks.filter((x) => (x.date || null) !== day);
-      if (change.length) await this.plugin.setDates(change, day);
       this.render();
     }, () => {
       this.editing = false;
       this.picker = null;
       el.removeClass("is-active");
       this.render();
-    }));
+    }, { time: timed, at: task.at, reminder: timed ? null : () => this.askReminder(tasks, el) }));
+  }
+
+  async askReminder(tasks, el = null) {
+    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(x => x && !x.isProject);
+    if (this.editing) { if (!this.endEdit) return; await this.endEdit(true, false); }
+    const anchor = el || this.rowLabel(list[0]);
+    if (!list.length || !anchor || this.editing) return;
+    const one = list.length === 1 ? list[0] : null;
+    const calendar = await this.plugin.calendarState();
+    if (this.editing || !anchor.isConnected) return;
+    this.card(anchor, () => new DatePicker(anchor, one?.date || today(), async (day, at) => {
+      if (!day || !at) return false;
+      if (await this.plugin.track(t("aDate"), list.map(x => x.file), async tx => {
+        for (const task of list) if (!await this.plugin.setScheduled(task, day, at, tx)) return false;
+        return true;
+      }) === false) return false;
+      this.editing = false;
+      this.picker = null;
+      this.clearSelection();
+      this.render();
+    }, () => {
+      this.editing = false;
+      this.picker = null;
+      anchor.removeClass("is-active");
+      this.render();
+    }, { title: t("reminderCaption"), info: t(calendar?.enabled ? "reminderInfo" : "calendarOff"), time: true, timeRequired: true, futureClock: true, at: one?.at, min: today(), clear: false }));
   }
 
   // A card opens over the row: while it is up the list is «editing» (no re-render, no other keys).
@@ -2045,7 +2156,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // «Undo» a delete from the menu gets. Esc brings the text back untouched and selects the row.
     const saveText = async (value) => {
       if (!value) { await this.plugin.remove(task); return null; }
-      if (value !== task.text) await this.plugin.rename(task, value);
+      if (value !== task.text && !await this.plugin.rename(task, value)) throw new Error(t("changed"));
       return task;
     };
     // The date changes at once and the label on the right follows; the text stays in edit. Unless
@@ -2055,7 +2166,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const redate = async (day, close) => {
       const li = el.closest("li");
       const pile = this.pileOf(li);
-      await this.plugin.setDate(task, day);
+      if (!await this.plugin.setDate(task, day)) return;
       const label = li?.querySelector(".ft-date");
       if (label) this.dateLabel(label, task);
       if (pile === "all" || this.inToday(task) === (pile === "focus")) return;
@@ -2323,8 +2434,23 @@ class FocusRenderer extends MarkdownRenderChild {
       el.removeClass("is-editing");
       const value = el.textContent.replace(/\s+/g, " ").trim();
       let result;
-      if (keep) result = await save(value);
-      else el.closest(".ft-draft, .ft-draft-row")?.remove();
+      try {
+        if (keep) result = await save(value);
+        else el.closest(".ft-draft, .ft-draft-row")?.remove();
+      } catch (e) {
+        new Notice(t("saveFailed"));
+        console.warn("Focus Tasks: editor save failed", e);
+        if (!this.unloaded && el.isConnected) {
+          done = false;
+          this.endEdit = finish;
+          this.scopes.add(scope);
+          this.plugin.app.keymap.pushScope(scope);
+          el.contentEditable = "true";
+          el.addClass("is-editing");
+          el.focus();
+          return null;
+        }
+      }
       this.editing = false;
       if (rerender) this.render();
       return result;
@@ -2447,6 +2573,8 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     menu.addSeparator();
     // A drag is not always possible — a finger loses to the scroll, a keyboard has no drag at all.
+    menu.addItem(i => i.setTitle(t("reminder")).setIcon("bell").onClick(() => this.askReminder(task)));
+    menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("moveUp")).setIcon("arrow-up").onClick(() => this.shift(task, -1)));
     menu.addItem((i) => i.setTitle(t("moveDown")).setIcon("arrow-down").onClick(() => this.shift(task, 1)));
     menu.addSeparator();
@@ -2500,6 +2628,7 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     menu.addSeparator();
     this.priorityItems(menu, chosen);
+    if (chosen.length) menu.addItem(i => i.setTitle(t("reminder")).setIcon("bell").onClick(() => this.askReminder(chosen)));
     if (chosen.length) { menu.addSeparator(); this.progressItem(menu, chosen); }
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
@@ -2526,7 +2655,7 @@ class FocusRenderer extends MarkdownRenderChild {
       el.addClass("is-linked");
       el.setAttr("aria-label", t("linkedNote", note.basename));
     }
-    el.onclick = (e) => { if (!el.isContentEditable) this.open(this.plugin.linked(file) || file, e, null, this.plugin.classify(file)?.project ? file : null); };
+    el.onclick = (e) => { if (!el.isContentEditable) this.open(this.plugin.linked(file) || file, e, null, this.plugin.classify(file) ? file : null); };
   }
 
   // A list of rows, tasks and projects alike, one line each. `opts.all`: «All» is on (nothing is
@@ -2715,6 +2844,16 @@ class FocusRenderer extends MarkdownRenderChild {
       const pile = ul.createEl("li", { cls: "ft-later-steps" });
       await this.ahead(pile, project.later.map((task) => ({ kind: "task", task })), area, { level: (opts.level || 0) + 1 });
     }
+    if (Platform.isMobile && step) {
+      // A phone gives the action its own full-width line. The project and its controls sit above it.
+      li.addClass("ft-mobile-project");
+      const caption = li.createSpan({ cls: "ft-mobile-project-caption" });
+      caption.appendChild(name);
+      const more = line.querySelector(".ft-steps-more");
+      if (more) caption.appendChild(more);
+      line.querySelector(".ft-sep")?.remove();
+      for (const control of li.querySelectorAll(":scope > .ft-plus, :scope > .ft-later-chip")) caption.appendChild(control);
+    }
   }
 
 }
@@ -2758,6 +2897,13 @@ class FocusSettingTab extends PluginSettingTab {
     text("sFolder", "sFolderDesc", "folder");
     text("sTasksFolder", "sTasksFolderDesc", "tasksFolder");
     this.companion(containerEl);
+    const calendar = new Setting(containerEl).setName(t("calendarTitle")).setDesc(t("calendarOff"));
+    p.calendarState().then(state => {
+      if (!state?.enabled) return;
+      const problem = !Number.isFinite(Date.parse(state.updatedAt)) || state.errors?.length || Object.values(state.tasks || {}).some(x=>x.status==="missed")
+        || Date.now()-Date.parse(state.updatedAt)>20*60*1000;
+      calendar.setDesc(t(problem ? "calendarProblem" : "calendarOn"));
+    });
     new Setting(containerEl).setName(t("sLanguage")).setDesc(t("sLanguageDesc")).addDropdown((d) => d
       .addOptions({ auto: "Auto", en: "English", ru: "Русский" }).setValue(s.language).onChange(async (v) => {
         s.language = v;
@@ -2887,7 +3033,18 @@ module.exports = class FocusTasks extends Plugin {
     this.toggling = new Set();  // lines with a toggle in flight
     for (const event of ["create", "delete", "modify"]) this.registerEvent(this.app.vault.on(event, () => this.forgetScan()));
     this.registerEvent(this.app.vault.on("rename", (file, old) => this.renamed(file.path, old)));
-    this.registerEvent(this.app.metadataCache.on("changed", () => this.forgetScan()));
+    const ensureArea = file => {
+      if (file && this.classify(file) && !this.classify(file).project)
+        this.ensureAreaBlock(file).catch(e=>console.warn("Focus Tasks: cannot add the area's view",e));
+    };
+    this.registerEvent(this.app.metadataCache.on("changed", file => {
+      this.forgetScan();
+      if (file && file===this.app.workspace.getActiveFile?.()) ensureArea(file);
+    }));
+    this.registerEvent(this.app.workspace.on("file-open", (file) => {
+      ensureArea(file);
+    }));
+    this.app.workspace.onLayoutReady?.(()=>ensureArea(this.app.workspace.getActiveFile?.()));
     this.registerView(VIEW_TYPE, (leaf) => new FocusView(leaf, this));
     this.registerMarkdownCodeBlockProcessor("focus-tasks", (src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath, null, src || "")));
     this.addCommand({ id: "steps-blocks", name: t("cmdStepsBlocks"), callback: () => this.stepsBlocksEverywhere() });
@@ -3012,8 +3169,8 @@ module.exports = class FocusTasks extends Plugin {
   // A task file: a note with `area:` in its frontmatter; `type: <project word>` makes it a project,
   // anything else an area. In the folder any such note counts; outside it only a note that says it
   // is an area — an area is one of your own notes (a hub in Base/, say), not a copy of it.
-  classify(file) {
-    const fm = this.app.metadataCache.getFileCache(file)?.frontmatter;
+  classify(file, fields = null) {
+    const fm = fields || this.app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm || !fm.area) return null;
     if (!this.inFolder(file) && !this.isAreaType(fm.type)) return null;
     if (this.isTaskType(fm.type)) return null;  // a task note carries `area:` too
@@ -3087,11 +3244,12 @@ module.exports = class FocusTasks extends Plugin {
 
   // A project is closed by hand, from its menu; the box in the closed block opens it again.
   async setProjectDone(file, on) {
-    return this.track(t("aProjectDone"), [file], async () => {
-      await this.app.fileManager.processFrontMatter(file, (fm) => {
+    return this.track(t("aProjectDone"), [file], async tx => {
+      await this.frontOwned(file, (fm) => {
+        if (!this.classify(file, fm)?.project) throw new Error(t("changed"));
         if (on) { fm.status = STATUS_DONE; fm.completedDate = today(); }
         else { delete fm.status; delete fm.completedDate; }
-      });
+      }, tx);
       this.forgetScan();
       new Notice(t(on ? "projectDoneNotice" : "projectBack", file.basename));
       this.refresh();
@@ -3104,13 +3262,21 @@ module.exports = class FocusTasks extends Plugin {
 
   get tasksFolder() { return normalizePath(this.settings.tasksFolder || DEFAULTS.tasksFolder); }
 
+  async calendarState() {
+    try {
+      const path="Internals/FocusTasks/calendar-status.json";
+      if (!await this.app.vault.adapter?.exists(path)) return null;
+      return JSON.parse(await this.app.vault.adapter.read(path));
+    } catch { return null; }
+  }
+
   // A task = its own note in the tasks folder: `type: задача`, the rest in the frontmatter. `uid` is
   // its identity and never changes; the file name is only a readable label.
-  taskOf(file) {
+  taskOf(file, fields = null) {
     const folder = this.tasksFolder;
     if (folder && folder !== "/" && !file.path.startsWith(folder + "/")) return null;
     const cache = this.app.metadataCache.getFileCache(file);
-    const fm = cache?.frontmatter;
+    const fm = fields || cache?.frontmatter;
     if (!fm || !this.isTaskType(fm.type)) return null;
     // Archived (the `archived` tag, as TaskNotes marks it): history, not a task — the focus never
     // reads it, whatever folder it lies in.
@@ -3272,6 +3438,29 @@ module.exports = class FocusTasks extends Plugin {
     });
   }
 
+  // Capture the exact bytes inside the atomic vault callback. A read after the gesture could
+  // already contain another writer's work, which must never become this gesture's Undo target.
+  async processOwned(file, change, tx = null) {
+    await this.app.vault.process(file, before => {
+      const after = change(before);
+      if (tx && before !== after) tx.record(file.path, before, after);
+      return after;
+    });
+  }
+
+  async frontOwned(file, change, tx = null) {
+    return this.processOwned(file, text => {
+      const [front, body] = splitNote(text);
+      const raw = front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "");
+      const fm = front ? parseYaml(raw) : {};
+      if (!fm || typeof fm !== "object" || Array.isArray(fm)) throw new Error("Invalid frontmatter");
+      if (change(fm) === false) return text;
+      const newline = front.includes("\r\n") ? "\r\n" : "\n";
+      const yaml = stringifyYaml(fm).replace(/\r?\n/g, newline);
+      return (text.startsWith("\uFEFF") ? "\uFEFF" : "") + "---" + newline + yaml + "---" + newline + body;
+    }, tx);
+  }
+
   // The one place a task note is written. `change(fm)` gets the frontmatter as it is on disk right
   // now — a decision made from what the screen showed a second ago (another device may have finished
   // the task since) must be taken inside it, not before.
@@ -3280,14 +3469,15 @@ module.exports = class FocusTasks extends Plugin {
     if (!file || file.deleted) { new Notice(t("changed")); return false; }
     let uid = null, wrong = false;
     try {
-      await this.app.fileManager.processFrontMatter(file, (fm) => {
+      await this.frontOwned(file, (fm) => {
         // The row was read a moment ago; another note may have taken this path since (Sync, a script,
         // the user). Writing into it would change the wrong task — or turn an ordinary note into one.
-        if (!this.isTaskType(fm.type)) { wrong = true; return; }
-        if (fm.uid && task.uid && String(fm.uid) !== task.uid) { wrong = true; return; }
+        if (!this.isTaskType(fm.type)) { wrong = true; return false; }
+        if (fm.uid && task.uid && String(fm.uid) !== task.uid) { wrong = true; return false; }
+        if (!fm.uid && task.uid && task.uid !== task.file.path) { wrong = true; return false; }
         if (!fm.uid) fm.uid = uid = newUid();  // a note written by another plugin gets its identity here
-        change(fm);
-      });
+        return change(fm);
+      }, this.tx);
       if (wrong) { new Notice(t("changed")); return false; }
       if (uid) {
         // it lived under its path until now: the order it was dragged into moves to the real identity
@@ -3327,18 +3517,24 @@ module.exports = class FocusTasks extends Plugin {
         // One occurrence is done, not the task. Only TaskNotes knows that rule; without it, writing
         // `status: done` here would quietly end the whole series.
         if (!api?.toggleCompleteInstance) { new Notice(t("repeating")); return false; }
+        if (this.tx) this.tx.delegated = true;
         await api.toggleCompleteInstance(task.file.path, task.date || today());
         this.forgetScan();
         return true;
       }
-      let done = null;
+      let done = null, doneDate = null;
       const ok = await this.update(task, (fm) => {
-        done = String(fm.status ?? STATUS_OPEN).trim().toLowerCase() !== STATUS_DONE;
+        const current = String(fm.status ?? STATUS_OPEN).trim().toLowerCase();
+        done = task.status !== STATUS_DONE;
+        doneDate = done ? (current === STATUS_DONE ? day(fm.completedDate) : today()) : null;
+        // The box is an intent (check or uncheck), rather than toggling a state the user never saw.
+        if (current === (done ? STATUS_DONE : STATUS_OPEN)) return false;
+        if (current !== task.status || fm.recurrence) throw new Error(t("changed"));
         fm.status = done ? STATUS_DONE : STATUS_OPEN;
         if (done) fm.completedDate = today();
         else delete fm.completedDate;
       });
-      if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate: done ? today() : null });
+      if (ok) Object.assign(task, { status: done ? STATUS_DONE : STATUS_OPEN, doneDate });
       return ok;
     }
   }
@@ -3348,36 +3544,52 @@ module.exports = class FocusTasks extends Plugin {
   // back, so it comes home instead: no day to return on means the task is mine again as of now.
   async setDate(task, day, tx = null) {
     return this.track(t("aDate"), [task.file], async () => {
-      const home = !day && task.status === STATUS_WAITING;
-      const ok = await this.setFields(task, { scheduled: day || null, ...(home ? { status: STATUS_OPEN } : {}) });
-      if (ok) {
-        task.date = day || null;
-        if (home) task.status = STATUS_OPEN;
-      }
-      return ok;
+      return this.scheduleNow(task, day, undefined);
     }, tx);
+  }
+
+  async setScheduled(task, day, at = null, tx = null) {
+    if (at && !parseTime(at)) throw new Error(t("reminderClock"));
+    return this.track(t("aDate"), [task.file], () => this.scheduleNow(task, day, at), tx);
+  }
+
+  async scheduleNow(task, day, at) {
+    let scheduled = null, status = task.status;
+    const ok = await this.update(task, fm => {
+      // A day-only gesture preserves an existing reminder hour; removing the day removes it all.
+      const clock = at === undefined ? timeOf(fm.scheduled) : at && parseTime(at);
+      scheduled = day ? day + (clock ? "T" + clock : "") : null;
+      if (scheduled) fm.scheduled = scheduled; else delete fm.scheduled;
+      if (!day && fm.status === STATUS_WAITING) fm.status = STATUS_OPEN;
+      status = String(fm.status ?? STATUS_OPEN).trim().toLowerCase();
+    });
+    if (ok) Object.assign(task, { date: day || null, at: timeOf(scheduled), status });
+    return ok;
   }
 
   async setDates(tasks, day) {
     return this.track(t("aDate"), tasks.map((x) => x.file), async (tx) => {
-      for (const task of tasks) await this.setDate(task, day, tx);
+      for (const task of tasks) if (!await this.setDate(task, day, tx)) return false;
+      return true;
     });
   }
 
   // New text: the note keeps its uid and is renamed to match (the whole text stays in `title` when it
   // is too long for a file name).
   async rename(task, text) {
-    return this.track(t("aRename"), [task.file], () => this.renameNow(task, text));
+    return this.track(t("aRename"), [task.file], (tx) => this.renameNow(task, text, tx));
   }
 
-  async renameNow(task, text) {
+  async renameNow(task, text, tx = null) {
     const name = fileName(text).slice(0, 60).trim();
     let file = name && name !== task.file.basename ? await this.freeName(name) : task.file.basename;
     // the file name may be cut or taken: then the whole text lives in `title`
-    const ok = await this.setFields(task, { title: !name || file !== text ? text : null });
-    if (!ok) return;  // the note is not the one this row was read from: leave its name alone too
+    // Keep the full text on disk before renaming: a failed rename must not discard what was typed.
+    const ok = await this.setFields(task, { title: text });
+    if (!ok) return false;  // the note is not the one this row was read from: leave its name alone too
     if (file !== task.file.basename) {
-      await this.app.fileManager.renameFile(task.file, normalizePath(`${this.tasksFolder}/${file}.md`));
+      const path = normalizePath(`${this.tasksFolder}/${file}.md`);
+      await this.renameOwned(task.file, path, tx);
       this.forgetScan();
       // A step named like its project had a link Obsidian resolved to the step itself, and has just
       // rewritten to the step's new path: it is written back to the project, by path if need be.
@@ -3387,7 +3599,9 @@ module.exports = class FocusTasks extends Plugin {
         if (link !== `[[${task.project}]]`) await this.setFields(task, { projects: [link] });
       }
     }
+    if (file === text) await this.setFields(task, { title: null });
     task.text = text;
+    return true;
   }
 
   // `drop` comes from FocusRenderer.target; `shown` is the order on screen.
@@ -3426,7 +3640,7 @@ module.exports = class FocusTasks extends Plugin {
       };
       if (to === item.area.name) return seatIn();
       return this.track(t("aMove"), [item.project.file, item.area.note, tg.area.note].filter(Boolean), async () => {
-        if (await this.moveProject(item.project, item.area, tg.area)) await seatIn();
+        if (await this.moveProject(item.project, item.area, tg.area, tx)) await seatIn();
       }, tx);
     } else return this.moveTasks(item.tasks || [item.task], drop, shown.tasks || {}, tx);
     await this.saveAll();
@@ -3435,21 +3649,25 @@ module.exports = class FocusTasks extends Plugin {
 
   // A project goes to live in another area: its note says so, the area notes list it accordingly,
   // its steps follow, and its seat in the old area's order goes.
-  async moveProject(project, from, to) {
-    const note = to.note || await this.createArea(to.name);
+  async moveProject(project, from, to, tx = null) {
+    const mine = this.tasks().filter((x) => this.samePlace(x, project.file));
+    await tx?.add(mine.map((x) => x.file));
+    const note = to.note || await this.createArea(to.name, null, tx);
     if (!note) return false;
     const file = project.file;
     const old = from.note ? this.app.metadataCache.fileToLinktext(from.note, file.path) : null;
     const link = this.app.metadataCache.fileToLinktext(note, file.path);
     const isOld = (v) => !!old && typeof v === "string" && v.replace(/^\[\[|\]\]$/g, "").split("|")[0] === old;
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
+    await this.frontOwned(file, (fm) => {
+      const own = this.classify(file, fm);
+      if (!own?.project || own.area !== from.name) throw new Error(t("changed"));
       fm.area = to.name;
       if (Array.isArray(fm.parents)) { const i = fm.parents.findIndex(isOld); if (i >= 0) fm.parents[i] = `[[${link}]]`; }
       else if (isOld(fm.parents)) fm.parents = `[[${link}]]`;
-    });
-    await this.dropLinks(file, from.name);
-    await this.app.vault.process(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading));
-    for (const task of this.tasks().filter((x) => this.samePlace(x, file))) await this.setFields(task, { area: to.name });
+    }, tx);
+    await this.dropLinks(file, from.name, tx);
+    await this.processOwned(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading), tx);
+    for (const task of mine) await this.setFields(task, { area: to.name });
     this.data.order.tasks["area:" + from.name] = this.areaSeats(from.name).filter((k) => k !== "p:" + file.path);
     this.forgetScan();
     return true;
@@ -3548,7 +3766,7 @@ module.exports = class FocusTasks extends Plugin {
   async setWaiting(tasks, running, day = null, at = null) {
     const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(Boolean);
     if (!list.length) return;
-    await this.track(t("aRunning"), list.map((x) => x.file), async () => {
+    return this.track(t("aRunning"), list.map((x) => x.file), async () => {
       for (const task of list) {
         const status = running ? STATUS_WAITING : STATUS_OPEN;
         const fields = { status };
@@ -3557,6 +3775,7 @@ module.exports = class FocusTasks extends Plugin {
         // moment, and an ordinary task in this list is planned by the day, not by the clock.
         if (!running) fields.scheduled = !task.date || task.date > today() ? today() : task.date;
         const ok = await this.setFields(task, fields);
+        if (!ok) return false;
         if (ok) {
           task.status = status;
           if ("scheduled" in fields) {
@@ -3566,6 +3785,7 @@ module.exports = class FocusTasks extends Plugin {
         }
       }
       this.refresh();
+      return true;
     });
   }
 
@@ -3712,69 +3932,80 @@ module.exports = class FocusTasks extends Plugin {
   // Changes run one at a time: a gesture that lands while another change is still writing waits
   // its turn, so the notes it makes never end up in the first one's record (and its undo). A call
   // from inside a running change (a group date sets each date) joins it, and says so with `tx`.
-  // One that does not say so and finds a change running waits a beat; a change that does not end
-  // in that beat is the one waiting for this call — then this call is a part of it after all.
-  async track(label, files, run, tx = null) {
-    if (tx && tx === this.tx) { await tx.add(files); return run(tx); }
+  // Only an explicit transaction token joins a change. A slow disk never joins unrelated gestures.
+  async serialize(run) {
     const before = this.txTail || Promise.resolve();
     let release;
-    const mine = new Promise((r) => (release = r));
-    this.txTail = mine;
-    const inTime = await Promise.race([before.then(() => true), new Promise((r) => setTimeout(() => r(false), 1500))]);
-    if (!inTime && this.tx) {
-      console.warn("Focus Tasks: a change inside a change did not say so:", label);
-      release();
-      await this.tx.add(files);
-      return run(this.tx);
-    }
-    const made = [];
-    // A note the change makes — created outright, or left at a new path by a rename — is written
-    // down as «did not exist»: undoing the change removes it again.
-    const isNote = (file) => !!file && !file.children && file.path?.endsWith(".md");  // folders are not notes
-    const refs = [
-      this.app.vault.on("create", (file) => { if (isNote(file)) made.push(file.path); }),
-      this.app.vault.on("rename", (file) => { if (isNote(file)) made.push(file.path); }),
-    ];
+    this.txTail = new Promise((r) => (release = r));
+    await before;
+    try { return await run(); } finally { release(); }
+  }
+
+  async track(label, files, run, tx = null) {
+    if (tx && tx === this.tx) { await tx.add(files); return run(tx); }
+    return this.serialize(async () => {
+    // Writers register their own output paths before creating or renaming. Vault-wide events
+    // also include other devices and plugins, whose notes must never enter this change's Undo.
     const snap = [];
-    const cur = { add: async (more) => { for (const item of await this.snapshot(more)) if (!snap.some((x) => x.path === item.path)) snap.push(item); } };
+    const cur = { renames: [], created: new Set(),
+      record: (path, before, after) => {
+        let item = snap.find(x => x.path === path);
+        if (!item) { item={path,text:before}; snap.push(item); }
+        if (item.recorded && item.after !== before) item.conflict = true;
+        if (!item.recorded && item.text !== null) item.text = before;
+        Object.assign(item, { after, recorded: true });
+      },
+      add: async (more) => { for (const item of await this.snapshot(more)) if (!snap.some((x) => x.path === item.path)) snap.push(item); } };
     this.tx = cur;
     const order = this.orderState();   // before: what undo puts back
     try {
       await cur.add(files);
-      const result = await run(cur);
-      for (const path of made) if (!snap.some((x) => x.path === path)) snap.push({ path, text: null });
-      for (const item of snap) {
-        const live = this.app.vault.getAbstractFileByPath(item.path);
-        item.after = live ? await this.app.vault.read(live) : null;
+      try { return await run(cur); }
+      finally {
+        // A failed second write still leaves the first write undoable.
+        for (const item of snap) {
+          if (item.recorded) continue;
+          const live = this.app.vault.getAbstractFileByPath(item.path);
+          item.after = live ? await this.app.vault.read(live) : null;
+        }
+        const changed = snap.filter(x => x.text !== x.after && (x.recorded || cur.created.has(x.path) || cur.renames.some(r=>r.to===x.path || r.from===x.path)));
+        if (changed.length || order !== this.orderState()) cur.entry = this.remember(label, changed, order, cur.renames);
+        // A companion can mutate occurrence files outside this transaction. Keep a
+        // barrier so Cmd+Z never silently undoes an earlier, unrelated action instead.
+        if (cur.delegated && !cur.entry) cur.entry = this.remember(label, [], order);
+        if (cur.entry && cur.delegated) cur.entry.delegated = true;
       }
-      const changed = snap.filter((x) => x.text !== x.after);
-      // a change of order alone (a drag within its list) is a change too
-      if (changed.length || order !== this.orderState()) this.remember(label, changed, order);
-      return result;
     } finally {
-      for (const ref of refs) (this.app.vault.offref ? this.app.vault.offref(ref) : this.app.vault.off(ref.name, ref.fn));
       this.tx = null;
-      release();
     }
+    });
   }
 
   // The last thirty changes, newest last. The order as it was before the change travels with each:
   // undoing a drag has to put the order back as well as the notes. What is folded does not travel:
   // that is the screen's business, not the change's.
-  remember(label, snap, order) {
+  remember(label, snap, order, renames = []) {
     this.history = this.history || [];
-    this.history.push({ label, snap, order });
+    const entry = { label, snap, order, afterOrder: this.orderState(), renames };
+    this.history.push(entry);
     if (this.history.length > 30) this.history.shift();
+    return entry;
   }
 
   orderState() { return JSON.stringify(this.data.order); }
 
   // ⌘Z: the last change made from the list, put back.
   async undo() {
+    return this.serialize(() => this.undoNow());
+  }
+
+  async undoNow() {
     const last = (this.history || []).pop();
     if (!last) { new Notice(t("nothingToUndo")); return 0; }
-    let back = await this.restore(last.snap);
-    if (last.order && last.order !== this.orderState()) {
+    if (last.delegated) { new Notice(t("repeatUndo")); return 0; }
+    const restoreOrder = !last.afterOrder || last.afterOrder === this.orderState();
+    let back = await this.restore(last.snap, last.renames);
+    if (back === last.snap.length && last.order && last.order !== this.orderState() && restoreOrder) {
       this.data.order = JSON.parse(last.order);
       await this.saveAll();
       back++;
@@ -3788,24 +4019,28 @@ module.exports = class FocusTasks extends Plugin {
   // the action left behind is kept too, so undo can tell «still as I left it» from «someone has
   // written here since» and never overwrite the second.
   async undoable(message, files, action) {
-    const snap = await this.snapshot(files);
-    const order = this.orderState();
     // A delete that fails halfway (Sync, a file gone under it) has still deleted what came before
     // the failure: the record and the «Undo» are made for whatever actually changed, then the
     // error goes on up.
     let failed = null;
-    try { await action(); } catch (e) { failed = e; }
-    for (const item of snap) {
-      const live = this.app.vault.getAbstractFileByPath(item.path);
-      item.after = live ? await this.app.vault.read(live) : null;
-    }
-    if (failed && !snap.some((x) => x.text !== x.after)) throw failed;
+    const tx = await this.track(message, files, async active => {
+      try { await action(active); } catch(e) { failed=e; }
+      return active;
+    });
+    const entry = tx.entry;
+    if (failed && !entry) throw failed;
+    if (!entry) return async () => 0;
+    const snap = entry.snap;
     this.undoStack = snap;
-    this.remember(message, snap, order);
     // Every notice holds its own snapshot: two deletes in a row must not undo each other's work.
     const put = async () => {
-      this.history = (this.history || []).filter((x) => x.snap !== snap);
-      return this.restore(snap);
+      return this.serialize(async () => {
+        this.history = (this.history || []).filter((x) => x !== entry);
+        const canOrder=entry.afterOrder===this.orderState();
+        const back=await this.restore(snap,entry.renames);
+        if(back===snap.length && canOrder) { this.data.order=JSON.parse(entry.order); await this.saveAll(); }
+        return back;
+      });
     };
     let undo;
     const notice = new Notice(createFragment((f) => {
@@ -3824,18 +4059,40 @@ module.exports = class FocusTasks extends Plugin {
   // Puts the last deleted notes back exactly as they were, uid and all — unless something has been
   // written at that path since (Sync, a script, the user): that is left alone and reported.
   async undoLast() {
-    const snap = this.undoStack || [];
-    this.undoStack = null;
-    return this.restore(snap);
+    return this.serialize(async () => {
+      const snap = this.undoStack || [];
+      this.undoStack = null;
+      this.history = (this.history || []).filter(x=>x.snap!==snap);
+      return this.restore(snap);
+    });
   }
 
   // Writes a snapshot back, skipping anything that has changed at that path since.
-  async restore(snap) {
+  async restore(snap, renames = []) {
     let back = 0;
-    for (const { path, text, after } of snap) {
+    const handled = new Set();
+    for (const { from, to } of [...(renames || [])].reverse()) {
+      const before = snap.find((x) => x.path === from), after = snap.find((x) => x.path === to);
+      if (!before || !after) continue;
+      handled.add(from); handled.add(to);
+      if (before.conflict || after.conflict) continue;
+      const file = this.app.vault.getAbstractFileByPath(to);
+      // The two paths form one rename: a conflict at either end refuses both halves.
+      if (!file || this.app.vault.getAbstractFileByPath(from) || await this.app.vault.read(file) !== after.after) continue;
+      try {
+        await this.app.fileManager.renameFile(file, from);  // Obsidian also repairs incoming links
+        let same = false;
+        await this.app.vault.process(file, now => { same = now === after.after; return same ? before.text : now; });
+        if (!same) continue;
+        back += 2;
+      } catch (e) { console.warn("Focus Tasks: cannot undo a rename", e); }
+    }
+    for (const { path, text, after, conflict } of snap) {
+      if (handled.has(path)) continue;
+      if (conflict) continue;
       const file = this.app.vault.getAbstractFileByPath(path);
       if (!file) {
-        if (text !== null) { await this.app.vault.create(path, text); back++; }
+        if (text !== null && after === null) { await this.app.vault.create(path, text); back++; }
         continue;
       }
       if (text === null) {  // it was made by the change being undone
@@ -3843,7 +4100,7 @@ module.exports = class FocusTasks extends Plugin {
         continue;
       }
       let same = false;
-      await this.app.vault.process(file, (now) => { same = now === after; return same ? text : now; });
+      await this.app.vault.process(file, (now) => { same = now === after || now === text; return same ? text : now; });
       if (same) back++;
     }
     this.forgetScan();
@@ -3853,17 +4110,40 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // The note goes to the trash; the notice puts it back with the same uid.
+  async liveTask(task) {
+    const file = this.app.vault.getAbstractFileByPath(task.file?.path);
+    if (!file || file.children) { new Notice(t("changed")); return null; }
+    try {
+      const text = await this.app.vault.read(file);
+      const [front] = splitNote(text);
+      const fm = front ? parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")) : null;
+      const fresh = fm && this.taskOf(file, fm);
+      if (!fresh || fresh.uid !== task.uid) { new Notice(t("changed")); return null; }
+      return { file, task: fresh, text };
+    } catch (e) {
+      new Notice(t("changed"));
+      console.warn("Focus Tasks: cannot read the selected task", e);
+      return null;
+    }
+  }
+
   async remove(task) { return this.removeTask(task); }
 
   // → the function that puts this very task back.
   async removeTask(task) {
-    return this.undoable(t("deleted", task.text), [task.file], () => this.trash(task.file));
+    return this.undoable(t("deleted", task.text), [task.file], async tx => {
+      const live = await this.liveTask(task);
+      if (live) await this.trashOwned(live.file, tx);
+    });
   }
 
   // The project's own day, in its note (`scheduled`); null takes it off.
   async setProjectDate(file, day) {
-    return this.track(t("aDate"), [file], async () => {
-      await this.app.fileManager.processFrontMatter(file, (fm) => { if (day) fm.scheduled = day; else delete fm.scheduled; });
+    return this.track(t("aDate"), [file], async tx => {
+      await this.frontOwned(file, (fm) => {
+        if (!this.classify(file, fm)?.project) throw new Error(t("changed"));
+        if (day) fm.scheduled = day; else delete fm.scheduled;
+      }, tx);
       this.forgetScan();
       this.refresh();
     });
@@ -3875,8 +4155,11 @@ module.exports = class FocusTasks extends Plugin {
     const list = tasks.filter((x) => x.file && !seen.has(x.file.path) && seen.add(x.file.path));  // a row on screen twice is one note
     if (list.length === 1) return this.removeTask(list[0]);
     if (!list.length) return null;
-    return this.undoable(t("deletedMany", list.length), list.map((x) => x.file), async () => {
-      for (const task of list) await this.trash(task.file);
+    return this.undoable(t("deletedMany", list.length), list.map((x) => x.file), async tx => {
+      for (const task of list) {
+        const live = await this.liveTask(task);
+        if (live) await this.trashOwned(live.file, tx);
+      }
     });
   }
 
@@ -3886,20 +4169,28 @@ module.exports = class FocusTasks extends Plugin {
     const seen = new Set();
     const list = tasks.filter((x) => x.file && !seen.has(x.file.path) && seen.add(x.file.path));
     if (!list.length) return [];
-    return this.track(t("aCopy"), [], async () => {
+    return this.track(t("aCopy"), [], async (tx) => {
       const copies = [];
-      for (const task of list) {
-        const live = this.app.vault.getAbstractFileByPath(task.file.path);
+      for (const stale of list) {
+        const live = await this.liveTask(stale);
         if (!live) continue;
-        const name = await this.freeName(live.basename);
-        const file = await this.app.vault.create(normalizePath(`${live.parent?.path || this.tasksFolder}/${name}.md`), await this.app.vault.read(live));
+        const task = live.task;
+        const name = await this.freeName(live.file.basename);
+        const path = normalizePath(`${live.file.parent?.path || this.tasksFolder}/${name}.md`);
+        const file = await this.createOwned(path, live.text, tx);
         const uid = newUid();
-        await this.app.fileManager.processFrontMatter(file, (fm) => {
+        await this.frontOwned(file, (fm) => {
           fm.uid = uid;
-          if (fm.status === STATUS_DONE) fm.status = STATUS_OPEN;
+          fm.status = STATUS_OPEN;
           delete fm.completedDate;
+          delete fm.timeEntries;
+          delete fm.time_entries;
+          delete fm.completeInstances;
+          delete fm.complete_instances;
+          delete fm.skippedInstances;
+          delete fm.skipped_instances;
           if (name !== task.text) fm.title = task.text;   // «X (2)» on disk, «X» on the row
-        });
+        }, tx);
         const copy = { ...task, file, uid, status: STATUS_OPEN };
         await this.seatAfter(copy, task);
         copies.push(copy);
@@ -3917,10 +4208,10 @@ module.exports = class FocusTasks extends Plugin {
 
   // A new task note. `target`: {area, project (basename or null)}; `day` — the focus date.
   async createTask(text, target, day, tx = null) {
-    return this.track(t("aNew"), [], () => this.createNow(text, target, day), tx);
+    return this.track(t("aNew"), [], (active) => this.createNow(text, target, day, active), tx);
   }
 
-  async createNow(text, target, day) {
+  async createNow(text, target, day, tx = null) {
     await this.ensureFolder(this.tasksFolder);
     const name = await this.freeName(fileName(text).slice(0, 60) || t("newTask"));
     const front = ["---", `uid: ${newUid()}`, `type: ${TASK_TYPE}`, `status: ${STATUS_OPEN}`];
@@ -3936,7 +4227,8 @@ module.exports = class FocusTasks extends Plugin {
     if (day) front.push(`scheduled: ${day}`);
     if (name !== text) front.push(`title: ${JSON.stringify(text)}`);
     front.push("---", "");
-    const file = await this.app.vault.create(normalizePath(`${this.tasksFolder}/${name}.md`), front.join("\n"));
+    const path = normalizePath(`${this.tasksFolder}/${name}.md`);
+    const file = await this.createOwned(path, front.join("\n"), tx);
     this.lastTarget = target;
     return this.taskOf(file) || { file, uid: front[1].slice(5), text, status: STATUS_OPEN, date: day || null, area: target.area, project: target.project };
   }
@@ -3986,13 +4278,13 @@ module.exports = class FocusTasks extends Plugin {
       if (m && m[1].trim()) steps.push(m[1].trim());
       else keep.push(line);
     }
-    const file = await this.createProject(holder, name, undefined, null, false);
+    const file = await this.createProject(holder, name, undefined, null, false, tx);
     if (!file) return null;
     const text = keep.join("\n").replace(/\n{3,}/g, "\n\n").trim();
-    if (text) await this.app.vault.process(file, (t0) => t0.includes(FocusTasks.STEPS_BLOCK)
+    if (text) await this.processOwned(file, (t0) => t0.includes(FocusTasks.STEPS_BLOCK)
       ? t0.replace(FocusTasks.STEPS_BLOCK, text + "\n\n" + FocusTasks.STEPS_BLOCK)   // the note above, the steps below
-      : t0.replace(/\s*$/, "\n\n") + text + "\n");
-    await this.app.fileManager.processFrontMatter(file, (fm) => { if (task.uid && !fm.uid) fm.uid = task.uid; });
+      : t0.replace(/\s*$/, "\n\n") + text + "\n", tx);
+    await this.frontOwned(file, (fm) => { if (task.uid && !fm.uid) fm.uid = task.uid; }, tx);
     if (steps.length) {
       let day = task.date;
       for (const step of steps) {
@@ -4004,7 +4296,7 @@ module.exports = class FocusTasks extends Plugin {
       // It was in the focus today: it stays there as the project's first step, or the day would
       // quietly lose it. The row reads the same as the project — one click renames it.
       await this.setFields(task, { projects: [this.projectLink(file, task.file.path)] });
-      if (rest.trim()) await this.app.vault.process(task.file, (t0) => splitNote(t0)[0] + "\n");
+      if (rest.trim()) await this.processOwned(task.file, (t0) => splitNote(t0)[0] + "\n", tx);
     } else {
       // Nothing was due: the project starts empty, under «Show upcoming», with no twin row.
       await this.trash(task.file);
@@ -4074,9 +4366,15 @@ module.exports = class FocusTasks extends Plugin {
 
   // `note`: an existing note that becomes the area itself — its frontmatter gets `area` and `type`,
   // nothing else of it changes. Without one, a new note named after the area.
-  async createArea(name, note = null) {
+  async createArea(name, note = null, tx = null) {
+    return this.track(t("aNew"), note ? [note] : [], active => this.createAreaNow(name, note, active), tx);
+  }
+
+  async createAreaNow(name, note = null, tx = null) {
     if (note) {
-      await this.app.fileManager.processFrontMatter(note, (fm) => { fm.area = name; fm.type = this.settings.typeArea; });
+      await tx?.add([note]);
+      await this.frontOwned(note, (fm) => { fm.area = name; fm.type = this.settings.typeArea; }, tx);
+      await this.ensureAreaBlock(note,note,tx);
       this.forgetScan();
       return note;
     }
@@ -4085,8 +4383,8 @@ module.exports = class FocusTasks extends Plugin {
     const path = normalizePath(`${this.folder}/${base}.md`);
     if (this.app.vault.getAbstractFileByPath(path)) { new Notice(t("noteExists", path)); return null; }
     const extra = (this.settings.areaFrontmatter || "").trim();
-    const file = await this.app.vault.create(path, ["---", ...(extra ? extra.split("\n") : []), `area: "${name.replace(/"/g, "'")}"`,
-      `type: ${this.settings.typeArea}`, "---", ""].join("\n"));
+    const file = await this.createOwned(path, ["---", ...(extra ? extra.split("\n") : []), `area: ${JSON.stringify(name)}`,
+      `type: ${this.settings.typeArea}`, "---", "", FocusTasks.STEPS_BLOCK, ""].join("\n"), tx);
     return file;
   }
 
@@ -4130,12 +4428,15 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // Links (or with null unlinks) a note to a task file; Obsidian keeps the link right on renames.
-  async setLinked(file, note, quiet = false) {
-    await this.app.fileManager.processFrontMatter(file, (fm) => {
+  async setLinked(file, note, quiet = false, tx = null) {
+    return this.track(t("aMove"), [file], async active => {
+    await this.frontOwned(file, (fm) => {
       if (note) fm.note = `[[${this.app.metadataCache.fileToLinktext(note, file.path)}]]`;
       else delete fm.note;
-    });
+    }, active);
     if (!quiet) new Notice(note ? t("linked", note.basename) : t("unlinked"));
+    this.forgetScan(); this.refresh();
+    }, tx);
   }
 
   // Any note of the vault except the task files; recently edited first.
@@ -4145,12 +4446,12 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // Drops the 📁 lines pointing at a project file (by name or by path) from its area's files.
-  async dropLinks(file, areaName) {
+  async dropLinks(file, areaName, tx = null) {
     const names = [file.basename, file.path.replace(/\.md$/, "")].map(escapeRe).join("|");
     const link = new RegExp(`^\\s*[-*] 📁 \\[\\[(${names})(\\|[^\\]]*)?\\]\\]\\s*$`);
     for (const n of this.notes()) {
       if (n.project || n.area !== areaName) continue;
-      await this.app.vault.process(n.file, (body) => body.split("\n").filter((l) => !link.test(l)).join("\n"));
+      await this.processOwned(n.file, (body) => body.split("\n").filter((l) => !link.test(l)).join("\n"), tx);
     }
   }
 
@@ -4169,6 +4470,13 @@ module.exports = class FocusTasks extends Plugin {
   // What a ```focus-tasks``` block shows: `project: [[Name]]` in its text names a project; with no
   // text, a block in a project's own note shows that project. Anywhere else it is the whole list.
   blockPage(src, sourcePath) {
+    const a = /^\s*area:\s*(.+?)\s*$/m.exec(src || "");
+    if (a) {
+      const link = a[1].replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0].trim();
+      const file = this.app.metadataCache.getFirstLinkpathDest(link, sourcePath || "");
+      const own = file && this.classify(file);
+      return { area: own && !own.project ? file : null, kind: "area", missing: own && !own.project ? null : link };
+    }
     const m = /^\s*project:\s*(.+?)\s*$/m.exec(src || "");
     if (m) {
       const link = m[1].replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0].trim();
@@ -4178,7 +4486,23 @@ module.exports = class FocusTasks extends Plugin {
       return { project: file && this.classify(file)?.project ? file : null, missing: file ? null : link };
     }
     const file = sourcePath ? this.app.vault.getAbstractFileByPath(sourcePath) : null;
-    return file && this.classify(file)?.project ? { project: file } : null;
+    const own = file && this.classify(file);
+    return own ? own.project ? { project: file } : { area: file, kind: "area" } : null;
+  }
+
+  async ensureAreaBlock(note, area = note, tx = null) {
+    let added = false;
+    const hasBlock = text => [...text.matchAll(/^```focus-tasks[^\n]*\n([\s\S]*?)^```/gm)]
+      .some(m => note===area && !m[1].trim() || this.blockPage(m[1], note.path)?.area?.path === area.path);
+    if (hasBlock(await this.app.vault.cachedRead(note))) return false;
+    await this.processOwned(note, (text) => {
+      if (hasBlock(text)) return text;
+      added = true;
+      const block = note === area ? FocusTasks.STEPS_BLOCK
+        : "```focus-tasks\narea: [[" + this.app.metadataCache.fileToLinktext(area, note.path) + "]]\n```";
+      return text.replace(/\s*$/, "") + "\n\n" + block + "\n";
+    }, tx);
+    return added;
   }
 
   // The block at the end of a project's note, once: the note is the project's page, the block is
@@ -4205,17 +4529,22 @@ module.exports = class FocusTasks extends Plugin {
     return n;
   }
 
-  async createProject(area, name, afterPath, linkTo = null, fresh = null) {
+  async createProject(area, name, afterPath, linkTo = null, fresh = null, tx = null) {
+    return this.track(t("aNew"), [], active => this.createProjectNow(area, name, afterPath, linkTo, fresh, active), tx);
+  }
+
+  async createProjectNow(area, name, afterPath, linkTo = null, fresh = null, tx = null) {
     await this.ensureFolder();
     const path = normalizePath(`${this.folder}/${fileName(name)}.md`);
     if (this.app.vault.getAbstractFileByPath(path)) { new Notice(t("noteExists", path)); return null; }
-    const note = area.note || await this.createArea(area.name);
+    const note = area.note || await this.createArea(area.name, null, tx);
     if (!note) return null;
     const extra = (this.settings.projectFrontmatter || "").trim().replaceAll("{areaNote}", this.app.metadataCache.fileToLinktext(note, path));
-    const file = await this.app.vault.create(path, ["---", ...(extra ? extra.split("\n") : []), `area: "${area.name.replace(/"/g, "'")}"`,
-      `type: ${this.settings.typeProject}`, "---", "", FocusTasks.STEPS_BLOCK, ""].join("\n"));
-    if (linkTo) await this.setLinked(file, linkTo, true);
-    await this.app.vault.process(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading));
+    await tx?.add([path, note]);
+    const file = await this.createOwned(path, ["---", ...(extra ? extra.split("\n") : []), `area: ${JSON.stringify(area.name)}`,
+      `type: ${this.settings.typeProject}`, "---", "", FocusTasks.STEPS_BLOCK, ""].join("\n"), tx);
+    if (linkTo) await this.setLinked(file, linkTo, true, tx);
+    await this.processOwned(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading), tx);
     await this.setOpen("area:" + area.name, true);
     if (fresh ?? (await this.collect(false)).some((a) => a.name === area.name)) {
       this.data.opened["fresh:" + file.path] = today();   // per device, and only for today
@@ -4263,14 +4592,18 @@ module.exports = class FocusTasks extends Plugin {
 
   // Renames a project note; Obsidian updates the links to it. The saved order and fold state follow.
   async renameProject(file, name) {
+    const mine = this.tasks().filter(x => this.samePlace(x, file));
+    return this.track(t("aRename"), [file, ...mine.map(x=>x.file)], tx=>this.renameProjectNow(file,name,mine,tx));
+  }
+
+  async renameProjectNow(file, name, mine, tx) {
     const path = normalizePath(`${file.parent?.path && file.parent.path !== "/" ? file.parent.path + "/" : ""}${fileName(name)}.md`);
     if (this.app.vault.getAbstractFileByPath(path)) { new Notice(t("noteExists", path)); return; }
     const old = file.path;
     // Its steps, found before the name changes. Obsidian rewrites the links it had resolved to this
     // note; a step named like its project had resolved its own link to itself and would be left
     // pointing at a name that no longer exists — so every step is re-pointed here, by hand.
-    const mine = this.tasks().filter((x) => this.samePlace(x, file));
-    await this.app.fileManager.renameFile(file, path);
+    await this.renameOwned(file, path, tx);
     await this.renamed(path, old);
     const fresh = this.app.vault.getAbstractFileByPath(path) || file;
     for (const task of mine) await this.setFields(task, { projects: [this.projectLink(fresh, task.file.path)] });
@@ -4280,6 +4613,34 @@ module.exports = class FocusTasks extends Plugin {
     return this.app.fileManager.trashFile ? this.app.fileManager.trashFile(file) : this.app.vault.trash(file, true);
   }
 
+  async createOwned(path, text, tx) {
+    await tx?.add([path]);
+    const file = await this.app.vault.create(path, text);
+    tx?.created.add(path);
+    tx?.record(path, null, text);
+    return file;
+  }
+
+  async renameOwned(file, path, tx) {
+    const from = file.path;
+    await tx?.add([path]);
+    const before = await this.app.vault.read(file);
+    await this.app.fileManager.renameFile(file, path);
+    if (tx) {
+      tx.renames.push({ from, to: path });
+      tx.record(from, before, null);
+      // Record the bytes that the rename moves, not a later read that may already
+      // contain another device's edit. Unexpected self-link changes refuse Undo too.
+      tx.record(path, null, before);
+    }
+  }
+
+  async trashOwned(file, tx) {
+    const before = await this.app.vault.read(file);
+    await this.trash(file);
+    tx?.record(file.path, before, null);
+  }
+
   // The project's note goes to the trash; its tasks stay in the area as loose ones. Undo brings back
   // the note and the links its tasks had to it.
   // `withTasks`: its tasks go to the trash with it (all of them, done ones too), in the same undo.
@@ -4287,12 +4648,16 @@ module.exports = class FocusTasks extends Plugin {
     const name = project.file.basename;
     const mine = this.tasks().filter((x) => this.samePlace(x, project.file));
     const touched = this.notes().filter((n) => !n.project && n.area === area.name).map((n) => n.file);
-    await this.undoable(t("projectDeleted", name), [project.file, ...mine.map((x) => x.file), ...touched], async () => {
+    await this.undoable(t("projectDeleted", name), [project.file, ...mine.map((x) => x.file), ...touched], async tx => {
       // a task that only knew where it was through this project keeps the area it was shown in
-      if (withTasks) for (const task of mine) await this.trash(task.file);
-      else for (const task of mine) await this.setFields(task, { projects: null, area: task.area || area.name });
-      await this.dropLinks(project.file, area.name);
-      await this.trash(project.file);
+      for (const task of mine) {
+        const live = await this.liveTask(task);
+        if (!live || !this.samePlace(live.task, project.file)) continue;
+        if (withTasks) await this.trashOwned(live.file, tx);
+        else await this.setFields(live.task, { projects: null, area: live.task.area || area.name });
+      }
+      await this.dropLinks(project.file, area.name, tx);
+      await this.trashOwned(project.file, tx);
       await this.forget("steps:" + project.file.path);
       this.data.order.tasks["area:" + area.name] = this.areaSeats(area.name).filter((k) => k !== "p:" + project.file.path);
       await this.saveAll();
@@ -4309,10 +4674,14 @@ module.exports = class FocusTasks extends Plugin {
   async removeArea(area) {
     const files = this.notes().filter((n) => n.area === area.name).map((n) => n.file);
     const mine = this.tasks().filter((x) => x.area === area.name);
-    await this.undoable(t("areaDeleted", area.name), [...mine.map((x) => x.file), ...files], async () => {
-      for (const task of mine) await this.trash(task.file);
+    await this.undoable(t("areaDeleted", area.name), [...mine.map((x) => x.file), ...files], async tx => {
+      for (const task of mine) {
+        const live = await this.liveTask(task);
+        if (live?.task.area === area.name) await this.trashOwned(live.file, tx);
+      }
       for (const f of files) {
-        await this.trash(f);
+        if (this.classify(f)?.area !== area.name) continue;
+        await this.trashOwned(f, tx);
         await this.forget("project:" + f.path);
         await this.forget("steps:" + f.path);
       }

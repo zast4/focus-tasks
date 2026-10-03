@@ -16,6 +16,35 @@
                           The row is never made WIDER than its container — that scrolls a phone. */
 body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spares width for the text */
 
+/* Phone: the project is context above the action, so both names get the available width. */
+body.is-mobile .focus-tasks-view li.ft-mobile-project {
+  display: grid; grid-template-columns: var(--ft-col) minmax(0, 1fr);
+  column-gap: 0.15rem;
+}
+body.is-mobile .focus-tasks-view li.ft-mobile-project > :not(.ft-mobile-project-caption) { grid-row: 2; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption {
+  grid-column: 2 / -1; grid-row: 1; display: flex; align-items: center; gap: 0.3rem;
+  min-width: 0; padding-bottom: 0.2rem; font-size: 0.82em; line-height: 1.4;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name { flex: 1; display: flex; min-width: 0; color: var(--text-muted); }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption .ft-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more { flex: none; padding: 0.15rem 0.3rem; }
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line { margin-left: 0; }
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-box { grid-column: 1; }
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line { grid-column: 2 / -1; }
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-date {
+  grid-row: 3; grid-column: 2 / -1; justify-self: end; margin-left: 0; font-size: 0.8em;
+}
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-running,
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-priority,
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-bot-dot {
+  grid-row: 3; grid-column: 1; justify-self: center;
+}
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-grip { top: 0.15rem; }
+body.is-mobile .focus-tasks-view li.ft-task:not(.ft-project-row) > .ft-plus,
+body.is-mobile .focus-tasks-view li.ft-task > .ft-running.is-offer { display: none; }
+.ft-picker-info { color: var(--text-muted); font-size: 0.8em; padding: 0 0.4em 0.7em; max-width: 17rem; }
+
 
 .focus-tasks-view .ft-area { padding: 0.7em 0 0.4em; }
 .focus-tasks-view .ft-area + .ft-area { border-top: 1px solid var(--background-modifier-border); }
