@@ -804,8 +804,9 @@ test("the project a task becomes is listed in its area's note", async () => {
     taskNote(a, "Big thing", { area: "Sport", scheduled: TODAY });
   });
   await plugin.toProject(plugin.tasks()[0]);
-  // the task note of the same name still exists while the line is written: Obsidian names the project by its path then
-  ok(/\[\[(Areas\/)?Big thing\]\]/.test(bodyOf(app, "Areas/Sport.md")), "the 📁 line is in the area note");
+  ok(bodyOf(app, "Areas/Sport.md").includes("```focus-tasks"), "the area has a local view");
+  ok(projectOf(areaOf(await plugin.collect(true), "Sport"), "Big thing"), "the converted project is listed in that view");
+  ok(!bodyOf(app, "Areas/Sport.md").includes("- 📁 [["), "there is no duplicate static project list");
 });
 
 test("a task without an area can be placed into one", async () => {
@@ -2040,6 +2041,43 @@ test("a thousand tasks collect fast enough for a keystroke", async () => {
   const ms = Date.now() - started;
   eq(areas.length, 20, "every area");
   ok(ms < 400, `collect took ${ms}ms`);
+});
+
+test("creating a project uses the area's view without a duplicate Projects section", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    const note = a.vault.files.get("Areas/Work.md");
+    a.vault.files.set("Areas/Work.md", note + "\nMy area notes\n");
+  });
+  const before = bodyOf(app, "Areas/Work.md");
+  const area = areaOf(await plugin.collect(true), "Work");
+  await plugin.createProject(area, "First project");
+  const after = bodyOf(app, area.note.path);
+  ok(after.startsWith(before.trimEnd()), "the area's own text is kept");
+  eq((after.match(/```focus-tasks/g) || []).length, 1, "one local view");
+  ok(!/^#+ Projects\s*$/m.test(after) && !after.includes("- 📁 [["), "no static duplicate project list");
+  await plugin.createProject(area, "Second project");
+  eq(bodyOf(app, area.note.path), after, "another project leaves the area note alone");
+  await plugin.undo();
+  await plugin.undo();
+  eq(bodyOf(app, area.note.path), before, "Undo restores the original area text");
+});
+
+test("moving a project uses the destination view without recreating a Projects heading", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Work");
+    areaNote(a, "Home");
+    projectNote(a, "Work", "Plan");
+    taskNote(a, "Step", { area: "Work", project: "Plan", scheduled: TODAY });
+  });
+  const areas = await plugin.collect(true);
+  const from = areaOf(areas, "Work"), to = areaOf(areas, "Home");
+  await plugin.moveProject(projectOf(from, "Plan"), from, to);
+  const body = bodyOf(app, to.note.path);
+  eq((body.match(/```focus-tasks/g) || []).length, 1, "the destination has a local view");
+  ok(!/^#+ Projects\s*$/m.test(body) && !body.includes("- 📁 [["), "no recreated section or static project list");
+  eq(frontmatter(app, "Tasks/Step.md").area, "Home", "the step follows its project");
+  ok(projectOf(areaOf(await plugin.collect(true), "Home"), "Plan"), "the view includes the moved project");
 });
 
 // --- run ------------------------------------------------------------------------------------------

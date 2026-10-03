@@ -226,14 +226,16 @@ step("a click on «Empty» types a task: one note per task", async () => {
   await until(() => page.eval(`return !!__ft.task('Stretch')`), "Stretch on screen");
 });
 
-step("the grip opens the area menu; New project makes a project note linked from the area", async () => {
+step("the grip opens the area menu; New project uses the area's view without a Projects heading", async () => {
   await click(`__ft.grip(__ft.area('Sport'))`);
   await menu("New project");
   await modalInput();
   await page.type("Marathon");
   await page.key("Enter");
   await fileHas("Tasks/Marathon.md", '---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n');
-  await fileHas("Tasks/Sport.md", "## Projects\n\n- 📁 [[Marathon]]\n");
+  await fileHas("Tasks/Sport.md", "```focus-tasks\n```\n");
+  await fileLacks("Tasks/Sport.md", "## Projects");
+  await fileLacks("Tasks/Sport.md", "- 📁 [[Marathon]]");
   await until(() => page.eval(`return !!__ft.project('Marathon')`), "Marathon on screen");
 });
 
@@ -860,7 +862,8 @@ step("the last step of a project checked off: the project stays as an empty row,
   await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && !r.closest('.ft-done-today')`), "and it is back in the list");
 });
 
-step("rename a project in place; its tasks follow it", async () => {
+step("rename a project in place; its tasks and legacy area links follow it", async () => {
+  await page.eval(`const file=app.vault.getAbstractFileByPath('Tasks/Sport.md');await app.vault.process(file,body=>body.replace('\\x60\\x60\\x60focus-tasks','- 📁 [[Marathon]]\\n\\n\\x60\\x60\\x60focus-tasks'));return true;`);
   await menuOn(`__ft.at(__ft.name('Marathon'))`);
   await menu("Rename");
   await editing();
@@ -2037,6 +2040,12 @@ step("an area's own note shows only its projects and all its tasks, and adds an 
     const project = await p.createProject({ name: 'Audit Area', note }, 'Audit Project');
     await p.createTask('Audit loose task', { area: 'Audit Area' }, null);
     await p.createTask('Audit project step', { area: 'Audit Area', project: project.basename, projectFile: project }, ${J(TOMORROW)});
+    await p.createTask('Audit second project step', { area: 'Audit Area', project: project.basename, projectFile: project }, ${J(TODAY)});
+    await p.createTask('Audit third project step', { area: 'Audit Area', project: project.basename, projectFile: project }, ${J(TODAY)});
+    const completed = await p.createTask('Audit completed area task', { area: 'Audit Area' }, ${J(TODAY)});
+    await p.setFields(completed, { status:'done', completedDate:${J(TODAY)} });
+    await p.setOpen('steps:' + project.path, true);
+    await p.setOpen('area-page-done:' + note.path, true);
     await p.ensureAreaBlock(note);
     const leaf = app.workspace.getLeaf('tab');
     await leaf.setViewState({ type: 'markdown', state: { file: note.path, mode: 'preview' } });
@@ -2050,12 +2059,40 @@ step("an area's own note shows only its projects and all its tasks, and adds an 
   await page.send('Input.dispatchMouseEvent', {type:'mouseMoved',x:header.x,y:header.y});
   await page.click(await until(() => page.eval(`const e = [...document.querySelectorAll('.ft-area-page .ft-area-title .ft-plus')].find(e=>e.getClientRects().length); if(!e)return null; const r = e.getBoundingClientRect(); return { x: r.left+r.width/2, y:r.top+r.height/2 };`), 'the real hover reveals area add'));
   await editing();
+  const draftInset=await page.eval(`const root=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);const draft=root.querySelector('.is-editing').closest('li.ft-task');const row=[...root.querySelectorAll('li.ft-task')].find(e=>e!==draft);return draft.getBoundingClientRect().left-row.getBoundingClientRect().left;`);
+  if(Math.abs(draftInset)>1)throw new Error('the local area draft acquired an extra indent: '+draftInset);
   await page.type('Added inside area');
   await page.key('Enter');
   await page.key('Escape');
   await taskIs('Added inside area', { area: 'Audit Area', scheduled: null });
   if ((read(file).match(/```focus-tasks/g) || []).length !== 1) throw new Error('the area block duplicated itself');
   await toPane();
+});
+
+step("local area rows are flat like the project page while the global focus keeps its hierarchy", async () => {
+  const previousAll = await plugin('return p.everything();');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];const file=p.notes().find(n=>!n.project&&n.area==='Audit Area').file;
+    const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+  await until(()=>page.eval(`const e=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return e?.querySelectorAll('.ft-steps li.ft-task').length===3;`),'expanded project steps on the area page');
+  const measure = (selector) => page.eval(`const root=[...document.querySelectorAll(${J(selector)})].find(e=>e.getClientRects().length);
+    const left=root.getBoundingClientRect().left;return [...root.querySelectorAll('li.ft-task')].map(e=>({text:e.textContent,offset:e.getBoundingClientRect().left-left}));`);
+  const areaRows = await measure('.ft-area-page');
+  if(!areaRows.some(r=>r.text.includes('Audit completed area task')))throw new Error('the completed area row was not checked');
+  if(areaRows.length<4 || areaRows.some(r=>Math.abs(r.offset-areaRows[0].offset)>1))throw new Error('indented area rows: '+J(areaRows));
+  const guides=await page.eval(`const root=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return [...root.querySelectorAll('.ft-steps,.ft-steps > ul')].filter(e=>{const s=getComputedStyle(e,'::before');return s.display!=='none'&&!['none','normal'].includes(s.content);}).length;`);
+  if(guides)throw new Error('the area page still draws '+guides+' indentation guides');
+  await page.shot(path.join(SHOTS,'area-page-flat.png'));
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];const file=p.notes().find(n=>n.project&&n.file.basename==='Audit Project').file;
+    const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+  await until(()=>page.eval(`return [...document.querySelectorAll('.ft-page')].some(e=>e.getClientRects().length&&e.querySelector('li.ft-task'));`),'local project page');
+  const projectRows=await measure('.ft-page');
+  if(projectRows.some(r=>Math.abs(r.offset-areaRows[0].offset)>1))throw new Error('area and project pages have different insets: '+J({areaRows,projectRows}));
+  await toPane();
+  await plugin(`p.setEverything(true);await p.setOpen('area:Audit Area',true);return true;`);
+  await until(()=>page.eval(`return __ft.area('Audit Area')?.closest('.ft-area').querySelectorAll('.ft-steps li.ft-task').length===2;`),'global project hierarchy');
+  const global=await page.eval(`const root=__ft.area('Audit Area').closest('.ft-area');const project=root.querySelector('li.ft-project-row');const step=root.querySelector('.ft-steps li.ft-task');return {project:project.getBoundingClientRect().left,step:step.getBoundingClientRect().left};`);
+  if(global.step-global.project<15)throw new Error('the global focus lost its step indentation: '+J(global));
+  await plugin(`p.setEverything(${J(previousAll)});return true;`);
 });
 
 step("a failed date write keeps the task in its editor with the original day", async () => {

@@ -78,6 +78,8 @@ task can be restored from the notice that appears.
 An area's own note can contain a `focus-tasks` block showing all of that area's projects
 and tasks. It is added once when the area is opened. Additions inside area/project pages
 start undated. A linked custom note can use `area: [[Area note]]` in the block.
+Projects and expanded steps align with loose tasks, as on a project's own page.
+Creating or moving a project uses this view without adding a separate Projects section.
 
 On a phone, project context sits above its first action so both names have room. Capture
 is local immediately; uploading an offline iPhone note still requires Obsidian Sync.
@@ -100,7 +102,6 @@ An event notification and a native Apple Reminders checkbox are different integr
 | Extra frontmatter (areas) | — | YAML lines for every new area note, e.g. `parents: ["[[Projects]]"]` |
 | Extra frontmatter (projects) | — | YAML lines for every new project note; `{areaNote}` = its area's note, e.g. `parents: ["[[{areaNote}]]"]` |
 | `type` of an area / project | `area` / `project` | `project`/`проект` and `area`/`область` are always recognised |
-| Steps / Inbox / Projects headings | `Steps` / `Inbox` / `Projects` | sections new lines go to |
 | Date format | `DD.MM.YY` | any moment.js format |
 | TaskNotes | — | install the companion plugin and point it at these tasks (see above) |
 
@@ -171,7 +172,7 @@ Try these in a new vault (or a copy of yours):
 
 1. The view opens with «No areas yet»; «+ Area» → `💪Sport` → `Tasks/Sport.md` appears.
 2. Click «Empty» → type → Enter → type → Enter → Esc: two tasks under `## Inbox`.
-3. Grip on the area → «New project» → the project note, and `- 📁 [[…]]` in the area note.
+3. Grip on the area → «New project» → the project note, listed in the area's `focus-tasks` view.
 4. **+** on the project → steps; click a step → ⌘1 → «Today» on the right, the area moves to the top.
 5. ⌘2 / ⌘4 / ⌘3 on a task; the date on the right → picker: «Today», a day, «Clear date».
 6. Check a task: it moves to the bottom of its area, and the area's title grows a green ✓1;
@@ -314,6 +315,8 @@ Shift+клик выделяет все задачи от последней кл
 
 В заметке области блок `focus-tasks` показывает её проекты и задачи. Он добавляется один
 раз при открытии области. Новые задачи внутри области или проекта появляются без даты.
+Проекты, отдельные задачи и раскрытые шаги в этой заметке стоят без вложенных отступов.
+Создание и перенос проекта используют этот view, без отдельного раздела "Проекты".
 На телефоне название проекта стоит над первым шагом, текст задачи получает отдельную строку.
 Офлайн-задача сохраняется на устройство сразу; доставка через Sync требует запущенного Obsidian.
 

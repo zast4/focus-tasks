@@ -323,6 +323,39 @@ step("phone area and project pages accept undated tasks offline", async () => {
   }
 });
 
+step("local area projects and expanded steps are flat on 320, 390 and 430px screens", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];const note=app.vault.getAbstractFileByPath('Areas/Дом.md');
+    await p.ensureAreaBlock(note);await p.createTask('Отдельная задача области',{area:'🏡Дом'},null);
+    await p.setOpen('steps:Areas/Ремонт.md',true);const leaf=app.workspace.getLeaf('tab');
+    await leaf.setViewState({type:'markdown',state:{file:note.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+  await until(()=>page.eval(`const root=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return root?.querySelectorAll('.ft-steps li.ft-task').length>=2;`),'expanded project inside the local area');
+  for (const width of [320,390,430]) {
+    await page.send('Emulation.setDeviceMetricsOverride',{width,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+    await sleep(300);
+    const state=await page.eval(`const root=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);const left=root.getBoundingClientRect().left;
+      return {screen:innerWidth,rows:[...root.querySelectorAll('li.ft-task')].map(e=>({text:e.textContent,left:e.getBoundingClientRect().left-left,right:e.getBoundingClientRect().right,gripLeft:e.querySelector(':scope > .ft-grip')?.getBoundingClientRect().left}))};`);
+    if(state.rows.length<3 || state.rows.some(r=>Math.abs(r.left-state.rows[0].left)>1 || r.right>state.screen+1 || r.gripLeft<0))
+      throw new Error('local area layout at '+width+': '+J(state));
+    if(width===390)await page.shot(path.join(SHOTS,'focus-tasks-mobile-area-flat.png'));
+  }
+  await page.send('Emulation.setDeviceMetricsOverride',{width:WIDTH,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await tapOn(`([...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length))?.querySelector('li.ft-task:not(.ft-project-row) > .ft-grip')`,'flat area task grip');
+  await until(()=>page.eval(`return !!document.querySelector('.menu');`),'task menu from the local area grip');
+});
+
+step("local project grips stay reachable on 320, 390 and 430px screens", async () => {
+  await page.eval(`const file=app.vault.getAbstractFileByPath('Areas/Ремонт.md');const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+  await until(()=>page.eval(`return [...document.querySelectorAll('.ft-page')].some(e=>e.getClientRects().length&&e.querySelector('li.ft-task'));`),'project page with tasks');
+  for(const width of [320,390,430]) {
+    await page.send('Emulation.setDeviceMetricsOverride',{width,height:HEIGHT,deviceScaleFactor:2,mobile:true});await sleep(300);
+    const rows=await page.eval(`const root=[...document.querySelectorAll('.ft-page')].find(e=>e.getClientRects().length);return [...root.querySelectorAll('li.ft-task')].map(e=>({left:e.querySelector(':scope > .ft-grip').getBoundingClientRect().left,right:e.getBoundingClientRect().right}));`);
+    if(!rows.length||rows.some(r=>r.left<0||r.right>width+1))throw new Error('project grip outside '+width+'px screen: '+J(rows));
+  }
+  await page.send('Emulation.setDeviceMetricsOverride',{width:WIDTH,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await tapOn(`([...document.querySelectorAll('.ft-page')].find(e=>e.getClientRects().length))?.querySelector('li.ft-task > .ft-grip')`,'local project task grip');
+  await until(()=>page.eval(`return !!document.querySelector('.menu');`),'task menu from the project page grip');
+});
+
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));

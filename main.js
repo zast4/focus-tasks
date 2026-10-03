@@ -2925,7 +2925,6 @@ class FocusSettingTab extends PluginSettingTab {
       }));
     text("sTypeArea", "sTypeDesc", "typeArea");
     text("sTypeProject", "sTypeDesc", "typeProject");
-    text("sProjects", "sProjectsDesc", "projectsHeading");
     text("sDateFormat", "sDateFormatDesc", "dateFormat");
   }
 
@@ -3647,7 +3646,7 @@ module.exports = class FocusTasks extends Plugin {
     this.refresh();
   }
 
-  // A project goes to live in another area: its note says so, the area notes list it accordingly,
+  // A project goes to live in another area: its note says so, the area's local view lists it,
   // its steps follow, and its seat in the old area's order goes.
   async moveProject(project, from, to, tx = null) {
     const mine = this.tasks().filter((x) => this.samePlace(x, project.file));
@@ -3666,7 +3665,7 @@ module.exports = class FocusTasks extends Plugin {
       else if (isOld(fm.parents)) fm.parents = `[[${link}]]`;
     }, tx);
     await this.dropLinks(file, from.name, tx);
-    await this.processOwned(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading), tx);
+    await this.ensureAreaBlock(note, note, tx);
     for (const task of mine) await this.setFields(task, { area: to.name });
     this.data.order.tasks["area:" + from.name] = this.areaSeats(from.name).filter((k) => k !== "p:" + file.path);
     this.forgetScan();
@@ -4544,7 +4543,7 @@ module.exports = class FocusTasks extends Plugin {
     const file = await this.createOwned(path, ["---", ...(extra ? extra.split("\n") : []), `area: ${JSON.stringify(area.name)}`,
       `type: ${this.settings.typeProject}`, "---", "", FocusTasks.STEPS_BLOCK, ""].join("\n"), tx);
     if (linkTo) await this.setLinked(file, linkTo, true, tx);
-    await this.processOwned(note, (body) => insertBlock(body, [`- 📁 [[${this.app.metadataCache.fileToLinktext(file, note.path)}]]`], this.settings.projectsHeading), tx);
+    await this.ensureAreaBlock(note, note, tx);
     await this.setOpen("area:" + area.name, true);
     if (fresh ?? (await this.collect(false)).some((a) => a.name === area.name)) {
       this.data.opened["fresh:" + file.path] = today();   // per device, and only for today

@@ -302,6 +302,16 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 /* On the page there is no area header to hang the rows under: the steps start at the heading's own
    left edge — the box under the 📁 — and «+ Step» sits in the same column. */
 .focus-tasks-view .ft-page li.ft-task { --ft-level: -1.25; }
+/* An area's own note is already the scope. Its projects, loose tasks, expanded steps and completed
+   tasks start at the same edge as a project's page, without a second tree of indentation. */
+.focus-tasks-view .ft-area-page li.ft-task { margin-left: calc(var(--ft-pad) * -1) !important; }
+.focus-tasks-view .ft-area-page li.ft-steps::before,
+.focus-tasks-view .ft-area-page li.ft-later-steps::before,
+.focus-tasks-view .ft-area-page ul.ft-list::before { display: none; }
+.focus-tasks-view .ft-area-page > .ft-empty { margin-left: 0; }
+/* Local notes have less left gutter than the Focus pane. Keep the phone's grip fully on screen. */
+body.is-mobile .focus-tasks-view .ft-area-page .ft-grip,
+body.is-mobile .focus-tasks-view .ft-page .ft-grip { left: calc(-1.5rem + var(--ft-pad)); }
 .focus-tasks-view .ft-page-add { margin: 0.2em 0 0 0; padding-left: calc((var(--ft-col) - 0.7em) / 2); color: var(--text-faint); cursor: pointer; }
 .focus-tasks-view .ft-page-add:hover { color: var(--text-muted); }
 .focus-tasks-view .ft-page-done { display: inline-flex; align-items: center; gap: 0.35rem; margin: 0.9em 0 0.2em; padding: 0.25rem 0.6rem;
