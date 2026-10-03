@@ -238,6 +238,22 @@ class ScanTests(unittest.TestCase):
 
 
 class IcsTests(unittest.TestCase):
+    def test_launch_job_runs_inside_the_requested_venv(self):
+        import os
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as folder:
+            venv = Path(folder) / 'venv'
+            subprocess.run([sys.executable, '-m', 'venv', '--without-pip', '--symlinks', str(venv)], check=True, capture_output=True)
+            python = venv / 'bin/python'
+            site = Path(subprocess.check_output([str(python), '-c', 'import sysconfig;print(sysconfig.get_path("purelib"))'], text=True).strip())
+            (site / 'focus_launch_probe.py').write_text('value = 1\n')
+            data, _ = job(Path(folder), python, 'Focus Tasks', Path(folder) / 'external.env', True)
+            env = {k: v for k, v in os.environ.items() if k not in ('VIRTUAL_ENV', 'PYTHONHOME', 'PYTHONPATH')}
+            run = subprocess.run([data['ProgramArguments'][0], '-c', 'import sys,focus_launch_probe;print(sys.prefix)'], env=env, capture_output=True, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(Path(run.stdout.strip()).resolve(), venv.resolve())
+
     def test_prepared_job_is_disabled_and_keeps_credentials_out_of_arguments(self):
         data,label=job(Path('/tmp/Vault with spaces'),Path('/tmp/python'),"Focus Tasks",Path('/tmp/external.env'))
         self.assertTrue(data['Disabled'])

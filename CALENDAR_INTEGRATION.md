@@ -83,6 +83,9 @@ The prepared host job polls every 60 seconds. The calendar is separate from Time
 and from other people's calendars. Phone/Mac alert preferences remain the user's;
 this user receives Calendar alerts on Apple Watch.
 
+The Python executable path is kept inside its venv, including symlinks. Resolving
+that symlink to the base interpreter would drop the installed dependencies.
+
 Creation, rescheduling and removal are eventual: the next successful poll acknowledges
 them. An action immediately before an alarm can arrive too late to prevent that alarm.
 The displayed cloud status reports persistence, not proof of notification delivery.

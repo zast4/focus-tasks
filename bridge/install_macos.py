@@ -16,7 +16,9 @@ def job(vault, interpreter, calendar, env_file, enabled=False, interval=60):
     label = "com.focus-tasks.calendar." + hashlib.sha256(str(vault.resolve()).encode()).hexdigest()[:12]
     bridge = Path(__file__).with_name("apple_calendar.py").resolve()
     log = Path.home() / "Library/Logs/focus-tasks-calendar.log"
-    args = [str(interpreter.resolve()), str(bridge), "--vault", str(vault.resolve()), "--calendar", calendar, "--env-file", str(env_file.resolve()), "--execute"]
+    # Resolving a venv's Python symlink selects the base interpreter and loses
+    # its site-packages. launchd must use the original executable path.
+    args = [str(interpreter.absolute()), str(bridge), "--vault", str(vault.resolve()), "--calendar", calendar, "--env-file", str(env_file.resolve()), "--execute"]
     return {"Label": label, "ProgramArguments": args, "StartInterval": interval,
         "RunAtLoad": True, "Disabled": not enabled, "StandardOutPath": str(log),
         "StandardErrorPath": str(log), "ProcessType": "Background", "LowPriorityIO": True,

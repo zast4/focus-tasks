@@ -2,7 +2,8 @@
 
 This audit targets every shipped plugin feature, the task-note contract, external
 writers, the ZFG workflow, phone capture and Apple Calendar notifications. Changes
-remain on `next`; the running stable build is `6691679` until explicit delivery.
+were developed on `next` against stable baseline `6691679`. The user authorized
+stable delivery and Calendar activation on 2026-10-03.
 
 ## Evidence and acceptance
 
@@ -20,7 +21,7 @@ remain on `next`; the running stable build is `6691679` until explicit delivery.
 - iCloud was tested with a temporary calendar: create, alarm read-back, reschedule,
   Waiting, stable UID, absence of duplicates, delete, and cleanup passed.
 - Final: 146 model checks; 42 deterministic regression/inventory/repair/delivery tests;
-  36 Calendar tests; 85 desktop scenarios in each of standalone, actual Tasks and
+  37 Calendar tests; 85 desktop scenarios in each of standalone, actual Tasks and
   actual TaskNotes configurations; 18 mobile scenarios. Every final run passed.
   The host's shared task scripts passed 173 checks. The private review log records
   the working-vault inventory and host installation state.
@@ -86,6 +87,10 @@ still need the short physical-device acceptance described below.
     now use the indexed Unicode form, verified with a real iCloud round trip.
 26. The independent inventory relied on Date.parse, which silently rolls impossible
     days forward. It now checks actual days and hours in all three date properties.
+27. The first real launchd run exposed a lost venv: resolving its Python symlink
+    selected the base interpreter without the bridge dependencies. The installer
+    preserves the executable path. A real isolated-venv launch test failed before
+    the fix and passed after it; the actual host job then synced a working reminder.
 
 ## Usage and implications
 
