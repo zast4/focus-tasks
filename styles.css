@@ -16,33 +16,6 @@
                           The row is never made WIDER than its container — that scrolls a phone. */
 body.is-mobile .focus-tasks-view { --ft-col: 1.55rem; }  /* a narrow screen spares width for the text */
 
-/* Phone: the project is context above the action, so both names get the available width. */
-body.is-mobile .focus-tasks-view li.ft-mobile-project {
-  display: grid; grid-template-columns: var(--ft-col) minmax(0, 1fr);
-  column-gap: 0.15rem;
-}
-body.is-mobile .focus-tasks-view li.ft-mobile-project > :not(.ft-mobile-project-caption) { grid-row: 2; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption {
-  grid-column: 2 / -1; grid-row: 1; display: flex; align-items: center; gap: 0.3rem;
-  min-width: 0; padding-bottom: 0.2rem; font-size: 0.82em; line-height: 1.4;
-}
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name { flex: 1; display: flex; min-width: 0; color: var(--text-muted); }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption .ft-link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more { flex: none; padding: 0.15rem 0.3rem; }
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line { margin-left: 0; }
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-box { grid-column: 1; }
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line { grid-column: 2 / -1; }
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-date {
-  grid-row: 3; grid-column: 2 / -1; justify-self: end; margin-left: 0; font-size: 0.8em;
-}
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-running,
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-priority,
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-bot-dot {
-  grid-row: 3; grid-column: 1; justify-self: center;
-}
-body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-grip { top: 0.15rem; }
-body.is-mobile .focus-tasks-view li.ft-task:not(.ft-project-row) > .ft-plus,
-body.is-mobile .focus-tasks-view li.ft-task > .ft-running.is-offer { display: none; }
 .ft-picker-info { color: var(--text-muted); font-size: 0.8em; padding: 0 0.4em 0.7em; max-width: 17rem; }
 
 
@@ -187,7 +160,7 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 /* The date on the right: one column, one format; a click opens the picker. */
 /* The date takes the room it needs, flush right; nothing hangs off it, so no gap opens beside a
    short one. A finger still gets a column to hit. */
-.focus-tasks-view li.ft-task > .ft-date { flex: none; margin: 0 0 0 0.8em; text-align: right; font-size: 0.8em;
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-date { flex: none; margin: 0 0 0 0.8em; text-align: right; font-size: 0.8em;
   height: calc(var(--ft-line) * 1em / 0.8); font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
   display: inline-flex; justify-content: flex-end; align-items: center; }
 .focus-tasks-view .ft-date.is-today { color: var(--color-green); }
@@ -204,7 +177,7 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 .focus-tasks-view .ft-date.is-bare { color: var(--text-faint); opacity: 0; }
 .focus-tasks-view li.ft-task:hover > .ft-date.is-bare, .focus-tasks-view .ft-date.is-bare.is-active { opacity: 0.8; }
 body.is-mobile .focus-tasks-view .ft-date.is-empty { opacity: 0.45; }
-body.is-mobile .focus-tasks-view li.ft-task > .ft-date { min-width: 3em; }
+body.is-mobile .focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-date { min-width: 3em; }
 .focus-tasks-view .ft-date svg { width: 0.95rem; height: 0.95rem; }
 .focus-tasks-view .ft-date.is-active { outline: 1px solid var(--interactive-accent); outline-offset: 2px; border-radius: 4px; }
 
@@ -289,7 +262,7 @@ body.is-mobile .focus-tasks-view .ft-chip.is-quiet { opacity: 1; }
 
 /* The shelf of what is in other hands: one block at the bottom, like the day's closed work. */
 .focus-tasks-view .ft-waiting { margin-top: 0.45em; padding-top: 0.2em; border-top: 1px solid var(--background-modifier-border); }
-.focus-tasks-view .ft-waiting li.ft-task > .ft-running { color: var(--interactive-accent); }
+.focus-tasks-view .ft-waiting :is(li.ft-task, .ft-mobile-meta) > .ft-running { color: var(--interactive-accent); }
 .focus-tasks-view .ft-waiting-toggle.is-on { color: var(--text-normal); }
 
 /* A project's page: the block at the bottom of its note. Its heading is the project's row as in the
@@ -358,35 +331,35 @@ body.is-mobile .focus-tasks-view .ft-page .ft-grip { left: calc(-1.5rem + var(--
 /* A row waiting to come back is no fainter than the rest of «not today» — it was two different greys
    in one list before. What sets it apart is the ▷ and the line above the group it sits in. */
 .focus-tasks-view li.ft-task.is-waiting > .ft-date { font-weight: 400; }
-.focus-tasks-view li.ft-task > .ft-running { flex: none; display: inline-flex; align-items: center; cursor: pointer;
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-running { flex: none; display: inline-flex; align-items: center; cursor: pointer;
   margin: calc(var(--ft-line) * 0.5em - 0.5rem) 0 0 0.4em; color: var(--text-faint); }
-.focus-tasks-view li.ft-task > .ft-running svg { width: 0.8rem; height: 0.8rem; }
-.focus-tasks-view li.ft-task > .ft-running:hover { color: var(--interactive-accent); }
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-running svg { width: 0.8rem; height: 0.8rem; }
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-running:hover { color: var(--interactive-accent); }
 
 /* The dot is a button: its menu sets the level or takes the mark off. */
-.focus-tasks-view li.ft-task > .ft-priority { cursor: pointer; flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-priority { cursor: pointer; flex: none; width: 0.45rem; height: 0.45rem; margin: calc(var(--ft-line) * 0.5em - 0.22rem) 0 0 0.5em;
   border-radius: 50%; background: var(--text-faint); }
 /* The level must be told apart at a glance, and not by colour alone: low is a hollow ring, normal a
    filled dot, high a bigger filled dot. Written at the same weight as the rule above, or the plain
    grey background there wins and every level looks the same. */
-.focus-tasks-view li.ft-task > .ft-priority.is-low {
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-priority.is-low {
   background: none; box-shadow: inset 0 0 0 1px var(--text-faint); }
-.focus-tasks-view li.ft-task > .ft-priority.is-normal { background: var(--color-orange); }
-.focus-tasks-view li.ft-task > .ft-priority.is-high {
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-priority.is-normal { background: var(--color-orange); }
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-priority.is-high {
   width: 0.6rem; height: 0.6rem; margin-top: calc(var(--ft-line) * 0.5em - 0.3rem);
   background: var(--text-error); }
-.focus-tasks-view li.ft-task > .ft-due { flex: none; display: inline-flex; align-items: center; gap: 0.15em; margin-left: 0.6em;
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-due { flex: none; display: inline-flex; align-items: center; gap: 0.15em; margin-left: 0.6em;
   height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; color: var(--text-muted); white-space: nowrap; }
 .focus-tasks-view .ft-due.is-late { color: var(--text-error); }
 .focus-tasks-view .ft-due svg { width: 0.8rem; height: 0.8rem; }
 
 /* A row of the flat focus (and a completed one) says which project it came from: the list has no
    project headers to say it for it. */
-.focus-tasks-view li.ft-task > .ft-project-tag { flex: none; display: inline-flex; align-items: center; gap: 0.2em; margin-left: 0.6em;
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-project-tag { flex: none; display: inline-flex; align-items: center; gap: 0.2em; margin-left: 0.6em;
   height: calc(var(--ft-line) * 1em / 0.8); font-size: 0.8em; color: var(--text-faint); white-space: nowrap; max-width: 40%; overflow: hidden; }
-.focus-tasks-view li.ft-task > .ft-project-tag > .ft-icon { width: auto; }
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-project-tag > .ft-icon { width: auto; }
 /* In the flat focus the tag also leads to its project: it looks like text until the pointer is on it. */
-.focus-tasks-view li.ft-task > .ft-project-tag:hover { color: var(--text-accent); cursor: pointer; }
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-project-tag:hover { color: var(--text-accent); cursor: pointer; }
 
 /* Tasks another tool wrote with no area of their own: apart, and one click from a home. */
 .focus-tasks-view .ft-orphans { margin-top: 1.2em; }
@@ -410,7 +383,7 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-text { margin-left: 0; }
 .focus-tasks-view .ft-count,
 .focus-tasks-view .ft-rest-title,
 .focus-tasks-view li.ft-done > .ft-text,
-.focus-tasks-view li.ft-task > .ft-project-tag,
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-project-tag,
 .focus-tasks-view .ft-future,
 .ft-picker-weekday { color: var(--text-muted); }
 
@@ -485,7 +458,7 @@ body.is-mobile .focus-tasks-view .ft-plus { opacity: 1; }
    with no pointer, they are always there. */
 body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-plus,
 body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-chip.is-quiet.is-off,
-body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-date.is-empty:not(.is-active),
+body:not(.is-mobile) .focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-date.is-empty:not(.is-active),
 body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more,
 body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-plus,
 body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-chip.is-quiet.is-off,
@@ -530,7 +503,7 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
    a ⏳ centred on a two-line row floated between the lines, out of line with the calendar. */
 .focus-tasks-view li.ft-task > .ft-plus,
 .focus-tasks-view li.ft-task > .ft-chip,
-.focus-tasks-view li.ft-task > .ft-running { align-self: flex-start; height: calc(var(--ft-line) * 1em); padding-top: 0; padding-bottom: 0;
+.focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-running { align-self: flex-start; height: calc(var(--ft-line) * 1em); padding-top: 0; padding-bottom: 0;
   display: inline-flex; align-items: center; }
 
 .focus-tasks-view .ft-focus-title { cursor: pointer; }
@@ -547,3 +520,105 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
 /* the row it took you to glows a moment */
 .focus-tasks-view .ft-found { animation: ft-found 1.4s ease-out; }
 @keyframes ft-found { from { background-color: color-mix(in srgb, var(--text-accent) 22%, transparent); } to { background-color: transparent; } }
+
+/* Mobile layout contract: one checkbox column, full-width action, wrapping metadata underneath.
+   Project steps keep these columns even when expanded: nesting on a narrow screen costs text.
+   Controls stay in the DOM with their original handlers; desktop retains its inline layout. */
+body.is-mobile .focus-tasks-view li.ft-task {
+  --ft-action-row: 1;
+  --ft-meta-row: 2;
+  display: grid; grid-template-columns: 1.7rem var(--ft-col) minmax(0, 1fr); column-gap: 0.2rem;
+  margin-left: 0 !important;
+}
+body.is-mobile .focus-tasks-view .ft-area-page li.ft-task,
+body.is-mobile .focus-tasks-view .ft-page li.ft-task { margin-left: 0 !important; }
+body.is-mobile .focus-tasks-view li.ft-task::before {
+  left: calc(1.7rem + var(--ft-col) + 0.4rem); right: 0;
+}
+body.is-mobile .focus-tasks-view li.ft-task > .ft-box {
+  grid-column: 2; grid-row: var(--ft-action-row); width: var(--ft-col);
+  min-height: 24px;
+}
+body.is-mobile .focus-tasks-view li.ft-task > :is(.ft-text, .ft-line, .ft-project-name) {
+  grid-column: 3 / -1; grid-row: var(--ft-action-row); min-width: 0; margin-left: 0; overflow-wrap: anywhere;
+}
+body.is-mobile .focus-tasks-view li.ft-task > .ft-line {
+  display: block; -webkit-line-clamp: none; overflow: visible; overflow-wrap: anywhere;
+}
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line > .ft-text {
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: var(--ft-line);
+}
+body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line > .ft-text.is-editing {
+  display: block; -webkit-line-clamp: none; overflow: visible;
+}
+body.is-mobile .focus-tasks-view li.ft-task > .ft-grip {
+  position: relative; left: auto; top: auto; grid-column: 1; grid-row: var(--ft-action-row);
+  transform: none; box-sizing: border-box;
+  width: 1.7rem; height: calc(var(--ft-line) * 1em); min-height: 24px;
+  padding: 0; align-self: start;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-meta {
+  grid-column: 3 / -1; grid-row: var(--ft-meta-row);
+  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center;
+  gap: 0.15rem 0.35rem; min-width: 0;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-meta > :is(.ft-date, .ft-running, .ft-due, .ft-project-tag, .ft-place) {
+  margin: 0; min-height: 24px; height: auto; max-width: 100%; min-width: 24px;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-meta > :is(.ft-date, .ft-project-tag, .ft-place) {
+  white-space: normal; overflow-wrap: anywhere;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-meta > .ft-place {
+  display: inline-flex; align-items: center; color: var(--text-accent); font-size: 0.8em; cursor: pointer;
+}
+/* The small agent mark has a 24px target; its ring remains small. */
+body.is-mobile .focus-tasks-view .ft-mobile-meta > .ft-priority {
+  position: relative; width: 24px; height: 24px; margin: 0; background: none; box-shadow: none;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-meta > .ft-priority::after {
+  content: ""; position: absolute; width: 0.45rem; height: 0.45rem; border: 1px solid var(--text-faint);
+  border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%);
+}
+body.is-mobile .focus-tasks-view li.ft-mobile-project { --ft-action-row: 2; --ft-meta-row: 3; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption {
+  grid-column: 2 / -1; grid-row: 1; display: flex; align-items: center;
+  gap: 0.3rem; min-width: 0; padding-bottom: 0.2rem; font-size: 0.85em; line-height: 1.5;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name {
+  flex: 1; display: flex; align-items: center; gap: 0.2rem; min-width: 0; color: var(--text-muted);
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption .ft-project-icon {
+  flex: none; width: var(--ft-col); text-align: center;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption .ft-link {
+  min-width: 0; min-height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > :is(.ft-plus, .ft-later-chip, .ft-steps-more) {
+  flex: none; margin: 0; min-width: 24px; min-height: 24px;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more.is-late { color: var(--text-error); }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more.is-open { color: var(--interactive-accent); }
+body.is-mobile .focus-tasks-view .ft-mobile-project-header > .ft-mobile-project-caption {
+  grid-column: 2 / -1; font-size: 1em;
+}
+/* The −N control folds an open project. A second caret would displace its folder and name. */
+body.is-mobile .focus-tasks-view .ft-mobile-project-header > .ft-box { display: none; }
+body.is-mobile .focus-tasks-view li.ft-steps::before,
+body.is-mobile .focus-tasks-view li.ft-later-steps::before,
+body.is-mobile .focus-tasks-view ul.ft-list::before { display: none; }
+body.is-mobile .focus-tasks-view li.ft-task:not(.ft-project-row) > .ft-plus,
+body.is-mobile .focus-tasks-view li.ft-task > .ft-running.is-offer { display: none; }
+/* Header names give controls their own space, including enlarged text and long area names. */
+body.is-mobile .focus-tasks-view .ft-area-title { margin-left: 0; margin-right: 0; }
+body.is-mobile .focus-tasks-view .ft-area-title > .ft-emoji + span,
+body.is-mobile .focus-tasks-view .ft-area-title > .ft-page-name {
+  flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+body.is-mobile .focus-tasks-view .ft-area-title > :is(.ft-caret, .ft-plus, .ft-more, .ft-chip) {
+  min-width: 24px; min-height: 24px; align-items: center; justify-content: center;
+}
+body.is-mobile .focus-tasks-view .ft-area-title > .ft-grip { left: -1.5rem; width: 1.5rem; min-width: 24px; padding: 0; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption .ft-link.is-editing {
+  white-space: pre-wrap; overflow: visible; overflow-wrap: anywhere;
+}

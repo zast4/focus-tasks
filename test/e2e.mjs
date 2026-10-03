@@ -1598,7 +1598,7 @@ step("ticking a box does not move the page under the reader", async () => {
     return row ? Math.round(row.getBoundingClientRect().top) : null;`);
   if (after === null) throw new Error("the row that was on screen is gone: " + J(before));
   const moved = Math.abs(after - before.markY);
-  if (moved > 30) throw new Error(`the page jumped by ${moved}px when a box was ticked (${J(before)} → ${after})`);
+  if (moved > 3) throw new Error(`the page jumped by ${moved}px when a box was ticked (${J(before)} → ${after})`);
   await page.eval(`
     const p = app.plugins.plugins['focus-tasks'];
     for (const task of p.tasks()) if (task.text.startsWith('Длинная задача номер')) await p.trash(task.file);

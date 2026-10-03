@@ -1204,16 +1204,21 @@ class FocusRenderer extends MarkdownRenderChild {
     this.swap(el, old);
   }
 
-  // The row to steer by when the list is rebuilt: the first one that is fully on screen and is not
-  // the row being ticked (that one is about to move), plus where it sits in the window.
+  // Phone progress follows the next visible action, including a step becoming a project's first
+  // action. Desktop browsing keeps the first visible row in place, even when a lower row is ticked.
   anchorRow() {
     const scroller = this.scroller;
     if (!scroller) return null;
     const top = scroller.getBoundingClientRect().top;
-    for (const [el, task] of this.rows()) {
+    const rows = this.rows();
+    const toggling = Platform.isMobile ? rows.findIndex(([el]) => el.hasClass("is-toggling")) : -1;
+    const candidates = toggling < 0 ? rows : [...rows.slice(toggling + 1), ...rows.slice(0, toggling)];
+    for (const [el, task] of candidates) {
       if (el.hasClass("is-toggling")) continue;
-      const y = el.getBoundingClientRect().top;
-      if (y >= top - 1 && y <= top + scroller.clientHeight) return { uid: task.uid, offset: y - top, scrollTop: scroller.scrollTop };
+      const box = el.querySelector(":scope > .ft-box");
+      const y = (box?.offsetWidth ? box : el).getBoundingClientRect().top;
+      const uid = this.items?.get(el)?.task?.uid || task.uid;
+      if (y >= top - 1 && y <= top + scroller.clientHeight) return { uid, offset: y - top, scrollTop: scroller.scrollTop };
     }
     return { uid: null, offset: 0, scrollTop: scroller.scrollTop };
   }
@@ -1224,9 +1229,11 @@ class FocusRenderer extends MarkdownRenderChild {
     const scroller = this.scroller;
     if (!anchor || !scroller) return;
     if (anchor.uid) {
-      const row = this.rows().find(([, task]) => task.uid === anchor.uid);
+      const row = this.rows().find(([el, task]) => task.uid === anchor.uid || this.items?.get(el)?.task?.uid === anchor.uid);
       if (row) {
-        const drift = row[0].getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.offset;
+        const box = row[0].querySelector(":scope > .ft-box");
+        const point = box?.offsetWidth ? box : row[0];
+        const drift = point.getBoundingClientRect().top - scroller.getBoundingClientRect().top - anchor.offset;
         if (Math.abs(drift) > 1) scroller.scrollTop += drift;
         return;
       }
@@ -1628,6 +1635,7 @@ class FocusRenderer extends MarkdownRenderChild {
       this.check(li, check, task);
       await this.text(li, task);
       if (task.project) this.projectTag(li, task);
+      this.mobileMeta(li);
       li.oncontextmenu = (e) => {
         e.preventDefault();
         const menu = new Menu();
@@ -1692,6 +1700,7 @@ class FocusRenderer extends MarkdownRenderChild {
       place.onclick = (e) => { e.stopPropagation(); p.placeTask(task); };
       li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(task, e); };
       this.grip(li, { type: "task", task });
+      this.mobileMeta(li);
     }
   }
 
@@ -2329,6 +2338,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const set = (day) => { state.day = day; paint(); };
     const ahead = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     paint();
+    this.mobileMeta(li);
     state.keys = { 1: () => set(ahead(0)), 2: () => set(ahead(1)), 4: () => set(null) };
     return state;
   }
@@ -2705,6 +2715,17 @@ class FocusRenderer extends MarkdownRenderChild {
     li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(task, e); };
     this.track(li, { type: "task", task });
     this.grip(li, { type: "task", task });
+    this.mobileMeta(li);
+  }
+
+  // Mobile metadata gets its own wrapping row. Moving the actual controls preserves their actions,
+  // selection and date-picker anchors; task text never competes with a time or a project tag.
+  mobileMeta(li) {
+    if (!Platform.isMobile) return;
+    const controls = [...li.children].filter((el) => el.matches(".ft-date, .ft-running, .ft-priority, .ft-due, .ft-project-tag, .ft-place"));
+    if (!controls.length) return;
+    const meta = li.createSpan({ cls: "ft-mobile-meta" });
+    for (const el of controls) meta.appendChild(el);
   }
 
   // A project as one row of the list: «📁 Name › its first step  +N  date». The box, the text, the
@@ -2844,16 +2865,19 @@ class FocusRenderer extends MarkdownRenderChild {
       const pile = ul.createEl("li", { cls: "ft-later-steps" });
       await this.ahead(pile, project.later.map((task) => ({ kind: "task", task })), area, { level: (opts.level || 0) + 1 });
     }
-    if (Platform.isMobile && step) {
-      // A phone gives the action its own full-width line. The project and its controls sit above it.
-      li.addClass("ft-mobile-project");
+    if (Platform.isMobile) {
+      // A collapsed project's context starts at the checkbox column; its action has the same text
+      // column as every other task. Expanded headers reuse the same project caption.
+      li.addClass(open ? "ft-mobile-project-header" : "ft-mobile-project");
       const caption = li.createSpan({ cls: "ft-mobile-project-caption" });
       caption.appendChild(name);
       const more = line.querySelector(".ft-steps-more");
       if (more) caption.appendChild(more);
       line.querySelector(".ft-sep")?.remove();
       for (const control of li.querySelectorAll(":scope > .ft-plus, :scope > .ft-later-chip")) caption.appendChild(control);
+      if (open) line.remove();
     }
+    this.mobileMeta(li);
   }
 
 }

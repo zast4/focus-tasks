@@ -81,7 +81,10 @@ start undated. A linked custom note can use `area: [[Area note]]` in the block.
 Projects and expanded steps align with loose tasks, as on a project's own page.
 Creating or moving a project uses this view without adding a separate Projects section.
 
-On a phone, project context sits above its first action so both names have room. Capture
+On a phone, folders align with checkboxes and project names align with task text. Project context
+sits above its first action; dates and status controls wrap underneath the action. Expanded steps
+keep the same columns, with `+N` / `−N` opening and folding the project.
+Task previews use the same three-line limit; editing shows the full text. Capture
 is local immediately; uploading an offline iPhone note still requires Obsidian Sync.
 
 TaskNotes is optional. The plugin reads and writes task notes independently.
@@ -317,7 +320,10 @@ Shift+клик выделяет все задачи от последней кл
 раз при открытии области. Новые задачи внутри области или проекта появляются без даты.
 Проекты, отдельные задачи и раскрытые шаги в этой заметке стоят без вложенных отступов.
 Создание и перенос проекта используют этот view, без отдельного раздела "Проекты".
-На телефоне название проекта стоит над первым шагом, текст задачи получает отдельную строку.
+На телефоне папка стоит в колонке галочек, название проекта - в колонке текста задач.
+Название проекта находится над первым шагом, даты и статусы - под текстом задачи.
+Раскрытые шаги сохраняют те же колонки; `+N` / `−N` раскрывают и сворачивают проект.
+Превью задач везде ограничено тремя строками; при правке виден полный текст.
 Офлайн-задача сохраняется на устройство сразу; доставка через Sync требует запущенного Obsidian.
 
 TaskNotes для работы списка не нужен. Если используются повторы, их выполнение

@@ -22,7 +22,7 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Link a custom note to an area/project | Name opens that note; menu can open the task container | M, E |
 | Make an existing note an area | Preserve prose/properties; add the local view once; Undo restores the original | A, E |
 | Enter while editing | Save text and open the next row at the same level/date | M, E, P |
-| Escape while editing | Keep the previously saved state and leave the row selected | E |
+| Escape while editing | Save nonempty edits; restore wiped text; leave the row selected | E, P |
 | A date shortcut removes an edited row from its list | Save text and move the row immediately, preserving the next editing position | E |
 | Date/selection shortcuts without an editor or selection | Pass to Obsidian, including Cmd+1..9 tab switching | E; native Mac acceptance |
 | Cmd+D while editing/selecting | New open note per task with fresh identity; copies selected/editable; one Undo | A, E |
@@ -56,8 +56,10 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | All, upcoming toggles, collapse/expand, Focus reset | All remains complete; Focus hides upcoming/rest work; folding is per device | M, E, P |
 | Embedded view, Live Preview, links, pane close/reload | Same task state; ordinary navigation; no orphan editor, picker or shortcut scope | E |
 | Russian/English settings, folder, companion/build switching | Valid settings; real companion configuration; clear running build identity | M, E |
-| Phone at 320/390/430 px | Project above step; action has width; no horizontal overflow; touch capture/drag/menu | P |
+| Phone at 320/390/430 px, 18/22/26 px text | Shared grip/checkbox/title columns; project context above action; wrapping metadata; no nested step indent, overflow or overlapping targets; embedded Focus, pane, area and project notes | P |
+| Phone with user theme and long inline text | Same columns during editing and expansion; date/status controls respond to touch; finishing edits preserves task properties | P |
 | Phone offline capture and reload | Note exists locally immediately and survives reload | P; actual iPhone/Sync acceptance |
+| Tick a task halfway down the list | Desktop preserves the top visible row; phone preserves the next action, including a step becoming the project's collapsed action; drift at most 3 px | E, P |
 | Timed backlog task becomes relevant | Scheduled day enters Focus; separate cloud event notifies at its hour | A, E, C |
 | Timed Waiting becomes relevant | Same event identity, exact return moment, no completion automation | M, E, C |
 | Calendar rename/reschedule/complete/cancel/clear | Update/delete only the owned event without duplicates | C, disposable iCloud probe |

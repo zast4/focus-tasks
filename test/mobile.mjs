@@ -9,11 +9,19 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { Page, J, sleep, ymd, until } from "./cdp.mjs";
+import { layoutFixture, checkLayoutMatrix, checkCurrentLayout, openLayoutContext } from "./mobile-layout.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const KEEP = args.includes("--keep");
+const themeArg = args.indexOf("--theme");
+const THEME = themeArg >= 0 ? path.resolve(args[themeArg + 1]) : null;
+const baselineArg=args.indexOf('--baseline');
+const BASELINE=baselineArg>=0?args[baselineArg+1]:null;
+const tasksArg=args.indexOf('--with-tasks');
+const TASKS=tasksArg<0?null:args[tasksArg+1]&&!args[tasksArg+1].startsWith('--')?path.resolve(args[tasksArg+1]):path.join(process.env.HOME,'vaults/Vault/.obsidian/plugins/obsidian-tasks-plugin');
 const NAME = "focus-tasks-mobile";
 const VAULT = path.join(ROOT, "test", NAME);
 const SHOTS = path.join(ROOT, "test", "shots");
@@ -48,10 +56,14 @@ const taskIs = (name, fields, what) => until(() => {
 const at = (selector) => page.eval(`
   const el = ${selector};
   if (!el) return null;
-  el.scrollIntoView({ block: 'center' });
+  el.scrollIntoView({ block: 'center', behavior:'instant' });
   const r = el.getBoundingClientRect();
-  return r.width && r.height ? { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) } : null;`);
+  const x=Math.round(r.left+r.width/2),y=Math.round(r.top+r.height/2),hit=document.elementFromPoint(x,y);
+  return r.width && r.height && hit && (hit===el||el.contains(hit)) ? {x,y} : null;`);
 const tapOn = async (selector, what) => {
+  await page.front();
+  await page.eval(`(${selector})?.scrollIntoView({block:'center',behavior:'instant'});return true;`);
+  await sleep(180);
   const point = await until(() => at(selector), what || selector);
   await page.tap(point);
 };
@@ -82,9 +94,10 @@ async function calm() {
 
 step("the plugin runs in Obsidian's mobile mode", async () => {
   const state = await page.eval(`return { mobile: document.body.classList.contains('is-mobile'), width: window.innerWidth,
-    plugin: !!app.plugins.plugins['focus-tasks'], rows: __m.rows().length };`);
+    plugin: !!app.plugins.plugins['focus-tasks'], tasks:!!app.plugins.plugins['obsidian-tasks-plugin'], rows: __m.rows().length };`);
   if (!state.mobile) throw new Error("not in mobile mode: " + J(state));
   if (state.width > 500) throw new Error("the window is not phone-sized: " + state.width);
+  if(state.tasks!==!!TASKS)throw new Error('Tasks companion does not match the requested composition: '+J(state));
   if (!state.rows) throw new Error("no task rows on screen");
 });
 
@@ -173,8 +186,11 @@ step("the date picker fits the screen and sets a date by tap", async () => {
 step("a finger drags a task into a project", async () => {
   // the plain focus is flat, with no project headers to drop onto: the tree is in «All»
   await page.eval(`const p = app.plugins.plugins['focus-tasks']; window.__wasAll = p.everything(); p.setEverything(true); return true;`);
-  const from = await until(() => at(`__m.task('Позвонить маме сегодня').querySelector('.ft-grip')`), "the grip");
-  const onto = await until(() => at(`__m.project('Ремонт')`), "the project header");
+  await until(() => at(`__m.task('Позвонить маме сегодня').querySelector('.ft-grip')`), "the grip");
+  await until(() => at(`__m.project('Ремонт')`), "the project header");
+  await sleep(180);
+  const {from,onto}=await page.eval(`const point=e=>{const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};};
+    return {from:point(__m.task('Позвонить маме сегодня').querySelector('.ft-grip')),onto:point(__m.project('Ремонт'))};`);
   await page.eval(`window.__drag = []; for (const t of ['pointerdown','pointermove','pointerup','pointercancel','touchcancel'])
     window.addEventListener(t, (e) => window.__drag.push(t), true); return true;`);
   // the swipe, step by step, so the state mid-drag is visible
@@ -254,7 +270,7 @@ step("ticking a box does not throw the phone screen around", async () => {
     const row = [...view.containerEl.querySelectorAll('li.ft-task')].find((r) => r.querySelector('.ft-text').textContent.trim() === ${J(place.mark)});
     return row ? Math.round(row.getBoundingClientRect().top) : null;`);
   if (moved === null) throw new Error("the row that was on screen is gone: " + J(place));
-  if (Math.abs(moved - place.markY) > 40) throw new Error(`the screen jumped by ${Math.abs(moved - place.markY)}px when a box was tapped`);
+  if (Math.abs(moved - place.markY) > 3) throw new Error(`the screen jumped by ${Math.abs(moved - place.markY)}px when a box was tapped`);
   await page.eval(`
     const p = app.plugins.plugins['focus-tasks'];
     for (const task of p.tasks()) if (task.text.startsWith('Строка ')) await p.trash(task.file);
@@ -356,6 +372,89 @@ step("local project grips stay reachable on 320, 390 and 430px screens", async (
   await until(()=>page.eval(`return !!document.querySelector('.menu');`),'task menu from the project page grip');
 });
 
+for (const context of ["embedded-focus", "pane", "area", "project"]) {
+  step("shared phone columns, text width and touch targets: " + context, async () => {
+    await layoutFixture(page, TODAY);
+    await openLayoutContext(page, context);
+    await checkLayoutMatrix(page, context, SHOTS);
+  });
+}
+
+step("mobile metadata and project controls respond to touch without opening an editor", async () => {
+  await openLayoutContext(page, "embedded-focus");
+  await page.send('Emulation.setDeviceMetricsOverride', {width:390,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await tapOn(`window.__layoutRoot()?.querySelector('li.ft-mobile-project .ft-date')`, 'project first step date');
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker');`),'date picker from mobile metadata');
+  if(await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('date tap opened editor');
+  await calm();
+  await tapOn(`window.__layoutRoot()?.querySelector('li.ft-mobile-project .ft-steps-more')`, 'project expansion');
+  await until(()=>page.eval(`return !!window.__layoutRoot()?.querySelector('li.ft-project-row.is-open');`),'expanded project from its caption');
+  await checkLayoutMatrix(page, "embedded-focus-expanded", SHOTS);
+  await tapOn(`([...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent.includes('Решить, когда летим'))) ?.querySelector('.ft-running')`, 'return waiting task');
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-3')?.status==='open';`),'waiting control changes the fixture status');
+  if(await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('waiting control opened editor');
+});
+
+step("mobile long text stays readable while editing and Escape saves without changing task properties", async () => {
+  await openLayoutContext(page,'embedded-focus');
+  await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await page.eval(`window.__layoutRoot().style.fontSize='26px';return true;`);await sleep(250);
+  await tapOn(`([...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent.includes('Пройти часть 2'))) ?.querySelector('.ft-text')`, 'edit project first action');
+  await until(()=>page.eval(`return !!document.querySelector('.ft-text.is-editing');`),'mobile project editor');
+  await page.type(' '+ 'длиннаяссылка'.repeat(8));
+  const edited=await page.eval(`return document.querySelector('.ft-text.is-editing').textContent.replace(/\\s+/g,' ').trim();`);
+  await checkCurrentLayout(page,'embedded-focus-editing-320-26',SHOTS);
+  if(!await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('fixture editor lost focus before Escape');
+  await page.key('Escape');
+  await until(()=>page.eval(`return !document.querySelector('.ft-text.is-editing');`),'editor cancelled');
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-0')?.text===${J(edited)};`),'Escape saves the edited title');
+  const task=await page.eval(`const t=app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-0');return {status:t.status,date:t.date,project:t.project};`);
+  const late=ymd(new Date(new Date(TODAY+'T12:00:00').getTime()-6*86400000));
+  if(task.status!=='open'||task.date!==late||task.project!=='Пройти учебный курс UI')throw new Error('editing changed task properties: '+J(task));
+});
+
+step("mobile long text draft uses the same columns and can be cancelled", async () => {
+  await openLayoutContext(page,'area');
+  await page.send('Emulation.setDeviceMetricsOverride',{width:320,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await page.eval(`window.__layoutRoot().style.fontSize='26px';return true;`);await sleep(200);
+  await tapOn(`window.__layoutRoot().querySelector('.ft-area-page-head > .ft-plus')`,'add a long local draft');
+  await until(()=>page.eval(`return !!document.querySelector('.ft-draft-row .ft-text.is-editing');`),'draft editor');
+  await page.type('Черновик '+ 'неразрывноеслово'.repeat(6));
+  await checkCurrentLayout(page,'area-draft-320-26',SHOTS);
+  await page.eval(`const el=document.querySelector('.ft-draft-row .ft-text.is-editing');if(!el)throw new Error('draft lost focus');
+    const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);return true;`);
+  await page.key('Backspace');
+  if(await page.eval(`return !!document.querySelector('.ft-draft-row .ft-text.is-editing')?.textContent;`))throw new Error('draft was not cleared');
+  await page.key('Escape');
+  await until(()=>page.eval(`return !document.querySelector('.ft-draft-row .ft-text.is-editing');`),'draft cancelled');
+  if(await page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t=>t.text.startsWith('Черновик '));`))throw new Error('cancelled draft created a task');
+});
+
+step("mobile metadata completion keeps the next project action in place when the project folds", async () => {
+  await openLayoutContext(page,'pane');
+  await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];p.data.opened['steps:Areas/Пройти учебный курс UI.md']=true;
+    p.data.folded['area:🧤Рутина']=false;p.data.order.areas=['🧤Рутина','👨‍💻IT UI','🏡Дом'];p.saveFolds();p.refresh();return true;`);
+  await until(()=>page.eval(`return !!window.__layoutRoot()?.querySelector('li.ft-steps');`),'expanded steps before completion');
+  await page.front();
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];const v=[...p.views].find(v=>v.containerEl===window.__layoutRoot());
+    const row=v.rows().find(([,t])=>t.uid==='ft-ui-0')[0];const s=v.scroller;
+    window.__scrollTrace=[];const keep=v.keepPlace.bind(v);v.keepPlace=a=>{const before=s.scrollTop;keep(a);window.__scrollTrace.push({anchor:a,before,after:s.scrollTop});};
+    s.scrollTop+=row.getBoundingClientRect().top-s.getBoundingClientRect().top-60;return true;`);await sleep(400);
+  const before=await page.eval(`const p=app.plugins.plugins['focus-tasks'];const v=[...p.views].find(v=>v.containerEl===window.__layoutRoot());
+    const rect=uid=>v.rows().find(([,t])=>t.uid===uid)[0].querySelector('.ft-box').getBoundingClientRect();
+    const a=rect('ft-ui-0'),b=rect('ft-ui-1');const x=a.left+a.width/2,y=a.top+a.height/2;
+    return {point:{x,y},nextY:b.top,hit:!!document.elementFromPoint(x,y)?.closest('.ft-box'),scroll:v.scroller.scrollTop};`);
+  if(!before.hit||before.scroll<1)throw new Error('completion fixture not ready: '+J(before));
+  await page.tap(before.point);
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-0')?.status==='done';`),'first project step done');
+  await sleep(1200);
+  const after=await page.eval(`const p=app.plugins.plugins['focus-tasks'];const v=[...p.views].find(v=>v.containerEl===window.__layoutRoot());
+    const row=v.rows().find(([el,t])=>t.uid==='ft-ui-1'||v.items.get(el)?.task?.uid==='ft-ui-1');return row?.[0].querySelector('.ft-box').getBoundingClientRect().top;`);
+  if(after==null||Math.abs(after-before.nextY)>3)throw new Error('next project action jumped: '+J({before:before.nextY,after,scroll:before.scroll,trace:await page.eval('return window.__scrollTrace;')}));
+  await checkCurrentLayout(page,'pane-after-project-completion',SHOTS);
+});
+
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));
@@ -367,8 +466,22 @@ function buildVault() {
   fs.rmSync(VAULT, { recursive: true, force: true });
   const plug = path.join(VAULT, ".obsidian/plugins/focus-tasks");
   fs.mkdirSync(plug, { recursive: true });
-  for (const f of ["main.js", "manifest.json", "styles.css"]) fs.copyFileSync(path.join(ROOT, f), path.join(plug, f));
+  for (const f of ["main.js", "manifest.json", "styles.css"]) {
+    if(BASELINE)fs.writeFileSync(path.join(plug,f),execFileSync('git',['show',BASELINE+':'+f],{cwd:ROOT}));
+    else fs.copyFileSync(path.join(ROOT, f), path.join(plug, f));
+  }
+  if(TASKS) {
+    const target=path.join(VAULT,'.obsidian/plugins/obsidian-tasks-plugin');fs.mkdirSync(target,{recursive:true});
+    for(const file of ['main.js','manifest.json','styles.css'])fs.copyFileSync(path.join(TASKS,file),path.join(target,file));
+    fs.writeFileSync(path.join(target,'data.json'),J({}));
+  }
   fs.writeFileSync(path.join(VAULT, ".obsidian/app.json"), J({ nativeMenus: false, trashOption: "local", promptDelete: false, alwaysUpdateLinks: true }));
+  fs.writeFileSync(path.join(VAULT, '.obsidian/appearance.json'), J({theme:'obsidian',baseFontSize:16,cssTheme:THEME?'Layout fixture':''}));
+  if(THEME) {
+    const target=path.join(VAULT,'.obsidian/themes/Layout fixture');fs.mkdirSync(target,{recursive:true});
+    fs.copyFileSync(path.join(THEME,'theme.css'),path.join(target,'theme.css'));
+    fs.writeFileSync(path.join(target,'manifest.json'),J({name:'Layout fixture',version:'1.0.0',minAppVersion:'1.0.0',author:'Mobile test fixture'}));
+  }
   const note = (rel, front, body = "") => fs.writeFileSync(path.join(VAULT, rel), `---\n${front}\n---\n${body}`);
   fs.mkdirSync(path.join(VAULT, "Areas"));
   fs.mkdirSync(path.join(VAULT, "Задачи"));
@@ -415,6 +528,7 @@ async function openVault() {
     document.querySelectorAll('.modal-close-button').forEach((b) => b.click());
     await app.plugins.setEnable(true);
     await app.plugins.loadManifests();
+    if(${J(!!TASKS)})await app.plugins.enablePluginAndSave('obsidian-tasks-plugin');
     await app.plugins.enablePluginAndSave('focus-tasks');
     const p = app.plugins.plugins['focus-tasks'];
     p.settings.language = 'ru'; p.applyLanguage();
@@ -443,6 +557,7 @@ async function openVault() {
     [...document.querySelectorAll('.modal button')].find((b) => /Trust author|Доверять/i.test(b.textContent))?.click();
     await app.plugins.setEnable(true);
     await app.plugins.loadManifests();
+    if(${J(!!TASKS)})await app.plugins.enablePluginAndSave('obsidian-tasks-plugin');
     await app.plugins.enablePluginAndSave('focus-tasks');
     const p = app.plugins.plugins['focus-tasks'];
     p.settings.language = 'ru'; p.applyLanguage();
@@ -471,9 +586,10 @@ async function closeVault() {
 
 fs.mkdirSync(SHOTS, { recursive: true });
 let failed = 0;
+const selectedSteps=args.includes('--layout-only')?steps.filter(({name})=>/shared phone|mobile metadata|mobile long text/.test(name)):steps;
 try {
   await openVault();
-  for (const [i, { name, fn }] of steps.entries()) {
+  for (const [i, { name, fn }] of selectedSteps.entries()) {
     try {
       await calm();
       await fn();
@@ -490,5 +606,5 @@ try {
 } finally {
   await closeVault().catch(() => {});
 }
-console.log(failed ? `\n${failed} failed of ${steps.length}` : `\nall ${steps.length} phone steps passed`);
+console.log(failed ? `\n${failed} failed of ${selectedSteps.length}` : `\nall ${selectedSteps.length} phone steps passed`);
 process.exit(failed ? 1 : 0);

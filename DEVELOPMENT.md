@@ -163,7 +163,34 @@ second, so run it on every change.
 
 `test/mobile.mjs` turns on Obsidian's own mobile emulation (a setting of the whole app — both suites
 switch it deliberately, or the desktop run silently tests the phone build) and drives the list with
-touch events on a 390×844 screen.
+touch events. The layout matrix covers 320/390/430 px and text sizes 18/22/26 px, in the embedded
+Focus note, the dedicated pane, area notes and project notes. The same contracts also run after
+expanding a project and during inline editing. Fixtures include long titles, an empty project,
+one-step and multi-step projects, dated Waiting, deadlines and completed project tasks.
+
+Mobile changes must use the shared row layout: a reserved grip cell, a checkbox cell, full-width
+action text and wrapping metadata underneath. Project context uses those same cells. Expanded
+steps do not add horizontal indentation on a phone. Avoid absolute offsets for task grips.
+
+Before staging any mobile change:
+
+- Make the new geometry/interaction test fail against the previous build. Use
+  `node test/mobile.mjs --layout-only --baseline <commit>`; the fixture vault receives the old code,
+  while the working tree stays untouched. A zero-width or missing fixture is a test failure.
+- Check first-line alignment, shared columns, usable text width, horizontal overflow, and control
+  bounds/intersections. A screenshot existing or a row fitting the viewport does not prove layout.
+- Before dispatching a tap, bring the test window forward, finish scrolling and verify the target
+  with `elementFromPoint`. Measure drag endpoints together after scrolling; stale coordinates can
+  make a test interact with the wrong task while appearing to test its control.
+- Run the full suite and repeat it with the user's theme, for example
+  `node test/mobile.mjs --theme <Blue-Topaz-directory>`. Theme files go into the disposable vault.
+  If Tasks is enabled, also run that composition with `--with-tasks [plugin-directory]`.
+- Inspect the recorded screens in `test/shots/mobile-layout-*.png`, including a narrow screen with
+  large text. Verify the project action, loose Waiting task and expanded steps together.
+- Report mobile emulation accurately. Native iPhone keyboard, safe areas and Sync still require
+  physical-device acceptance; a desktop viewport narrowed to phone width does not replace this suite.
+
+`--layout-only` is for diagnosing layout regressions, never a substitute for the full phone suite.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
 The Russian scenario matrix and ZFG loop are in `SCENARIOS.ru.md`.
