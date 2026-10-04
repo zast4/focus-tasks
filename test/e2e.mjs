@@ -2095,6 +2095,23 @@ step("local area rows are flat like the project page while the global focus keep
   await plugin(`p.setEverything(${J(previousAll)});return true;`);
 });
 
+step("local area headers separate emoji from the name without adding a gap to plain names", async () => {
+  for (const [emoji, name] of [['🖥️', 'Desktop Emoji Area'], ['👩🏽‍💻', 'Compound Emoji Area'], ['', 'Plain Header Area']]) {
+    const area = emoji + name;
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'];const note=await p.createArea(${J(area)});
+      const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:note.path,mode:'preview'}});
+      app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+    await until(()=>page.eval(`return [...document.querySelectorAll('.ft-area-page-head')].some(e=>e.getClientRects().length&&e.textContent.includes(${J(name)}));`),'local area header '+name);
+    const actual = await page.eval(`const head=[...document.querySelectorAll('.ft-area-page-head')].find(e=>e.getClientRects().length);
+      const icon=head.querySelector('.ft-emoji'),name=head.querySelector('.ft-page-name');let gap=null;
+      if(icon){const glyph=document.createRange();glyph.selectNodeContents(icon);const letter=document.createRange();letter.setStart(name.firstChild,0);letter.setEnd(name.firstChild,1);gap=letter.getBoundingClientRect().left-glyph.getBoundingClientRect().right;}
+      return {emoji:icon?.textContent||'',name:name?.textContent,gap};`);
+    if(actual.emoji!==emoji||actual.name!==name)throw new Error('area header lost or duplicated its emoji/name: '+J(actual));
+    if(emoji&&(actual.gap<3||actual.gap>18))throw new Error('area emoji is stuck to or too far from its name: '+J(actual));
+  }
+  await toPane();
+});
+
 step("a failed date write keeps the task in its editor with the original day", async () => {
   await page.eval(`const p=app.plugins.plugins['focus-tasks']; await p.createTask('Audit write failure', {area:'Audit Area'}, ${J(TODAY)}); await p.setOpen('area:Audit Area', true); return true;`);
   await until(() => page.eval(`return !!__ft.task('Audit write failure')`), 'the task');

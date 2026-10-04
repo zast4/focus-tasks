@@ -94,6 +94,13 @@ function inspectLayout() {
   const reference=rows.find(row=>row.querySelector('.ft-text')&&visible(row.querySelector(':scope > .ft-box')));
   if(root.scrollWidth>root.clientWidth+1)errors.push('view scrolls horizontally');
   for(const header of [...root.querySelectorAll('.ft-area-title')].filter(visible)) {
+    const emoji=header.querySelector(':scope > .ft-emoji');
+    if(header.matches('.ft-area-page-head')&&!visible(emoji))fail('local area emoji is joined to its name',header);
+    if(visible(emoji)&&emoji.textContent) {
+      const name=emoji.nextElementSibling,glyph=document.createRange(),letter=document.createRange();
+      glyph.selectNodeContents(emoji);const first=document.createTreeWalker(name,NodeFilter.SHOW_TEXT).nextNode();
+      if(first){letter.setStart(first,0);letter.setEnd(first,1);if(letter.getBoundingClientRect().left-glyph.getBoundingClientRect().right<3)fail('area name is stuck to its emoji',header);}
+    }
     const controls=[...header.querySelectorAll(':scope > .ft-grip, :scope > .ft-caret, :scope > .ft-plus, :scope > .ft-more, :scope > .ft-chip')].filter(visible);
     for(const c of controls) {
       const q=rect(c);

@@ -1112,7 +1112,10 @@ class FocusRenderer extends MarkdownRenderChild {
     this.track(box, { type: "area", area });
     const head = box.createDiv({ cls: "ft-area-title ft-area-page-head" });
     this.track(head, { type: "area-title", area });
-    head.createSpan({ cls: "ft-page-name", text: area.name });
+    const label = bare(area.name);
+    const emoji = area.name.slice(0, area.name.length - label.length).trim();
+    if (emoji && label) head.createSpan({ cls: "ft-emoji", text: emoji });
+    head.createSpan({ cls: "ft-page-name", text: label || area.name });
     const target = { area: area.name, project: null, noDate: true };
     const last = () => [...box.querySelectorAll(":scope > ul.ft-list > li")].pop() || head;
     this.plus(head, t("addToArea"), async () => target, last);
