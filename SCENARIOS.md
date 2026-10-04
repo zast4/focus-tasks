@@ -56,7 +56,9 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | All, upcoming toggles, collapse/expand, Focus reset | All remains complete; Focus hides upcoming/rest work; folding is per device | M, E, P |
 | Embedded view, Live Preview, links, pane close/reload | Same task state; ordinary navigation; no orphan editor, picker or shortcut scope | E |
 | Russian/English settings, folder, companion/build switching | Valid settings; real companion configuration; clear running build identity | M, E |
-| Phone at 320/390/430 px, 18/22/26 px text | Shared grip/checkbox/title columns; project context above action; wrapping metadata; no nested step indent, overflow or overlapping targets; embedded Focus, pane, area and project notes | P |
+| Phone at 320/390/430 px, 18/22/26 px text | Shared checkbox/title columns, no visible or reserved grip column; project context above action; wrapping metadata; no nested step indent, overflow or overlapping targets; embedded Focus, pane, area and project notes, including temporary reorder mode | P |
+| Long-press task text, then choose Reorder | One menu, no edit or completion; temporary grips and reachable Done; a quick swipe scrolls, a second finger cancels a pending hold | P |
+| Drag in mobile reorder mode, cancel, refresh, edit or leave the note | Cancel keeps notes and ordering; refresh ends pending holds but retains the active mode; Done, editing, navigation or backgrounding restores the normal layout; no stale drag or listeners | P |
 | Phone with user theme and long inline text | Same columns during editing and expansion; date/status controls respond to touch; finishing edits preserves task properties | P |
 | Phone offline capture and reload | Note exists locally immediately and survives reload | P; actual iPhone/Sync acceptance |
 | Tick a task halfway down the list | Desktop preserves the top visible row; phone preserves the next action, including a step becoming the project's collapsed action; drift at most 3 px | E, P |

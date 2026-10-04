@@ -88,6 +88,7 @@ const STRINGS = {
     openCount: "open {0}", inFocus: ", in focus {0}", addToArea: "Task in this area", empty: "Empty",
     addTask: "Add a task", showUpcoming: "Show upcoming", hideUpcoming: "Hide upcoming",
     addStep: "Step in this project", drag: "Drag", collapse: "Collapse", expand: "Expand",
+    reorder: "Reorder", reordering: "Reordering", reorderHint: "Drag by a handle", reorderDone: "Done",
     pageNoProject: "This note is not a project of the list: no steps to show", pageMissing: "No project “{0}” in the list", areaPageMissing: "Area “{0}” is not in the list", saveFailed: "Could not save. Your text is kept in the row; try again.",
     cmdStepsBlocks: "Steps block in every project note", stepsBlocksAdded: "Steps block added to {0} notes", stepsBlocksNone: "Every project note already has its steps block",
     noStep: "no step yet", moreSteps: "{0} more — show them", hideSteps: "Hide the other steps", projectDone: "Project done",
@@ -178,6 +179,7 @@ const STRINGS = {
     openCount: "открыто {0}", inFocus: ", в фокусе {0}", addToArea: "Задача в область", empty: "Пусто",
     addTask: "Добавить задачу", showUpcoming: "Показать будущее", hideUpcoming: "Скрыть будущее",
     addStep: "Шаг в проект", drag: "Перетащить", collapse: "Свернуть", expand: "Развернуть",
+    reorder: "Переставить", reordering: "Перестановка", reorderHint: "Тяни за ручку", reorderDone: "Готово",
     pageNoProject: "Эта заметка - не проект списка: шагов нет", pageMissing: "Проекта «{0}» в списке нет", areaPageMissing: "Области «{0}» в списке нет", saveFailed: "Не удалось сохранить. Текст остался в строке - попробуй ещё раз.",
     cmdStepsBlocks: "Блок шагов во все заметки проектов", stepsBlocksAdded: "Блок шагов добавлен в заметок: {0}", stepsBlocksNone: "Блок шагов уже есть во всех заметках проектов",
     noStep: "пока пусто", moreSteps: "ещё {0} — показать", hideSteps: "Скрыть остальные шаги", projectDone: "Проект выполнен",
@@ -715,6 +717,7 @@ class FocusRenderer extends MarkdownRenderChild {
     this.selected = new Set();  // tasks of the selected rows
     this.anchor = null;         // the last clicked task: Shift-click selects from it
     this.cursor = null;         // the selected row the arrow keys go on from
+    this.mobileReordering = false;
   }
 
   // Opens a note: Cmd/Ctrl-click in a new tab; from the pane never over the list itself.
@@ -793,7 +796,12 @@ class FocusRenderer extends MarkdownRenderChild {
       e.preventDefault();
       e.stopPropagation();
     }, true);
-    this.registerEvent(this.plugin.app.workspace.on("active-leaf-change", () => this.keys(true)));
+    this.registerEvent(this.plugin.app.workspace.on("active-leaf-change", () => {
+      this.cancelMobilePress?.();
+      if (this.leafOf() !== this.plugin.app.workspace.activeLeaf) this.setMobileReordering(false);
+      this.keys(true);
+    }));
+    this.mobileGestures();
     this.plugin.views.add(this);
     this.render();
   }
@@ -803,11 +811,13 @@ class FocusRenderer extends MarkdownRenderChild {
     this.unloaded = true;
     clearTimeout(this.timer);
     clearTimeout(this.menuTimer);
+    clearTimeout(this.mobileClickTimer);
     this.keys(false);
     this.endEdit?.(false, false);
     this.dropScopes();
     this.picker?.close();
     this.stopDrag?.();
+    this.cancelMobilePress?.();
     this.plugin.views.delete(this);
   }
 
@@ -907,6 +917,7 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // Renders run one at a time; a change during a render, an edit or a drag queues one more.
   async render() {
+    this.cancelMobilePress?.();
     if (this.busy || this.editing || this.held) { this.again = true; return; }
     this.busy = true;
     try { await this.build(); } finally { this.busy = false; }
@@ -1077,8 +1088,10 @@ class FocusRenderer extends MarkdownRenderChild {
     // swap the scroll is nudged so that row keeps the same place in the window.
     const anchor = this.anchorRow();
     this.containerEl.addClass("focus-tasks-view");
+    this.cancelMobilePress?.();
     this.containerEl.replaceChildren(...el.childNodes);
     this.items = this.fresh;
+    this.paintMobileReordering();
     this.daySeen = today();
     this.keepPlace(anchor);
     this.paint();
@@ -1641,6 +1654,7 @@ class FocusRenderer extends MarkdownRenderChild {
       this.mobileMeta(li);
       li.oncontextmenu = (e) => {
         e.preventDefault();
+        if (!li.isConnected) return;
         const menu = new Menu();
         menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file)));
         showMenu(menu, e);
@@ -1719,6 +1733,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // A click on a row's text: a link inside it is left to itself, a task with a description opens as
   // a note, any other text goes into edit in place.
   textClick(task, text, e) {
+    if (this.unloaded || !text.isConnected) return;
     if (e.target.closest("a") || picking(e)) return;
     e.stopPropagation();
     // Only the words themselves are the link. The cell runs to the right edge of the row, and a
@@ -1802,6 +1817,118 @@ class FocusRenderer extends MarkdownRenderChild {
     grip.addEventListener("pointerdown", (e) => this.drag(e, item, grip));
   }
 
+  // A mode belongs to this visible list, never to Sync or the next visit to the note.
+  setMobileReordering(on) {
+    if (!Platform.isMobile || (on && this.editing)) return;
+    if (!!on === this.mobileReordering) return;
+    if (!on) this.stopDrag?.();
+    const anchor = this.anchorRow();
+    this.mobileReordering = !!on;
+    if (on) this.clearSelection();
+    this.paintMobileReordering();
+    this.keepPlace(anchor);
+  }
+
+  paintMobileReordering() {
+    const on = Platform.isMobile && this.mobileReordering;
+    this.containerEl.toggleClass("ft-reordering", on);
+    this.containerEl.querySelector(":scope > .ft-reorder-bar")?.remove();
+    if (!on) return;
+    const bar = createDiv({ cls: "ft-reorder-bar", attr: { role: "toolbar", "aria-label": t("reordering") } });
+    const label = bar.createDiv({ cls: "ft-reorder-label" });
+    label.createSpan({ cls: "ft-reorder-title", text: t("reordering") });
+    label.createSpan({ cls: "ft-reorder-hint", text: t("reorderHint") });
+    bar.createEl("button", { cls: "ft-reorder-done", text: t("reorderDone"), attr: { type: "button" } }).onclick = () => this.setMobileReordering(false);
+    this.containerEl.prepend(bar);
+  }
+
+  mobileReorderItem(menu) {
+    if (!Platform.isMobile || this.editing) return;
+    menu.addItem(i => i.setTitle(t(this.mobileReordering ? "reorderDone" : "reorder"))
+      .setIcon(this.mobileReordering ? "check" : "grip-vertical")
+      .onClick(() => this.setMobileReordering(!this.mobileReordering)));
+    menu.addSeparator();
+  }
+
+  mobileGestures() {
+    if (!Platform.isMobile) return;
+    this.registerDomEvent(window, "pointerdown", e => {
+      if (this.mobilePress && e.pointerId !== this.mobilePress.pointerId) this.cancelMobilePress?.();
+    }, true);
+    this.registerDomEvent(this.containerEl, "pointerdown", e => {
+      this.cancelMobilePress?.();
+      clearTimeout(this.mobileClickTimer);
+      this.mobileSuppressClick = null;
+      if (e.pointerType !== "touch" || !e.isPrimary || this.editing ||
+          e.target.closest("a, button, input, textarea, [contenteditable=true], .ft-box, .ft-grip, .ft-date, .ft-running, .ft-priority, .ft-plus, .ft-more, .ft-chip, .ft-steps-more, .ft-project-tag, .ft-place")) return;
+      const row = e.target.closest("li.ft-task[data-ft], .ft-area-title[data-ft]");
+      let item = row && this.items?.get(row);
+      if (!item) return;
+      if (item.type === "area-title") item = { ...item, type: "area" };
+      if (item.type === "project" && item.task && e.target.closest(".ft-text")) item = { type: "task", task: item.task };
+      const press = { row, pointerId: e.pointerId, x: e.clientX, y: e.clientY, fired: false };
+      const fire = () => {
+        if (press.fired || !row.isConnected || this.editing) return;
+        press.fired = true;
+        clearTimeout(timer);
+        this.mobileSuppressClick = { row, until: Infinity };
+        this.openMenu(item, { clientX: press.x, clientY: press.y }, row);
+      };
+      const move = ev => { if (ev.pointerId === press.pointerId && Math.hypot(ev.clientX - press.x, ev.clientY - press.y) > 10) cancel(false); };
+      const end = ev => { if (ev.pointerId === press.pointerId) cancel(false); };
+      const cancel = (suppress = true) => {
+        // Refresh/navigation can replace the row before release; ignore that gesture's click too.
+        if (suppress && !press.fired) this.mobileSuppressClick = { row, until: Infinity, cancelled: true };
+        clearTimeout(timer);
+        window.removeEventListener("pointermove", move, true);
+        window.removeEventListener("pointerup", end, true);
+        window.removeEventListener("pointercancel", end, true);
+        if (this.mobilePress === press) this.mobilePress = null;
+        if (this.cancelMobilePress === cancel) this.cancelMobilePress = null;
+      };
+      const timer = setTimeout(fire, 550);
+      Object.assign(press, { fire });
+      this.mobilePress = press;
+      this.cancelMobilePress = cancel;
+      window.addEventListener("pointermove", move, true);
+      window.addEventListener("pointerup", end, true);
+      window.addEventListener("pointercancel", end, true);
+    }, true);
+    this.registerDomEvent(this.containerEl, "contextmenu", e => {
+      if (this.held) { e.preventDefault(); e.stopPropagation(); return; }
+      const skip = this.mobileSuppressClick;
+      if (skip && Date.now() < skip.until && (skip.cancelled || skip.row.contains(e.target))) { e.preventDefault(); e.stopPropagation(); return; }
+      if (!this.mobilePress) return;
+      e.preventDefault(); e.stopPropagation();
+      this.mobilePress.fire();
+    }, true);
+    this.registerDomEvent(this.containerEl, "click", e => {
+      const skip = this.mobileSuppressClick;
+      if (skip && Date.now() < skip.until && (skip.cancelled || skip.row.contains(e.target))) {
+        e.preventDefault(); e.stopImmediatePropagation(); this.mobileSuppressClick = null;
+      }
+    }, true);
+    const touchEnd = e => {
+      const skip = this.mobileSuppressClick;
+      if (skip && Date.now() < skip.until && (skip.cancelled || skip.row.contains(e.target))) {
+        if (e.type === "touchend") { e.preventDefault(); e.stopPropagation(); }
+        skip.until = Date.now() + 800;
+        clearTimeout(this.mobileClickTimer);
+        this.mobileClickTimer = setTimeout(() => { if (this.mobileSuppressClick === skip) this.mobileSuppressClick = null; }, 800);
+      }
+    };
+    this.registerDomEvent(document, "touchend", touchEnd, { capture: true, passive: false });
+    this.registerDomEvent(document, "touchcancel", touchEnd, true);
+    this.registerDomEvent(document, "keydown", e => {
+      if (e.key === "Escape" && this.mobileReordering && !document.querySelector(".menu, .modal, .ft-picker")) {
+        this.setMobileReordering(false); e.preventDefault(); e.stopPropagation();
+      }
+    }, true);
+    this.registerDomEvent(document, "visibilitychange", () => {
+      if (document.hidden) { this.cancelMobilePress?.(); this.setMobileReordering(false); }
+    });
+  }
+
   target(item, x, y) {
     const el = document.elementFromPoint(x, y);
     if (!el || !this.containerEl.contains(el)) return null;
@@ -1836,7 +1963,8 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   drag(e, item, grip) {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || e.isPrimary === false || this.held) return;
+    if (Platform.isMobile && !this.mobileReordering) return;
     e.preventDefault();
     e.stopPropagation();
     const row = item.type === "area" ? grip.closest(".ft-area") : grip.closest(".ft-project, .ft-task");
@@ -2140,6 +2268,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // The flags are set only once the card is there — a card that failed to open left the list frozen
   // for good, every click deaf, the selection stuck.
   card(el, make) {
+    if (Platform.isMobile && this.mobileReordering) this.setMobileReordering(false);
     let picker;
     try { picker = make(); } catch (e) { console.error("Focus Tasks: the card did not open", e); return; }
     this.picker = picker;
@@ -2150,6 +2279,8 @@ class FocusRenderer extends MarkdownRenderChild {
   // Turns the text of a row into an editor: the raw markdown of the task, caret at the clicked
   // character (proportional when links render shorter than their source).
   editInline(task, el, e) {
+    if (this.unloaded || !el.isConnected) return;
+    if (Platform.isMobile && this.mobileReordering) this.setMobileReordering(false);
     if (el.isContentEditable || this.editing) return;
     this.clearSelection();
     this.anchor = task;
@@ -2420,6 +2551,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // `hotkeys`: Mod+<key> handlers; `onEnter(result of save)` continues with a next row;
   // `onEscape(result of save)`: Esc saves too (a wiped row keeps its text) and goes on from there.
   editor(el, offset, save, hotkeys = {}, onEnter = null, onEscape = null) {
+    if (Platform.isMobile && this.mobileReordering) this.setMobileReordering(false);
     this.editing = true;
     let typed = false;   // any input at all — typed and erased again is still the browser's to undo
     el.addEventListener("input", () => { typed = true; });
@@ -2511,6 +2643,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const show = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!parent.isConnected) return;
       const menu = new Menu();
       build(menu);
       showMenu(menu, e);
@@ -2523,6 +2656,7 @@ class FocusRenderer extends MarkdownRenderChild {
 
   areaMenu(menu, area) {
     const p = this.plugin;
+    this.mobileReorderItem(menu);
     menu.addItem((i) => i.setTitle(t("addToArea")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: null })));
     menu.addItem((i) => i.setTitle(t("newProject")).setIcon("folder-plus").onClick(() => p.newProject(area)));
     menu.addItem((i) => i.setTitle(t("projectFromNote")).setIcon("file-plus").onClick(() => p.projectFromNote(area)));
@@ -2537,6 +2671,7 @@ class FocusRenderer extends MarkdownRenderChild {
 
   projectMenu(menu, area, project, head) {
     const p = this.plugin;
+    this.mobileReorderItem(menu);
     menu.addItem((i) => i.setTitle(t("addStep")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: project.file.basename })));
     if (head) menu.addItem((i) => i.setTitle(t("rename")).setIcon("pencil").onClick(() => this.renameProject(head, area, project)));
     if (head) menu.addItem((i) => i.setTitle(t("projectDate")).setIcon("calendar-days").onClick(() => {
@@ -2572,10 +2707,13 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   taskMenu(task, e) {
+    // Obsidian's iOS hold timer can dispatch onto an old, detached row after a refresh.
+    if (e.target && (!e.target.isConnected || !this.containerEl.contains(e.target))) return;
     if (this.selected.has(task) && this.selected.size > 1) return this.selectionMenu(task, e);
     const p = this.plugin;
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
     const menu = new Menu();
+    this.mobileReorderItem(menu);
     // A running task has no ordinary date to set: the only day it has is the day it comes back.
     if (task.status === STATUS_WAITING) {
       menu.addItem((i) => i.setTitle(t("returnWhen") + "…").setIcon("calendar-clock").onClick(() => this.askReturn(task)));
@@ -2778,6 +2916,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const projectMenu = (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (!li.isConnected) return;
       const menu = new Menu();
       this.projectMenu(menu, area, project, li);
       showMenu(menu, e);

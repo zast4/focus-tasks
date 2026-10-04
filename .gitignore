@@ -1,6 +1,7 @@
 node_modules/
 dist/
 test/focus-tasks-e2e*/
+test/focus-tasks-mobile/
 test/shots/
 .DS_Store
 test/dbg.mjs

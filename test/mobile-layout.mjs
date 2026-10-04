@@ -93,6 +93,10 @@ function inspectLayout() {
   const rows=[...root.querySelectorAll('li.ft-task')].filter(visible);
   const reference=rows.find(row=>row.querySelector('.ft-text')&&visible(row.querySelector(':scope > .ft-box')));
   if(root.scrollWidth>root.clientWidth+1)errors.push('view scrolls horizontally');
+  if(root.classList.contains('ft-reordering')) {
+    const done=root.querySelector('.ft-reorder-done'),d=rect(done);
+    if(!d||d.width<44||d.height<44||d.left<0||d.right>innerWidth+1||d.top<0||d.bottom>innerHeight)errors.push('reordering Done is not reachable');
+  }
   for(const header of [...root.querySelectorAll('.ft-area-title')].filter(visible)) {
     const emoji=header.querySelector(':scope > .ft-emoji');
     if(header.matches('.ft-area-page-head')&&!visible(emoji))fail('local area emoji is joined to its name',header);
@@ -113,7 +117,11 @@ function inspectLayout() {
   const seen=[];
   for(const row of rows) {
     const text=row.querySelector('.ft-text'),box=row.querySelector(':scope > .ft-box'),grip=row.querySelector(':scope > .ft-grip');
-    const r=rect(row),t=rect(text),b=visible(box)?rect(box):null,g=rect(grip);
+    const r=rect(row),t=rect(text),b=visible(box)?rect(box):null,g=visible(grip)?rect(grip):null;
+    if(!root.classList.contains('ft-reordering')) {
+      if(g)fail('grip is visible outside reordering',row);
+      if(b&&Math.abs(b.left-r.left-parseFloat(getComputedStyle(row).paddingLeft))>2)fail('hidden grip still reserves a column',row);
+    }
     if(r.right>innerWidth+1||r.left<0)fail('row outside screen',row);
     const separator=getComputedStyle(row,'::before');
     if(reference&&separator.content!=='none'&&separator.display!=='none') {

@@ -68,6 +68,22 @@ const tapOn = async (selector, what) => {
   await page.tap(point);
 };
 
+const longPressOn = async (selector, duration=700) => {
+  await page.front();
+  await page.eval(`(${selector})?.scrollIntoView({block:'center',behavior:'instant'});return true;`);
+  await sleep(180);
+  const point=await until(()=>at(selector),'long press target');
+  await page.touch('touchStart',[point]);
+  await sleep(duration);
+  await page.touch('touchEnd',[]);
+  await sleep(180);
+};
+const enterReordering = async (selector) => {
+  await longPressOn(selector);
+  await tapOn(`[...document.querySelectorAll('.menu-item-title')].find(e=>e.textContent.trim()==='Переставить')?.closest('.menu-item')`,'reorder menu item');
+  await until(()=>page.eval(`return !!document.querySelector('.focus-tasks-view.ft-reordering')&&!document.querySelector('.menu');`),'reordering mode');
+};
+
 // The right-hand end of an element: a tap there puts the caret after the last character.
 const atEnd = (selector) => page.eval(`
   const el = ${selector};
@@ -82,6 +98,7 @@ const step = (name, fn) => steps.push({ name, fn });
 // Between steps: close whatever the on-screen keyboard left behind (Obsidian's own suggestion
 // popup swallows the next tap) and let the list settle.
 async function calm() {
+  await page.eval(`document.querySelectorAll('.ft-reorder-done').forEach(e=>e.click());return true;`).catch(()=>{});
   await page.key("Escape").catch(() => {});
   await page.eval(`
     document.activeElement?.blur?.();
@@ -111,22 +128,21 @@ step("nothing runs off the side of a phone screen", async () => {
   if (over.wide.length) throw new Error("these stick out: " + J(over.wide));
 });
 
-step("a checkbox, a grip and a date are big enough for a finger", async () => {
+step("a checkbox and a date are big enough for a finger", async () => {
   const sizes = await page.eval(`
     const row = __m.rows()[0];
     const size = (sel) => { const e = row.querySelector(sel); if (!e) return null; const r = e.getBoundingClientRect(); return [Math.round(r.width), Math.round(r.height)]; };
-    return { box: size('.ft-box'), grip: size('.ft-grip'), date: size('.ft-date') };`);
+    return { box: size('.ft-box'), date: size('.ft-date') };`);
   for (const [what, size] of Object.entries(sizes)) {
     if (!size) throw new Error(`${what} is not on the row at all`);
     if (Math.min(...size) < MIN_TAP) throw new Error(`${what} is ${size.join("×")} — too small to tap`);
   }
 });
 
-step("the grip is visible without hovering", async () => {
+step("normal mobile rows have no visible grips or reserved grip column", async () => {
   const shown = await page.eval(`
-    const g = __m.rows()[0].querySelector('.ft-grip');
-    return g ? Number(getComputedStyle(g).opacity) : 0;`);
-  if (shown < 0.3) throw new Error("the grip is invisible on a phone: opacity " + shown);
+    return __m.rows().map(row=>{const g=row.querySelector('.ft-grip'),b=row.querySelector('.ft-box'),r=row.getBoundingClientRect();return {grip:g?.getBoundingClientRect().width||0,inset:b?b.getBoundingClientRect().left-r.left-parseFloat(getComputedStyle(row).paddingLeft):0};});`);
+  if(shown.some(r=>r.grip||Math.abs(r.inset)>2))throw new Error('normal mode still spends width on grips: '+J(shown));
 });
 
 step("a tap on the box completes the task and the day's closed block takes it", async () => {
@@ -150,20 +166,21 @@ step("a tap on the end of the text appends to it", async () => {
   await until(() => page.eval(`return !document.querySelector('.ft-text.is-editing')`), "the empty row was dropped");
 });
 
-step("a tap on the grip opens the row's menu", async () => {
-  // A long press is Obsidian's own gesture and synthetic touches do not trigger it, so the phone way
-  // into a row's menu is the grip — and that must work with a finger, not only with a mouse.
-  const point = await until(() => at(`__m.task('Сходить в зал').querySelector('.ft-grip')`), "the grip of Сходить в зал");
+step("a long press opens one task menu without editing or completing the task", async () => {
   const before = await page.eval(`return { bg: !!document.querySelector('.suggestion-bg'), editing: !!document.querySelector('.ft-text.is-editing'),
     active: document.activeElement?.className || document.activeElement?.tagName };`);
   if (before.bg || before.editing) throw new Error("the phone keyboard was still up before this step: " + J(before));
   await page.eval(`window.__tapped = []; for (const t of ['pointerdown', 'pointerup', 'click', 'pointercancel'])
     document.addEventListener(t, (e) => window.__tapped.push(t + '→' + (e.target.className || e.target.tagName)), true); return true;`);
-  await page.tap(point);
+  const noteBefore=JSON.stringify(fm('Сходить в зал'));
+  await longPressOn(`__m.task('Сходить в зал').querySelector('.ft-text')`,2200);
   await sleep(500);
   const what = await page.eval(`return { menu: !!document.querySelector('.menu'), items: [...document.querySelectorAll('.menu-item-title')].map((e) => e.textContent.trim()),
     overlays: [...document.body.children].map((e) => e.className).filter((c) => typeof c === 'string' && c && !c.includes('app-container')) };`);
-  if (!what.items.length) throw new Error("no menu after tapping the grip: " + J(what));
+  if (!what.items.length) throw new Error("no menu after holding task text: " + J(what));
+  const count=await page.eval(`return document.querySelectorAll('.menu').length;`);
+  if(count!==1||!what.items.includes('Переставить')||JSON.stringify(fm('Сходить в зал'))!==noteBefore)throw new Error('long press duplicated the menu or changed the task');
+  if(await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('long press opened an editor');
   if (!what.items.includes("Сегодня")) throw new Error("the task menu is not the one that opened: " + J(what.items));
   await page.key("Escape");
   await until(() => page.eval(`return !document.querySelector('.menu')`), "the menu closed");
@@ -186,6 +203,7 @@ step("the date picker fits the screen and sets a date by tap", async () => {
 step("a finger drags a task into a project", async () => {
   // the plain focus is flat, with no project headers to drop onto: the tree is in «All»
   await page.eval(`const p = app.plugins.plugins['focus-tasks']; window.__wasAll = p.everything(); p.setEverything(true); return true;`);
+  await enterReordering(`__m.task('Позвонить маме сегодня').querySelector('.ft-text')`);
   await until(() => at(`__m.task('Позвонить маме сегодня').querySelector('.ft-grip')`), "the grip");
   await until(() => at(`__m.project('Ремонт')`), "the project header");
   await sleep(180);
@@ -355,13 +373,14 @@ step("local area projects and expanded steps are flat on 320, 390 and 430px scre
     if(width===390)await page.shot(path.join(SHOTS,'focus-tasks-mobile-area-flat.png'));
   }
   await page.send('Emulation.setDeviceMetricsOverride',{width:WIDTH,height:HEIGHT,deviceScaleFactor:2,mobile:true});
-  await tapOn(`([...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length))?.querySelector('li.ft-task:not(.ft-project-row) > .ft-grip')`,'flat area task grip');
+  await longPressOn(`([...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length))?.querySelector('li.ft-task:not(.ft-project-row) > .ft-text')`);
   await until(()=>page.eval(`return !!document.querySelector('.menu');`),'task menu from the local area grip');
 });
 
 step("local project grips stay reachable on 320, 390 and 430px screens", async () => {
   await page.eval(`const file=app.vault.getAbstractFileByPath('Areas/Ремонт.md');const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
   await until(()=>page.eval(`return [...document.querySelectorAll('.ft-page')].some(e=>e.getClientRects().length&&e.querySelector('li.ft-task'));`),'project page with tasks');
+  await enterReordering(`([...document.querySelectorAll('.ft-page')].find(e=>e.getClientRects().length))?.querySelector('li.ft-task .ft-text')`);
   for(const width of [320,390,430]) {
     await page.send('Emulation.setDeviceMetricsOverride',{width,height:HEIGHT,deviceScaleFactor:2,mobile:true});await sleep(300);
     const rows=await page.eval(`const root=[...document.querySelectorAll('.ft-page')].find(e=>e.getClientRects().length);return [...root.querySelectorAll('li.ft-task')].map(e=>({left:e.querySelector(':scope > .ft-grip').getBoundingClientRect().left,right:e.getBoundingClientRect().right}));`);
@@ -377,8 +396,121 @@ for (const context of ["embedded-focus", "pane", "area", "project"]) {
     await layoutFixture(page, TODAY);
     await openLayoutContext(page, context);
     await checkLayoutMatrix(page, context, SHOTS);
+    await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+    await checkLayoutMatrix(page, context+'-reordering', SHOTS);
+    await tapOn(`window.__layoutRoot().querySelector('.ft-reorder-done')`,'finish reordering');
   });
 }
+
+step("mobile reordering survives refresh and Done restores the full-width normal list", async () => {
+  await openLayoutContext(page,'pane');
+  const before=await page.eval(`return JSON.stringify(app.plugins.plugins['focus-tasks'].data.order);`);
+  await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  await page.eval(`app.plugins.plugins['focus-tasks'].refresh();return true;`);
+  await until(()=>page.eval(`return ![...app.plugins.plugins['focus-tasks'].views].some(v=>v.busy)&&window.__layoutRoot().querySelectorAll('.ft-reorder-bar').length===1;`),'mode survives refresh');
+  await tapOn(`window.__layoutRoot().querySelector('.ft-reorder-done')`,'Done');
+  if(await page.eval(`return window.__layoutRoot().classList.contains('ft-reordering');`))throw new Error('Done left reordering active');
+  if(before!==await page.eval(`return JSON.stringify(app.plugins.plugins['focus-tasks'].data.order);`))throw new Error('entering or leaving reordering changed task order');
+  await checkCurrentLayout(page,'pane-after-reordering',SHOTS);
+});
+
+step("mobile reordering ends on navigation and does not follow another note", async () => {
+  await openLayoutContext(page,'pane');
+  await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  await openLayoutContext(page,'area');
+  if(await page.eval(`return [...app.plugins.plugins['focus-tasks'].views].some(v=>v.mobileReordering);`))throw new Error('reordering leaked to another note');
+  await openLayoutContext(page,'pane');
+  if(await page.eval(`return window.__layoutRoot().classList.contains('ft-reordering');`))throw new Error('reordering came back when revisiting a list');
+});
+
+step("mobile editing exits reordering and backgrounding clears its temporary state", async () => {
+  await openLayoutContext(page,'pane');
+  await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  await tapOn(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`,'edit while reordering');
+  await until(()=>page.eval(`return !!window.__layoutRoot().querySelector('[contenteditable=true]');`),'inline editor');
+  if(await page.eval(`return window.__layoutRoot().classList.contains('ft-reordering');`))throw new Error('editing kept reordering active');
+  await page.key('Escape');await calm();
+  await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  await tapOn(`window.__layoutRoot().querySelector('.ft-area-title .ft-plus')`,'new task while reordering');
+  await until(()=>page.eval(`return !!window.__layoutRoot().querySelector('[contenteditable=true]');`),'new task editor');
+  if(await page.eval(`return window.__layoutRoot().classList.contains('ft-reordering');`))throw new Error('creating a task kept reordering active');
+  await page.key('Escape');await calm();
+  await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  await tapOn(`window.__layoutRoot().querySelector('li.ft-task .ft-date')`,'date while reordering');
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker');`),'date picker');
+  if(await page.eval(`return window.__layoutRoot().classList.contains('ft-reordering');`))throw new Error('date editing kept reordering active');
+  await page.key('Escape');await calm();
+  await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  await page.eval(`const desc=Object.getOwnPropertyDescriptor(document,'hidden');try{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));}finally{if(desc)Object.defineProperty(document,'hidden',desc);else delete document.hidden;}return true;`);
+  if(await page.eval(`return [...app.plugins.plugins['focus-tasks'].views].some(v=>v.mobileReordering||v.mobilePress||v.held);`))throw new Error('backgrounding retained a temporary gesture');
+  await checkCurrentLayout(page,'pane-after-backgrounding',SHOTS);
+});
+
+step("a quick swipe scrolls task text without a long-press menu or an editor", async () => {
+  await openLayoutContext(page,'pane');
+  await page.front();
+  await page.eval(`const v=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.containerEl===window.__layoutRoot());v.scroller.scrollTop=40;return true;`);
+  await sleep(250);
+  const data=await page.eval(`const v=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.containerEl===window.__layoutRoot());const s=v.scroller.getBoundingClientRect();const text=[...window.__layoutRoot().querySelectorAll('.ft-text')].find(e=>{const r=e.getBoundingClientRect();return r.top>s.top+100&&r.bottom<s.bottom-20;});if(!text)return null;const r=text.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2,scroll:v.scroller.scrollTop};`);
+  if(!data)throw new Error('scroll fixture has no usable visible text');
+  await page.touch('touchStart',[{x:data.x,y:data.y}]);await sleep(60);
+  for(let i=1;i<=6;i++){await page.touch('touchMove',[{x:data.x,y:data.y-i*20}]);await sleep(20);}
+  await page.touch('touchEnd',[]);await sleep(750);
+  const after=await page.eval(`const v=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.containerEl===window.__layoutRoot());return {scroll:v.scroller.scrollTop,menu:!!document.querySelector('.menu'),editing:!!v.editing,drag:!!v.held};`);
+  if(after.scroll<data.scroll+30||after.menu||after.editing||after.drag)throw new Error('swipe conflicted with task controls: '+J({data,after}));
+});
+
+step("a second finger cancels a pending task long press", async () => {
+  await openLayoutContext(page,'pane');await page.front();
+  await page.eval(`window.__layoutRoot().querySelector('li.ft-task .ft-text').scrollIntoView({block:'center'});return true;`);await sleep(180);
+  const point=await until(()=>at(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`),'multi-touch task');
+  await page.touch('touchStart',[point]);await sleep(100);
+  await page.touch('touchStart',[point,{x:point.x+35,y:point.y+30}]);await sleep(700);
+  await page.touch('touchCancel',[]);await sleep(180);
+  if(await page.eval(`return !!document.querySelector('.menu')||[...app.plugins.plugins['focus-tasks'].views].some(v=>v.mobilePress||v.held);`))throw new Error('multi-touch left a menu or gesture running');
+});
+
+step("cancelled mobile drag leaves notes and ordering intact and permits the next gesture", async () => {
+  await openLayoutContext(page,'pane');
+  await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  const before=await page.eval(`const p=app.plugins.plugins['focus-tasks'];return JSON.stringify({order:p.data.order,tasks:p.tasks().map(t=>({uid:t.uid,area:t.area,project:t.project,date:t.date,status:t.status}))});`);
+  await page.eval(`window.__layoutRoot().querySelector('li.ft-task .ft-grip').scrollIntoView({block:'center'});return true;`);await sleep(180);
+  const point=await until(()=>at(`window.__layoutRoot().querySelector('li.ft-task .ft-grip')`),'drag to cancel');
+  await page.touch('touchStart',[point]);await sleep(700);
+  if(await page.eval(`return !!document.querySelector('.menu');`))throw new Error('holding a drag grip opened a menu');
+  await page.touch('touchMove',[{x:point.x+35,y:point.y+40}]);await sleep(80);
+  if(await page.eval(`return document.querySelectorAll('.ft-drop-line').length!==1;`))throw new Error('drag did not start once');
+  await page.touch('touchStart',[{x:point.x+35,y:point.y+40},{x:point.x+80,y:point.y+80}]);
+  if(await page.eval(`return document.querySelectorAll('.ft-drop-line').length!==1;`))throw new Error('second finger started another drag');
+  await page.touch('touchCancel',[]);await sleep(250);
+  const after=await page.eval(`const p=app.plugins.plugins['focus-tasks'];if([...p.views].some(v=>v.held)||document.querySelector('.ft-drop-line')||document.body.classList.contains('ft-drag-active'))throw new Error('drag cleanup failed');return JSON.stringify({order:p.data.order,tasks:p.tasks().map(t=>({uid:t.uid,area:t.area,project:t.project,date:t.date,status:t.status}))});`);
+  if(before!==after)throw new Error('cancelling drag changed task data');
+  await tapOn(`window.__layoutRoot().querySelector('.ft-reorder-done')`,'Done after cancelled drag');
+  await longPressOn(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+  await until(()=>page.eval(`return !!document.querySelector('.menu');`),'menu after cancelled drag');
+});
+
+step("mobile reordering Done stays reachable at the bottom of every list", async () => {
+  for(const context of ['embedded-focus','pane','area','project']) {
+    await openLayoutContext(page,context);
+    await enterReordering(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`);
+    await page.eval(`const v=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.containerEl===window.__layoutRoot());v.scroller.scrollTop=v.scroller.scrollHeight;return true;`);await sleep(250);
+    const box=await page.eval(`const d=window.__layoutRoot().querySelector('.ft-reorder-done').getBoundingClientRect();return {top:d.top,bottom:d.bottom,height:innerHeight};`);
+    if(box.top<0||box.bottom>box.height)throw new Error(context+' Done scrolled out of reach: '+J(box));
+    await tapOn(`window.__layoutRoot().querySelector('.ft-reorder-done')`,'Done at the bottom');
+  }
+});
+
+step("refresh cancels a pending mobile long press without leaving listeners active", async () => {
+  await layoutFixture(page,TODAY);await openLayoutContext(page,'pane');await page.front();
+  await page.eval(`window.__layoutRoot().querySelector('li.ft-task .ft-text').scrollIntoView({block:'center'});return true;`);await sleep(180);
+  const point=await until(()=>at(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`),'pending press');
+  await page.touch('touchStart',[point]);await sleep(100);
+  await page.eval(`app.plugins.plugins['focus-tasks'].refresh();return true;`);await sleep(700);
+  await page.touch('touchEnd',[]);await sleep(180);
+  const state=await page.eval(`return {menu:!!document.querySelector('.menu'),menuText:document.querySelector('.menu')?.innerText,views:[...app.plugins.plugins['focus-tasks'].views].map(v=>({press:!!v.mobilePress,fired:!!v.mobilePress?.fired,busy:!!v.busy,editing:!!v.editing,held:!!v.held}))};`);
+  if(state.menu||state.views.some(v=>v.press||v.editing||v.held))throw new Error('old press survived the rebuilt list: '+J(state));
+});
 
 step("mobile metadata and project controls respond to touch without opening an editor", async () => {
   await openLayoutContext(page, "embedded-focus");
@@ -586,7 +718,8 @@ async function closeVault() {
 
 fs.mkdirSync(SHOTS, { recursive: true });
 let failed = 0;
-const selectedSteps=args.includes('--layout-only')?steps.filter(({name})=>/shared phone|mobile metadata|mobile long text/.test(name)):steps;
+const matchArg=args.indexOf('--match');
+const selectedSteps=matchArg>=0?steps.filter(({name})=>new RegExp(args[matchArg+1]).test(name)):args.includes('--layout-only')?steps.filter(({name})=>/shared phone|mobile metadata|mobile long text/.test(name)):steps;
 try {
   await openVault();
   for (const [i, { name, fn }] of selectedSteps.entries()) {

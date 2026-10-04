@@ -168,9 +168,12 @@ Focus note, the dedicated pane, area notes and project notes. The same contracts
 expanding a project and during inline editing. Fixtures include long titles, an empty project,
 one-step and multi-step projects, dated Waiting, deadlines and completed project tasks.
 
-Mobile changes must use the shared row layout: a reserved grip cell, a checkbox cell, full-width
-action text and wrapping metadata underneath. Project context uses those same cells. Expanded
-steps do not add horizontal indentation on a phone. Avoid absolute offsets for task grips.
+Mobile changes must use the shared row layout: checkbox, full-width action text and wrapping
+metadata underneath. Normal mode has no visible grip and no reserved grip cell. Long press opens
+the menu; Reorder temporarily adds the grip column and a Done toolbar. Drag handles have their own
+touch-action region; short swipes on text keep native scrolling. Done, navigation and backgrounding
+end the mode; it is renderer state, never saved to settings or Sync. Project context uses the same
+cells, and expanded steps do not add indentation. Avoid absolute offsets for task grips.
 
 Before staging any mobile change:
 
@@ -179,6 +182,8 @@ Before staging any mobile change:
   while the working tree stays untouched. A zero-width or missing fixture is a test failure.
 - Check first-line alignment, shared columns, usable text width, horizontal overflow, and control
   bounds/intersections. A screenshot existing or a row fitting the viewport does not prove layout.
+- Run geometry in both normal and reordering mode. Verify short tap, scrolling, long press,
+  duplicate native contextmenu, multi-touch, cancelled drag, mode refresh and navigation cleanup.
 - Before dispatching a tap, bring the test window forward, finish scrolling and verify the target
   with `elementFromPoint`. Measure drag endpoints together after scrolling; stale coordinates can
   make a test interact with the wrong task while appearing to test its control.
@@ -191,6 +196,8 @@ Before staging any mobile change:
   physical-device acceptance; a desktop viewport narrowed to phone width does not replace this suite.
 
 `--layout-only` is for diagnosing layout regressions, never a substitute for the full phone suite.
+`--match <regex>` selects named phone scenarios for debugging; include their fixture setup when
+the scenario depends on earlier steps. Delivery still requires the full suite.
 
 What each scenario is for, and which test holds it: `SCENARIOS.md`.
 The Russian scenario matrix and ZFG loop are in `SCENARIOS.ru.md`.

@@ -59,9 +59,9 @@ What you can do in the view:
 | Undo | **⌘/Ctrl+Z** in the list takes back the last change (a tick, a date, a move, a delete) and selects the rows it touched; while editing, with nothing typed yet, it does the same — typed text keeps the editor's own undo |
 | Date picker | click the date on the right (type `25.12`, `tomorrow`, or pick a day) |
 | Add a task | **+** on an area or a project header; «Empty» in an empty area |
-| Menu | right-click a row (on a phone: tap the grip) |
+| Menu | right-click a row; on a phone, long-press its text |
 | Find | **⌘/Ctrl+F** in the list's pane (or the command «Find in the list»): any area, project or open task by part of its name; choosing one opens whatever hides it, scrolls to it and selects it |
-| Reorder / move | drag the grip: areas among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
+| Reorder / move | desktop: drag the grip; phone: long press, choose Reorder, then drag the temporary grip and finish with Done. Areas reorder among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
 | Select a row | click the grip on the left (again: drops it), or **Esc** while editing. A selected row is a block picked up as a whole, as in Notion: **↑/↓** walk the list, **Shift+↑/↓** extend, **Enter** edits it, **⌫** deletes (Undo in the notice), **⌘/Ctrl+1…4** date it, **⌘/Ctrl+5** hands it off («Waiting…»), **⌘/Ctrl+Enter** opens its note, **⌘/Ctrl+Z** takes back the last change, **Esc** drops the selection |
 | Select several | **Shift**-click selects every task from the last clicked one, **⌘/Ctrl**-click adds or drops one; the grip of a selected row drags them all; its date, its menu, the keys above or **⌘/Ctrl+1…4** work on all of them |
 | Upcoming | the ⏳ on an area's header opens its undated and future tasks; what is in other hands is not there but on the **▷ Waiting** shelf at the bottom |
@@ -81,8 +81,10 @@ start undated. A linked custom note can use `area: [[Area note]]` in the block.
 Projects and expanded steps align with loose tasks, as on a project's own page.
 Creating or moving a project uses this view without adding a separate Projects section.
 
-On a phone, folders align with checkboxes and project names align with task text. Project context
-sits above its first action; dates and status controls wrap underneath the action. Expanded steps
+On a phone, folders align with checkboxes and project names align with task text. The normal list
+has no grip column. Long press opens the menu; Reorder temporarily shows drag handles
+and Done. Text remains a scrolling surface. Done, leaving the list or backgrounding ends the mode.
+Project context sits above its first action; dates and status controls wrap underneath the action. Expanded steps
 keep the same columns, with `+N` / `−N` opening and folding the project.
 Task previews use the same three-line limit; editing shows the full text. Capture
 is local immediately; uploading an offline iPhone note still requires Obsidian Sync.
@@ -279,7 +281,7 @@ passes (`--keep` leaves it).
 в любой заметке. Клик по тексту — правка на месте (Enter — сохранить и новая строка ниже, Esc —
 сохранить и выделить строку; ⌘1 сегодня, ⌘2 завтра, ⌘3 календарь, ⌘4 без даты, ⌘5 «Жду…», ⌘D - копия задачи прямо под ней (правка переходит в копию), ⌘Enter - открыть задачу заметкой, ⌘⌫ - удалить задачу целиком и перейти на строку выше; ⌘Z, пока ничего не
 набрано, отменяет последнее действие списка). Ручка слева — перетаскивание, клик по ней — выделить
-строку (на телефоне — меню), правый клик — меню. Выделенная строка — блок целиком, как в Notion:
+строку, правый клик — меню. На телефоне меню открывается долгим нажатием на текст. Выделенная строка — блок целиком, как в Notion:
 ↑/↓ ходят по списку, Shift+↑/↓ расширяют, Enter — правка, ⌫ — удалить (с «Вернуть»), ⌘1–4 — дата, ⌘5 — «Жду…», ⌘D — копии выделенных задач (выделяются копии),
 ⌘Z — отменить последнее действие (строки, которых оно касалось, выделяются), Esc — снять выделение.
 Shift+клик выделяет все задачи от последней кликнутой до этой, ⌘/Ctrl+клик добавляет или убирает
@@ -321,6 +323,9 @@ Shift+клик выделяет все задачи от последней кл
 Проекты, отдельные задачи и раскрытые шаги в этой заметке стоят без вложенных отступов.
 Создание и перенос проекта используют этот view, без отдельного раздела "Проекты".
 На телефоне папка стоит в колонке галочек, название проекта - в колонке текста задач.
+Обычно ручки скрыты и их колонка отсутствует. Долгое нажатие открывает меню; "Переставить"
+временно показывает ручки и "Готово". За ручку можно тянуть, по тексту прокручивать список.
+"Готово", переход из списка и уход приложения в фон выключают режим. В настройках он не сохраняется.
 Название проекта находится над первым шагом, даты и статусы - под текстом задачи.
 Раскрытые шаги сохраняют те же колонки; `+N` / `−N` раскрывают и сворачивают проект.
 Превью задач везде ограничено тремя строками; при правке виден полный текст.
