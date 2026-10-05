@@ -286,7 +286,8 @@ class IcsTests(unittest.TestCase):
             self.assertEqual(str(ev["uid"]), r.event_uid)
             self.assertEqual(str(ev[OWNER]), r.uid)
             self.assertEqual(ev.decoded("dtstart"), r.at)
-            self.assertEqual(ev.decoded("dtend") - ev.decoded("dtstart"), dt.timedelta(minutes=30))
+            self.assertEqual(ev.decoded("dtend") - ev.decoded("dtstart"), dt.timedelta(hours=1))
+            self.assertNotIn("description", ev)
             self.assertEqual(str(ev["transp"]), "TRANSPARENT")
             self.assertIn("obsidian://focus-tasks?", str(ev["url"]))
             self.assertEqual(str(ev['summary']), r.title)
@@ -551,6 +552,34 @@ class OwnershipTests(unittest.TestCase):
         self.assertEqual(self.client.headers[-1]["If-Match"], '"1"')
         self.transport.delete(self.r)
         self.assertEqual(self.client.headers[-1]["If-Match"], '"1"')
+
+    def test_half_hour_event_with_instructions_updates_once_in_place(self):
+        snapshot = Snapshot(desired={self.r.uid: self.r}, seen={self.r.uid})
+        state = {'tasks': {}}
+        reconcile(snapshot, state, self.transport, now=NOW)
+        with patch('apple_calendar.EVENT_DURATION_MINUTES', 30):
+            old = Calendar.from_ical(event_ical(self.r))
+            old_fingerprint = self.r.fingerprint
+        old.walk('VEVENT')[0].add('description', 'Открыть задачу в Фокусе: old instructions')
+        self.client.raw = old.to_ical()
+        state['tasks'][self.r.uid]['fingerprint'] = old_fingerprint
+        self.assertFalse(self.transport.verify(self.r))
+        for seconds in (1, 2, 3):
+            reconcile(snapshot, state, self.transport, now=NOW + dt.timedelta(seconds=seconds))
+        self.assertEqual(len(self.client.headers), 2, 'one initial create and one migration')
+        self.assertEqual(self.client.headers[-1]['If-Match'], '"1"')
+        current = Calendar.from_ical(self.client.raw).walk('VEVENT')[0]
+        self.assertEqual(str(current['uid']), self.r.event_uid)
+        self.assertEqual(str(current[OWNER]), self.r.uid)
+        self.assertEqual(current.decoded('dtend') - current.decoded('dtstart'), dt.timedelta(hours=1))
+        self.assertNotIn('description', current)
+        self.assertTrue(self.transport.verify(self.r))
+
+    def test_retained_event_instructions_are_not_acknowledged(self):
+        event = Calendar.from_ical(event_ical(self.r))
+        event.walk('VEVENT')[0].add('description', 'stale event instructions')
+        self.client.raw = event.to_ical()
+        self.assertFalse(self.transport.verify(self.r))
 
     def test_foreign_event_never_overwritten_or_deleted(self):
         self.client.raw = event_ical(reminder(uid="someone-else"))

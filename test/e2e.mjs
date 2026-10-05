@@ -1206,7 +1206,7 @@ step("a [[link]] in a task's text opens its note from the pane, in a tab of its 
   await page.eval(`for (const l of app.workspace.getLeavesOfType('markdown')) if (l.view.file?.path === 'Notes/Linked.md') l.detach(); return true;`);
 });
 
-step("⌘D copies the selected task right under it and selects the copy; in the editor it moves into the copy; ⌘Z takes a copy back", async () => {
+step("⌘D inserts above the selected or edited task and immediately edits the copy; ⌘Z removes the copy", async () => {
   await plugin(`await p.createTask('Twin me', { area: '💪Sport', project: null }, ${J(TODAY)}); return true;`);
   await toPane();
   await until(() => page.eval(`return !!__ft.task('Twin me')`), "the row on screen");
@@ -1218,7 +1218,7 @@ step("⌘D copies the selected task right under it and selects the copy; in the 
   const one = fm("Twin me"), two = fm("Twin me (2)");
   if (!two.uid || two.uid === one.uid) throw new Error("the copy needs a uid of its own: " + J([one.uid, two.uid]));
   if (two.title !== "Twin me" || two.scheduled !== one.scheduled || two.area !== one.area) throw new Error("the copy is not the same task: " + J(two));
-  await until(() => page.eval(`const r = __ft.all('li.ft-task', __ft.view()).map((e) => ({ t: e.querySelector('.ft-text')?.textContent.trim(), sel: e.classList.contains('is-selected'), uid: e.dataset.uid })); const i = r.findIndex((x) => x.t === 'Twin me' && !x.sel); return i >= 0 && r[i + 1]?.t === 'Twin me' && r[i + 1].sel`), "the copy right under the original, selected");
+  await until(() => page.eval(`const e = document.querySelector('.focus-tasks-view .is-editing'), v = [...app.plugins.plugins['focus-tasks'].views].find(x => e && x.containerEl.contains(e)), li = e?.closest('li'); return v?.items.get(li)?.task?.uid === ${J(two.uid)} && v.items.get(li.nextElementSibling)?.task?.uid === ${J(one.uid)} && document.activeElement === e`), "the copy above the source has the editor and keyboard focus");
   await page.key("Meta+z");
   await until(() => !exists(taskPath("Twin me (2)")), "⌘Z took the copy back");
   await idle();
@@ -1229,11 +1229,79 @@ step("⌘D copies the selected task right under it and selects the copy; in the 
   await editing();
   await page.key("Meta+d");
   await until(() => exists(taskPath("Twin me (2)")), "the copy from the editor");
-  await until(() => page.eval(`const e = document.querySelector('.focus-tasks-view .is-editing'); const li = e?.closest('li'); return !!li && li.previousElementSibling?.querySelector('.ft-text')?.textContent.trim() === 'Twin me'`), "the editor moved into the copy under the original");
-  await page.key("Escape");
+  const editorCopy = fm("Twin me (2)").uid;
+  await until(() => page.eval(`const e = document.querySelector('.focus-tasks-view .is-editing'), v = [...app.plugins.plugins['focus-tasks'].views].find(x => e && x.containerEl.contains(e)), li = e?.closest('li'); return v?.items.get(li)?.task?.uid === ${J(editorCopy)} && v.items.get(li.nextElementSibling)?.task?.uid === ${J(one.uid)} && document.activeElement === e`), "the editor moved into the copy above the original");
+  await page.eval(`__ft.selectAll(); return true;`);
+  await page.type("Renamed twin copy");
+  await page.key("Tab");
+  await until(() => exists(taskPath("Renamed twin copy")), "typing changes the copied note");
+  if (fm("Renamed twin copy").uid !== editorCopy || fm("Twin me").uid !== one.uid) throw new Error("copy edit changed the source identity");
+  if (fm("Twin me").title) throw new Error("copy edit renamed the source");
   await idle();
   await page.key("Escape");
   await selectedAre([]);
+});
+
+step("⌘D copies a selection above each source, edits the first copy and undoes the whole group", async () => {
+  await plugin(`for (const name of ['Dup group A', 'Dup group B']) await p.createTask(name, { area: '💪Sport', project: null }, ${J(TODAY)}); return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Dup group A') && !!__ft.task('Dup group B')`), "group sources on screen");
+  await click(`__ft.at(__ft.task('Dup group A').querySelector('.ft-text'))`, "first source", CMD);
+  await click(`__ft.at(__ft.task('Dup group B').querySelector('.ft-text'))`, "second source", CMD);
+  await selectedAre(['Dup group A', 'Dup group B']);
+  await page.key('Meta+d');
+  await until(() => exists(taskPath('Dup group A (2)')) && exists(taskPath('Dup group B (2)')), "both copied notes");
+  const sourceA = fm('Dup group A').uid, sourceB = fm('Dup group B').uid;
+  const copyA = fm('Dup group A (2)').uid, copyB = fm('Dup group B (2)').uid;
+  await until(() => page.eval(`
+    const rows = __ft.all('li.ft-task', __ft.view()), v = [...app.plugins.plugins['focus-tasks'].views].find(x => x.containerEl === __ft.view()), uid = x => v?.items.get(x)?.task?.uid;
+    const a = rows.find(x => uid(x) === ${J(copyA)}), b = rows.find(x => uid(x) === ${J(copyB)});
+    const editor = a?.querySelector('.is-editing');
+    return !!editor && document.activeElement === editor && uid(a.nextElementSibling) === ${J(sourceA)} && uid(b?.nextElementSibling) === ${J(sourceB)};
+  `), "copies sit above both sources and the first copy is editing");
+  await page.key('Meta+z');
+  await until(() => !exists(taskPath('Dup group A (2)')) && !exists(taskPath('Dup group B (2)')), "one Undo removes all copies");
+  if (!exists(taskPath('Dup group A')) || !exists(taskPath('Dup group B'))) throw new Error('Undo removed an original');
+  await idle();
+  await page.key('Escape');
+  await selectedAre([]);
+});
+
+step("⌘D on a compact project step inserts the new first step and edits that copy", async () => {
+  await plugin(`const area = (await p.collect(true)).find(a => a.name === '💪Sport'); await p.createProject(area, 'Dup compact project'); await p.createTask('Dup compact step', { area: '💪Sport', project: 'Dup compact project' }, ${J(TODAY)}); return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.project('Dup compact project')?.querySelector('.ft-text')`), "compact project step");
+  await click(`__ft.at(__ft.project('Dup compact project').querySelector('.ft-text'))`);
+  await editing();
+  await page.key('Meta+d');
+  await until(() => exists(taskPath('Dup compact step (2)')), "copied step note");
+  const source = fm('Dup compact step').uid, copy = fm('Dup compact step (2)').uid;
+  await until(() => page.eval(`const row = __ft.project('Dup compact project'), e = row?.querySelector('.is-editing'), p = app.plugins.plugins['focus-tasks'], v = [...p.views].find(x => e && x.containerEl.contains(e)); const order = p.data.order.tasks['project:Dup compact project']; return v?.items.get(row)?.task?.uid === ${J(copy)} && document.activeElement === e && order?.[0] === ${J(copy)} && order?.[1] === ${J(source)};`), "copy becomes the visible first step with editing focus");
+  await page.key('Meta+z');
+  await until(() => !exists(taskPath('Dup compact step (2)')), "Undo removes only the copied step");
+  if (fm('Dup compact step').uid !== source) throw new Error('source step identity changed');
+  await idle();
+  await page.key('Escape');
+  await selectedAre([]);
+});
+
+step("⌘D from Waiting reveals the open copy when its new future shelf is hidden", async () => {
+  await plugin(`const task = await p.createTask('Dup waiting task', { area: '💪Sport', project: null }, ${J(TOMORROW)}); await p.setFields(task, { status: 'waiting' }); app.saveLocalStorage('focus-tasks-all', null); app.saveLocalStorage('focus-tasks-waiting', '1'); delete p.data.opened['future:💪Sport']; delete p.data.opened['futureoff:💪Sport']; p.saveFolds(); p.refresh(); return true;`);
+  await toPane();
+  await until(() => page.eval(`return !!__ft.task('Dup waiting task')?.closest('.ft-waiting')`), "source task on Waiting shelf");
+  await click(`__ft.at(__ft.task('Dup waiting task').querySelector('.ft-text'))`);
+  await editing();
+  await page.key('Meta+d');
+  await until(() => exists(taskPath('Dup waiting task (2)')), "Waiting copy note");
+  const copy = fm('Dup waiting task (2)'), source = fm('Dup waiting task');
+  if (copy.status !== 'open' || source.status !== 'waiting' || copy.uid === source.uid) throw new Error('copy altered the Waiting source');
+  await until(() => page.eval(`const e = document.querySelector('.focus-tasks-view .is-editing'), v = [...app.plugins.plugins['focus-tasks'].views].find(x => e && x.containerEl.contains(e)), row = e?.closest('li'); return v?.items.get(row)?.task?.uid === ${J(copy.uid)} && !!row.closest('.ft-future-block') && document.activeElement === e;`), "future copy is visible and editing");
+  await page.key('Meta+z');
+  await until(() => !exists(taskPath('Dup waiting task (2)')), "Undo removes only the open copy");
+  if (fm('Dup waiting task').status !== 'waiting') throw new Error('Undo changed Waiting source');
+  await idle();
+  await page.key('Escape');
+  await plugin(`app.saveLocalStorage('focus-tasks-all','1'); p.refresh(); return true;`);
 });
 
 step("⌫ on a selected project's row deletes the project and all its tasks; Undo brings them back", async () => {

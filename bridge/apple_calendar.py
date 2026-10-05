@@ -25,7 +25,7 @@ from zoneinfo import ZoneInfo
 import yaml
 
 UTC = dt.timezone.utc
-EVENT_DURATION_MINUTES = 30
+EVENT_DURATION_MINUTES = 60
 CALENDAR_CONTRACT = "focus-view-at-start-v1"
 SILENT_TRIGGER = dt.datetime(1976, 4, 1, 0, 55, 45, tzinfo=UTC)
 OWNER = "X-FOCUS-TASKS-UID"
@@ -145,7 +145,6 @@ def event_ical(reminder: Reminder) -> bytes:
     ev.add("transp", "TRANSPARENT")
     link = focus_url(reminder)
     ev.add("url", link)
-    ev.add("description", "Открыть задачу в Фокусе: " + link + "\nСсылка находит задачу по постоянному UID. Дату и время меняй в Фокусе.")
     # Apple's explicit NONE placeholder disables the device's default alert for this event.
     # The separate DISPLAY alarm is the sole notification, at DTSTART. Both need a UID in iCloud.
     quiet = Alarm()
@@ -209,6 +208,7 @@ class ICloud:
             and ev.decoded("dtend") == reminder.at + dt.timedelta(minutes=EVENT_DURATION_MINUTES)
             and str(ev.get("summary", "")) == reminder.title
             and str(ev.get("url", "")) == focus_url(reminder)
+            and not str(ev.get("description", "")).strip()
             and silent_default and len(active) == 1
             and str(active[0].get("action", "")).upper() == "DISPLAY"
             and str(active[0].get("uid", "")) == reminder.event_uid.replace("@", "-alarm@")

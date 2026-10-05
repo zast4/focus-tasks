@@ -1179,6 +1179,49 @@ test("a dragged order is kept by uid and survives a rename", async () => {
   eq(names(loose((await plugin.collect(false))[0])), ["C renamed", "A", "B"], "the order held through the rename");
 });
 
+test("duplicating tasks inserts each copy above its source and undoes the whole group", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    projectNote(a, "Sport", "Training");
+    taskNote(a, "Loose", { area: "Sport", scheduled: TODAY + "T13:00", priority: "low" }, "Keep this description");
+    taskNote(a, "First", { area: "Sport", project: "Training", scheduled: TODAY });
+    taskNote(a, "Second", { area: "Sport", project: "Training", scheduled: TODAY });
+  });
+  const original = Object.fromEntries(plugin.tasks().map((x) => [x.text, x]));
+  plugin.data.order.tasks["area:Sport"] = ["p:Areas/Training.md", original.Loose.uid];
+  plugin.data.order.tasks["project:Training"] = [original.Second.uid, original.First.uid];
+  const orderBefore = JSON.stringify(plugin.data.order);
+  const [looseCopy, secondCopy, firstCopy] = await plugin.duplicateTasks([original.Loose, original.Second, original.First, original.Loose]);
+  eq(plugin.data.order.tasks["area:Sport"], ["p:Areas/Training.md", looseCopy.uid, original.Loose.uid]);
+  eq(plugin.data.order.tasks["project:Training"], [secondCopy.uid, original.Second.uid, firstCopy.uid, original.First.uid]);
+  ok(looseCopy.uid !== original.Loose.uid && secondCopy.uid !== original.Second.uid, "copies have independent identities");
+  const copied = frontmatter(app, looseCopy.file.path);
+  eq(copied.scheduled, TODAY + "T13:00");
+  eq(copied.priority, "low");
+  ok(bodyOf(app, looseCopy.file.path).includes("Keep this description"), "description preserved");
+  await plugin.undo();
+  eq(plugin.tasks().length, 3, "all copies removed by one undo");
+  eq(JSON.stringify(plugin.data.order), orderBefore, "original order restored");
+});
+
+test("a copied completed task is open and contains no completion or time-tracking history", async () => {
+  const { app, plugin } = await stand((a) => {
+    areaNote(a, "Sport");
+    taskNote(a, "Finished", { area: "Sport", scheduled: TODAY, status: "done", completedDate: TODAY,
+      timeEntries: ["record"], time_entries: ["record"], completeInstances: [TODAY], complete_instances: [TODAY],
+      skippedInstances: [TODAY], skipped_instances: [TODAY] });
+  });
+  const original = plugin.tasks()[0];
+  const before = bodyOf(app, original.file.path);
+  const [copy] = await plugin.duplicateTasks([original]);
+  const copied = frontmatter(app, copy.file.path);
+  eq(copied.status, "open");
+  for (const key of ["completedDate", "timeEntries", "time_entries", "completeInstances", "complete_instances", "skippedInstances", "skipped_instances"])
+    ok(!(key in copied), "copy has no " + key);
+  eq(bodyOf(app, original.file.path), before, "original unchanged");
+  eq(plugin.data.order.tasks["area:Sport"], [copy.uid, original.uid]);
+});
+
 test("the saved order does not grow duplicates", async () => {
   const { plugin } = await stand((a) => {
     areaNote(a, "Sport");

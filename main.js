@@ -1555,17 +1555,30 @@ class FocusRenderer extends MarkdownRenderChild {
     keymap.pushScope(this.scope);
   }
 
-  // ⌘D on selected rows: a copy of each right under it, and the copies are selected instead.
+  // ⌘D: a copy above each selected task; start editing the first copy in screen order.
   async duplicateSelected() {
-    const copies = await this.plugin.duplicateTasks(this.tasksChosen());
-    if (!copies?.length) return;
     const touch = this.touch || 0;
+    const copies = await this.plugin.duplicateTasks(this.tasksChosen());
+    await this.editCopies(copies, touch);
+  }
+
+  async editCopies(copies, touch = this.touch || 0) {
+    if (!copies?.length) return;
     const uids = copies.map((x) => x.uid);
     await this.cachedAll(uids);
     await this.rerendered();
-    if ((this.touch || 0) !== touch) return;
-    const rows = this.rows().map(([, x]) => x).filter((x) => uids.includes(x.uid));
-    if (rows.length) this.mark(rows);
+    if ((this.touch || 0) !== touch || this.editing || this.held || this.unloaded) return;
+    const findRow = () => this.rows().find(([el, x]) => x.uid === uids[0] || this.items.get(el)?.task?.uid === uids[0]);
+    let row = findRow();
+    // A Waiting copy is open work: its new shelf may be hidden even though its source was visible.
+    if (!row) {
+      await this.reveal({ kind: "task", uid: uids[0] }, false);
+      if (this.editing || this.held || this.unloaded) return;
+      row = findRow();
+    }
+    const task = row && (row[1].isProject ? this.items.get(row[0])?.task : row[1]);
+    const text = row?.[0].querySelector(":scope > .ft-text, :scope > .ft-line > .ft-text");
+    if (task && text) this.editInline(task, text, null);
   }
 
   // One date for the selected rows; the selection is done then. A selected project's row dates the
@@ -2401,18 +2414,13 @@ class FocusRenderer extends MarkdownRenderChild {
         const now = this.plugin.tasks().find((x) => x.uid === task.uid) || saved || task;
         this.open(now.file);
       },
-      // ⌘D: the text is saved, a copy lands right under the row and the editor moves into the copy
+      // ⌘D: save the text, insert a copy above the row and move the editor into it.
       d: async (close) => {
         await close(true, false);
+        const touch = this.touch || 0;
         const now = this.plugin.tasks().find((x) => x.uid === task.uid) || task;
         const [copy] = await this.plugin.duplicateTasks([now]);
-        if (!copy) return;
-        await this.cachedAll([copy.uid]);
-        await this.rerendered();
-        const row = this.rows().find(([e, x]) => x.uid === copy.uid || this.items.get(e)?.task?.uid === copy.uid);
-        const t2 = row && (row[1].isProject ? this.items.get(row[0])?.task : row[1]);
-        const text2 = row?.[0].querySelector(":scope > .ft-text, :scope > .ft-line > .ft-text");
-        if (t2 && text2) this.editInline(t2, text2, null);
+        await this.editCopies(copy ? [copy] : [], touch);
       },
       // ⌘5: hand the task off — the card asks when to look at it again
       5: async (close) => {
@@ -4455,7 +4463,7 @@ module.exports = class FocusTasks extends Plugin {
     });
   }
 
-  // ⌘D: each task again, right under itself — the same note with a uid of its own, open whatever
+  // ⌘D: each task again, right above itself - the same note with a uid of its own, open whatever
   // the original was (a copy of a done task is one to do again). One undo takes all the copies back.
   async duplicateTasks(tasks) {
     const seen = new Set();
@@ -4484,7 +4492,7 @@ module.exports = class FocusTasks extends Plugin {
           if (name !== task.text) fm.title = task.text;   // «X (2)» on disk, «X» on the row
         }, tx);
         const copy = { ...task, file, uid, status: STATUS_OPEN };
-        await this.seatAfter(copy, task);
+        await this.seatTask(copy, task, { before: true });
         copies.push(copy);
       }
       return copies;
@@ -4610,12 +4618,12 @@ module.exports = class FocusTasks extends Plugin {
     const task = await this.createTask(text, { area: anchor.area, project: anchor.project }, day);
     // Enter under a row means «here», not «somewhere below»: without a seat of its own the new task
     // is sorted by date and name and usually lands at the bottom of the list.
-    if (task) await this.seatAfter(task, anchor);
+    if (task) await this.seatTask(task, anchor);
     return task;
   }
 
-  // Writes the whole list's order down as it is on screen, with the new task right after its anchor.
-  async seatAfter(task, anchor) {
+  // Preserve the visible order and insert a task beside its anchor.
+  async seatTask(task, anchor, { before = false } = {}) {
     const key = listOf(task);
     if (key !== listOf(anchor)) return;
     // Everything in the list, ticked ones included: a task that loses its seat when it is checked
@@ -4630,7 +4638,7 @@ module.exports = class FocusTasks extends Plugin {
     const order = saved.filter((k) => k !== task.uid && (k.startsWith("p:") || mine.includes(k)));
     for (const uid of mine) if (!order.includes(uid)) order.push(uid);
     const i = order.indexOf(anchor.uid);
-    order.splice(i < 0 ? order.length : i + 1, 0, task.uid);
+    order.splice(i < 0 ? order.length : i + (before ? 0 : 1), 0, task.uid);
     this.data.order.tasks[key] = order;
     await this.saveAll();
   }

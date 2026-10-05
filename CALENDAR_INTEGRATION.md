@@ -1,9 +1,10 @@
 # Apple Calendar notifications
 
-The task note owns the date and time. The Mac-host bridge mirrors it into one 30-minute,
+The task note owns the date and time. The Mac-host bridge mirrors it into one hour-long,
 transparent Calendar event with one active notification at its start. An Apple NONE
 default placeholder suppresses the native default for this event; a UID-bearing DISPLAY
 alarm triggers at DTSTART. Other calendars retain their default preferences.
+The task link lives only in the event URL field; the event description is empty.
 This is a Calendar event;
 it is not a native Apple Reminders item with its own checkbox.
 
@@ -47,7 +48,7 @@ action, and Calendar never completes or reopens a task.
   Both alarms have stable UIDs; only DISPLAY is a notification.
 - Updating/deleting verifies ownership and uses ETag conditions. A foreign event is
   never overwritten, including a replacement between GET and PUT/DELETE.
-- After saving, GET verifies the event time, duration, identity, fingerprint, Focus URL, exact task title, disabled native default and sole active at-start alarm.
+- After saving, GET verifies the event time, duration, identity, fingerprint, Focus URL, empty event description, exact task title, disabled native default and sole active at-start alarm.
   State is acknowledged only after this succeeds. This proves server persistence,
   not delivery on a particular Watch or phone.
 - Completion, cancellation, clearing the time/date or archiving removes only the owned

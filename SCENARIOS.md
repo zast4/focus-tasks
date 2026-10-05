@@ -25,8 +25,8 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Escape while editing | Save nonempty edits; restore wiped text; leave the row selected | E, P |
 | A date shortcut removes an edited row from its list | Save text and move the row immediately, preserving the next editing position | E |
 | Date/selection shortcuts without an editor or selection | Pass to Obsidian, including Cmd+1..9 tab switching | E; native Mac acceptance |
-| Cmd+D while editing/selecting | New open note per task with fresh identity; copies selected/editable; one Undo | A, E |
-| Duplicate previously waiting/done/cancelled work | Copy is open, original is unchanged; recorded execution history is not copied | A |
+| Cmd+D while editing/selecting | New open note per task with fresh identity; copies inserted above sources; first copy immediately editing; one Undo | A, E |
+| Duplicate previously waiting/done/cancelled work | Copy is open, original is unchanged; recorded execution history is not copied; a hidden future copy is revealed for editing | A, E |
 | Change day on a timed task | Preserve its existing hour from disk | A, E |
 | Remove its hour or day | Explicit hour removal retains day; clearing day clears both | A, E |
 | Invalid day/hour in a card | No silent fallback; invalid input remains available to correct | E |
@@ -67,13 +67,13 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Timed task before and after cloud acknowledgement | Pending until current UID/path/title/clock/Waiting status is confirmed; no green badge after edits or failure | M, E, C |
 | Timed project step with a project date on narrow phones | Step clock and confirmation badge remain visible, aligned and inside 320/390/430px at 18/26px text | E, P |
 | Group time edit, clear time, complete | Existing event IDs update; old receipts turn pending; clearing time removes badges and owned events | M, E, C |
-| Timed backlog task becomes relevant | Scheduled day enters Focus; its automatic 30-minute event alerts at the chosen hour | A, E, C |
+| Timed backlog task becomes relevant | Scheduled day enters Focus; its automatic one-hour event alerts at the chosen hour | A, E, C |
 | Open the date/clock or Waiting card on a phone | Shared date/clock/Save layout; 320/390/430px fit, 44px Save, calendar taps keep the keyboard closed | P |
 | Save an ordinary task with empty time | Day-only value, no implicit midnight event; an explicit 00:00 remains a real clock | E, P, C |
 | Change the day of open or Waiting tasks with different hours | Each hour survives; setting/clearing a group clock is one undoable transaction | E |
 | Timed Waiting becomes relevant | Same event identity, exact return moment, no completion automation | M, E, C |
 | Calendar rename/reschedule/complete/cancel/clear | Update/delete only the owned event without duplicates | C, disposable iCloud probe |
-| Existing reminder after format update | Same event uid, 30-minute display, disabled default plus sole at-start alert, Focus link, no busy time | C, live iCloud readback |
+| Existing reminder after format update | Same event uid, one-hour display with empty description, disabled default plus sole at-start alert, Focus link, no busy time | C, live iCloud readback |
 | Follow a Calendar UID link after rename or project move | Focus selects the exact task; folded area, future pile and project steps open, including a single step and a project dated later than its step; no new note tab | M, E, P; native owner-vault probe |
 | Follow a UID link to Waiting on a phone | Waiting opens and the exact task is selected without a note tab | P |
 | Follow a link immediately after saving Waiting while metadata is delayed | Wait for the index to match the saved note before choosing the shelf; no stale-status navigation | M, P |

@@ -56,6 +56,7 @@ What you can do in the view:
 | Finish a project's current steps | check off its last step: within a visible area the empty project row remains for the day, marked «done N», and its «+» adds the next step. This does not automatically close the project |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** saves and leaves the row selected (a wiped row keeps its text) |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date, **⌘/Ctrl+5** «Waiting…» (the card asks when to look again), **⌘/Ctrl+Enter** saves and opens the task as a note, **⌘/Ctrl+⌫** deletes the task (Undo in the notice) and moves the editor to the row above; a day that takes the row out of its list sends it off at once and moves the editor to the next row |
+| Duplicate | **⌘/Ctrl+D** while editing or selecting inserts a copy above each source and immediately edits the first copy. Each copy has its own UID; one Undo removes the whole group. A copy of Waiting work is open and its new shelf is revealed if hidden |
 | Undo | **⌘/Ctrl+Z** in the list takes back the last change (a tick, a date, a move, a delete) and selects the rows it touched; while editing, with nothing typed yet, it does the same — typed text keeps the editor's own undo |
 | Date picker | click the date on the right, type `25.12` / `tomorrow` or pick a day, then Save / Enter; the same task card accepts an optional hour, blank means day-only |
 | Add a task | **+** on an area or a project header; «Empty» in an empty area |
@@ -93,7 +94,7 @@ TaskNotes is optional. The plugin reads and writes task notes independently.
 If used, recurring-instance completion is delegated to TaskNotes; undo that occurrence
 in TaskNotes. Focus Undo preserves changes owned by the companion.
 Apple Calendar notification support uses the optional host bridge in [the integration guide](CALENDAR_INTEGRATION.md).
-An explicit scheduled hour automatically creates a 30-minute reminder event with one alert
+An explicit scheduled hour automatically creates a one-hour reminder event with one alert
 at its start; dates alone do not create events. Change the day without losing the hour;
 clear the clock to remove the reminder. The calendar check icon appears only after iCloud
 confirms the current task and time. Pending/error icons never claim success. Calendar links
@@ -285,10 +286,10 @@ passes (`--keep` leaves it).
 
 Открыть: иконка на ленте или команда **Focus Tasks: Открыть Фокус**, либо блок ` ```focus-tasks``` `
 в любой заметке. Клик по тексту — правка на месте (Enter — сохранить и новая строка ниже, Esc —
-сохранить и выделить строку; ⌘1 сегодня, ⌘2 завтра, ⌘3 календарь, ⌘4 без даты, ⌘5 «Жду…», ⌘D - копия задачи прямо под ней (правка переходит в копию), ⌘Enter - открыть задачу заметкой, ⌘⌫ - удалить задачу целиком и перейти на строку выше; ⌘Z, пока ничего не
+сохранить и выделить строку; ⌘1 сегодня, ⌘2 завтра, ⌘3 календарь, ⌘4 без даты, ⌘5 «Жду…», ⌘D - копия задачи прямо над ней, сразу в режиме правки, ⌘Enter - открыть задачу заметкой, ⌘⌫ - удалить задачу целиком и перейти на строку выше; ⌘Z, пока ничего не
 набрано, отменяет последнее действие списка). Ручка слева — перетаскивание, клик по ней — выделить
 строку, правый клик — меню. На телефоне меню открывается долгим нажатием на текст. Выделенная строка — блок целиком, как в Notion:
-↑/↓ ходят по списку, Shift+↑/↓ расширяют, Enter — правка, ⌫ — удалить (с «Вернуть»), ⌘1–4 — дата, ⌘5 — «Жду…», ⌘D — копии выделенных задач (выделяются копии),
+↑/↓ ходят по списку, Shift+↑/↓ расширяют, Enter — правка, ⌫ — удалить (с «Вернуть»), ⌘1–4 — дата, ⌘5 — «Жду…», ⌘D — копии над выделенными задачами (сразу редактируется первая копия),
 ⌘Z — отменить последнее действие (строки, которых оно касалось, выделяются), Esc — снять выделение.
 Shift+клик выделяет все задачи от последней кликнутой до этой, ⌘/Ctrl+клик добавляет или убирает
 одну; ручка выделенных строк тащит их все, а дата, меню и клавиши работают на всех сразу.
@@ -340,7 +341,7 @@ Shift+клик выделяет все задачи от последней кл
 TaskNotes для работы списка не нужен. Если используются повторы, их выполнение
 делегируется TaskNotes; отменять выполнение такого повтора нужно в нём.
 Apple Calendar подключается отдельным мостом:
-[как устроено подключение](CALENDAR_INTEGRATION.md). У задачи со временем появляется получасовое
+[как устроено подключение](CALENDAR_INTEGRATION.md). У задачи со временем появляется часовое
 событие с уведомлением. Обычная дата не создаёт ночных уведомлений. Перенос дня сохраняет
 час; удаление часа убирает напоминание. Это событие Calendar, отдельное от задачи Apple Reminders.
 Для этих событий дефолтный алерт отключён; уведомление приходит в момент начала.
