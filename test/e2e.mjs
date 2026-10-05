@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { Page, PORT, J, sleep, ymd, until } from "./cdp.mjs";
 import { checkRowAlignment } from "./row-alignment.mjs";
+import { checkIntentsUI } from "./intents-ui.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -203,7 +204,7 @@ step("opens with an onboarding and the area buttons", async () => {
   await toPane(); // an optional companion can open its own startup tab
   await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .ft-onboarding')`), "onboarding");
   const foot = await page.eval(`return __ft.all('.ft-foot-button', __ft.view()).map((b) => b.textContent.trim())`);
-  if (J(foot) !== J(["+ Area"])) throw new Error("footer: " + J(foot));
+  if (J(foot) !== J(["Ideas", "+ Area"])) throw new Error("footer: " + J(foot));
   if (!(await page.eval(`return !!document.querySelector('.side-dock-ribbon-action[aria-label="Open Focus"]')`))) throw new Error("no ribbon icon");
 });
 
@@ -674,12 +675,14 @@ step("«Waiting…» sends the task off: a day, an hour typed in two segments, a
   if (card.date !== ddmmyy(TODAY)) throw new Error(`the day is not today by default: ${J(card.date)}`);
   if (!/is-hh/.test(card.focused)) throw new Error(`the caret does not start in the hour: ${J(card.focused)}`);
   if (card.parts !== 2) throw new Error("the hour is not two segments");
+  // Always use a future day: a late-night run must not send Waiting into the past.
+  await page.eval(`document.querySelector('.ft-picker-input').value=${J(ddmmyy(TOMORROW))};return true;`);
   // two digits and the caret moves on by itself; two more and Tab is the end of it
   await page.type("23");
   await until(() => page.eval(`return /is-mm/.test(document.activeElement?.className || '')`), "the caret moved to the minutes");
   await page.type("56");
   await page.key("Tab");
-  await taskIs("Ask the lawyer", { status: "waiting", scheduled: `${TODAY}T23:56` }, "the moment is written in one change");
+  await taskIs("Ask the lawyer", { status: "waiting", scheduled: `${TOMORROW}T23:56` }, "the moment is written in one change");
   // sent off, the row is on the shelf at the bottom — opened, so its date can be clicked
   await plugin(`if (!p.waitingShown()) p.setWaitingShown(true); return true;`);
   await until(() => page.eval(`return !!__ft.task('Ask the lawyer')?.closest('.ft-waiting')`), "the row on the shelf");
@@ -2466,7 +2469,7 @@ step("configured companion plugins actually run in this test vault", async () =>
 
 step("commands are registered", async () => {
   const ids = await page.eval(`return Object.keys(app.commands.commands).filter((k) => k.startsWith('focus-tasks:')).sort()`);
-  const want = ["add-area", "add-task", "area-from-note", "find", "fold-all", "open", "steps-blocks", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
+  const want = ["add-area", "add-intent", "add-task", "area-from-note", "find", "fold-all", "open", "steps-blocks", "toggle-all", "undo", "unfold-all"].map((k) => "focus-tasks:" + k);
   // ⌘Z must not be claimed for the whole app: with it on the command, a note lost its own undo
   const claimed = await page.eval(`
     const hk = app.hotkeyManager;
@@ -2480,6 +2483,7 @@ step("commands are registered", async () => {
 
 // --- run ------------------------------------------------------------------------------------
 
+step("ideas are free notes, derive tasks, search by body and retain failed drafts", async () => { await checkIntentsUI(page); });
 step("row controls share first-line centres in pane, area and project views", async () => {
   fs.mkdirSync(SHOTS,{recursive:true});
   await checkRowAlignment(page,TODAY,TOMORROW,SHOTS);

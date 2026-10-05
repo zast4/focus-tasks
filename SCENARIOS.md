@@ -9,6 +9,17 @@ Four or five areas is a ZFG working norm, never a cap that hides additional work
 
 ## Scenario matrix
 
+Ideas remain Zettelkasten source material: free cards grouped by area, no completion or schedule.
+Capture and edit a card locally; a concurrent body/identity edit keeps the draft and refuses an
+overwrite. Search body text and reveal the card in Focus. Derive a concrete action into the backlog
+or today's Focus without consuming its source. Delete and Undo a card; derived tasks remain intact,
+and changed source bytes refuse stale deletion. The same flow must fit 320/390/430px touch screens
+with large text and Tasks/Blue Topaz enabled (`test/intents-ui.mjs`, E/P).
+TODO migration preserves all content outside blocks, nested prose, fenced examples and completed
+history. It is idempotent, has verified backups in the operator tool, and retains source material
+on creation/source-write failures. Retry reuses unchanged copies; conflicting changes refuse
+removal. One-file Undo restores the source and removes its owned cards (`test/intents.mjs`).
+
 M = `test/model.mjs`; A = `test/audit.mjs`; E = `test/e2e.mjs`;
 P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 

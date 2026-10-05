@@ -88,13 +88,15 @@ def scan(vault: Path, folder="Задачи", timezone="Europe/Moscow", exclude=(
             fm = yaml.safe_load(match[1]) if match else None
             if not isinstance(fm, dict):
                 raise ValueError("frontmatter missing")
+            kind = str(fm.get("type", "")).strip().lower()
+            if kind not in ("task", "задача"):
+                continue
             uid = str(fm.get("uid") or "")
             if uid:
                 if uid in out.seen:
                     out.duplicates.add(uid)
                 out.seen.add(uid)
-            kind = str(fm.get("type", "")).strip().lower()
-            if kind not in ("task", "задача") or not uid:
+            if not uid:
                 continue
             status = str(fm.get("status", "open")).strip().lower()
             tags = fm.get("tags") or []

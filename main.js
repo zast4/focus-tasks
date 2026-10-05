@@ -57,6 +57,7 @@ const CALENDAR_CONTRACT = "focus-view-at-start-v1";
 const PROJECT_WORDS = ["project", "проект"];
 const TASK_WORDS = ["task", "задача"];
 const TASK_TYPE = "задача";   // what a new task note gets; TASK_WORDS is what we also read
+const INTENT_TYPE = "замысел";
 // TaskNotes: the optional companion on the same notes. Its own field names are our contract
 // already; the one thing it has to be told is how to recognise a task.
 const COMPANION = { id: "tasknotes", repo: "callumalpass/tasknotes", property: "type" };
@@ -79,6 +80,7 @@ const DEFAULTS = {
   typeProject: "project",
   projectsHeading: "Projects",
   dateFormat: "DD.MM.YY",
+  todoIdeas: true,
 };
 
 // --- strings ----------------------------------------------------------------------------------
@@ -285,6 +287,30 @@ const STRINGS = {
 };
 
 let LANG = "en";
+Object.assign(STRINGS.en, {
+  intents: "Ideas", addIntent: "Add an idea", editIntent: "Edit idea", intentTitle: "Title",
+  intentBody: "Thoughts, possibilities, links…", intentArea: "Area", intentLoose: "Without an area",
+  intentSave: "Save", intentTask: "Create a task", intentTaskTitle: "What will you do?",
+  intentBacklog: "Backlog", intentFocus: "Focus today", intentSource: "From {0}",
+  intentChanged: "The note changed. Your draft is kept; reopen the current card before saving.",
+  intentFailed: "Could not save. Your draft is kept.", intentHint: "Possibilities to think about. They do not need to become tasks.",
+  intentDeleted: "Idea deleted", intentDeleteQ: "Delete this idea?",
+  intentDeleteDesc: "The card goes to the trash. Tasks created from it stay in their lists.",
+  intentDeleteTodo: "Remove this TODO block from its source note? Other sections and derived tasks stay in place.",
+  intentTodos: "Show TODO sections as ideas", intentTodosDesc: "Reads source notes without moving or completing their items.",
+});
+Object.assign(STRINGS.ru, {
+  intents: "Замыслы", addIntent: "Добавить замысел", editIntent: "Редактировать замысел", intentTitle: "Название",
+  intentBody: "Мысли, возможности, ссылки…", intentArea: "Область", intentLoose: "Без области",
+  intentSave: "Сохранить", intentTask: "Создать задачу", intentTaskTitle: "Что конкретно сделать?",
+  intentBacklog: "Отложка", intentFocus: "Фокус сегодня", intentSource: "Из {0}",
+  intentChanged: "Заметка изменилась. Черновик сохранён в редакторе; перед сохранением открой актуальную карточку.",
+  intentFailed: "Не удалось сохранить. Черновик остался в редакторе.", intentHint: "Возможности для размышления. Они не обязаны становиться задачами.",
+  intentDeleted: "Замысел удалён", intentDeleteQ: "Удалить замысел?",
+  intentDeleteDesc: "Карточка попадёт в корзину. Созданные из неё задачи останутся в своих списках.",
+  intentDeleteTodo: "Удалить этот TODO-блок из исходной заметки? Другие разделы и созданные задачи останутся на месте.",
+  intentTodos: "Показывать TODO-блоки как замыслы", intentTodosDesc: "Читает исходные заметки без переноса и выполнения пунктов.",
+});
 function t(key, ...args) {
   const s = (STRINGS[LANG] && STRINGS[LANG][key]) ?? STRINGS.en[key] ?? key;
   return typeof s === "string" ? s.replace(/\{(\d)\}/g, (_, i) => args[i] ?? "") : s;
@@ -678,7 +704,7 @@ class FindModal extends SuggestModal {
     const q = query.trim();
     if (!q) return this.items.slice(0, this.limit);
     const match = prepareFuzzySearch(q);
-    const kind = { area: 0, project: 1, task: 2 };
+    const kind = { area: 0, project: 1, task: 2, intent: 3 };
     return this.items
       .map((i) => ({ i, r: match(i.search) }))
       .filter((x) => x.r)
@@ -689,7 +715,7 @@ class FindModal extends SuggestModal {
   renderSuggestion(item, el) {
     el.addClass("ft-find-item");
     const icon = el.createSpan({ cls: "ft-find-icon" });
-    setIcon(icon, item.kind === "area" ? "layers" : item.kind === "project" ? "folder" : item.waiting ? "play" : "square");
+    setIcon(icon, item.kind === "area" ? "layers" : item.kind === "project" ? "folder" : item.kind === "intent" ? "lightbulb" : item.waiting ? "play" : "square");
     const body = el.createDiv({ cls: "ft-find-body" });
     body.createDiv({ cls: "ft-find-title", text: item.title });
     if (item.where) body.createDiv({ cls: "ft-find-where", text: item.where });
@@ -712,6 +738,95 @@ class NotePicker extends FuzzySuggestModal {
 }
 
 // One line of text: the name of a new area, project or task.
+// TODO sections remain source material. Fenced examples and nested headings are not new cards.
+function todoBlocks(text) {
+  const headings = [], views = []; let offset = 0, fence = null, front = /^\uFEFF?---\r?\n/.test(text), first = true;
+  for (const raw of text.match(/[^\n]*(?:\n|$)/g) || []) {
+    const line = raw.replace(/\r?\n$/, "");
+    if (front) { if (!first && /^---\s*$/.test(line)) front = false; }
+    else {
+      const f = /^ {0,3}(`{3,}|~{3,})/.exec(line);
+      if (f) { if (!fence) { if (/^ {0,3}(?:`{3,}|~{3,})\s*focus-tasks\b/.test(line)) views.push(offset); fence = f[1]; } else if (f[1][0] === fence[0] && f[1].length >= fence.length && !line.slice(f[0].length).trim()) fence = null; }
+      else if (!fence) { const h = /^ {0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line); if (h) headings.push({ start: offset, bodyStart: offset + raw.length, level: h[1].length, heading: h[2] }); }
+    }
+    first = false; offset += raw.length;
+  }
+  return headings.filter(h => /^TODO\b/i.test(h.heading)).map(h => {
+    const next = headings.find(n => n.start > h.start && n.level <= h.level);
+    const view = views.find(start => start > h.start);
+    const end = Math.min(next ? next.start : text.length, view ?? text.length);
+    return { ...h, end, body: text.slice(h.bodyStart, end), snapshot: text.slice(h.start, end) };
+  }).filter((b, i, all) => !all.some(p => p.start < b.start && p.end >= b.end));
+}
+
+const intentProse = text => {
+  let fence = null;
+  return text.split(/(?<=\n)/).map(line => {
+    const mark = line.match(/^\s{0,3}(`{3,}|~{3,})/);
+    if (mark) { if (!fence) fence = mark[1]; else if (mark[1][0] === fence[0] && mark[1].length >= fence.length && !line.slice(mark[0].length).trim()) fence = null; return line; }
+    if (fence) return line;
+    return line.replace(/^(\s*[-*+]\s+)\[([ xX])\][ \t]*(.*?)(\r?\n)?$/, (_, bullet, checked, body, newline) =>
+      bullet + (checked.trim() ? "~~" + body + "~~" : body) + (newline || ""));
+  }).join("");
+};
+
+class IntentModal extends Modal {
+  constructor(plugin, intent, area, onClose, task = false) {
+    super(plugin.app); Object.assign(this, { plugin, intent, area, finish: onClose, task });
+  }
+  onOpen() {
+    this.titleEl.setText(t(this.task ? "intentTask" : this.intent ? "editIntent" : "addIntent"));
+    this.modalEl.addClass("ft-intent-modal");
+    const form = this.contentEl;
+    form.createEl("label", { text: t(this.task ? "intentTaskTitle" : "intentTitle") });
+    const title = form.createEl("input", { cls: "ft-input ft-intent-title-input", type: "text" });
+    title.value = this.task ? "" : this.intent?.title || ""; title.disabled = !!(this.intent?.legacy && !this.task);
+    if (this.task) title.placeholder = this.intent?.title || t("intentTaskTitle");
+    form.createEl("label", { text: t("intentArea") });
+    const area = form.createEl("select", { cls: "ft-intent-area-input" });
+    area.createEl("option", { value: "", text: t("intentLoose") });
+    for (const name of [...new Set(this.plugin.notes().filter(n => !n.project).map(n => n.area))]) area.createEl("option", { value: name, text: name });
+    area.value = this.area || this.intent?.area || "";
+    const chosenArea = this.area || this.intent?.area;
+    if (chosenArea && ![...area.options].some(o => o.value === chosenArea)) { area.createEl("option", { value: chosenArea, text: chosenArea }); area.value = chosenArea; }
+    let body, destination;
+    if (this.task) {
+      destination = form.createEl("select", { cls: "ft-intent-destination" });
+      destination.createEl("option", { value: "", text: t("intentBacklog") });
+      destination.createEl("option", { value: "today", text: t("intentFocus") });
+    } else {
+      body = form.createEl("textarea", { cls: "ft-intent-body-input", attr: { placeholder: t("intentBody") } });
+      body.value = this.intent?.body || "";
+    }
+    const error = form.createDiv({ cls: "ft-intent-error", attr: { role: "alert" } });
+    const buttons = form.createDiv({ cls: "modal-button-container" });
+    const save = buttons.createEl("button", { cls: "mod-cta ft-intent-save", text: t(this.task ? "create" : "intentSave") });
+    save.onclick = async () => {
+      if (this.saving || !title.value.trim()) { title.focus(); return; }
+      this.saving = true; save.disabled = true; error.setText("");
+      try {
+        if (this.task) await this.plugin.taskFromIntent(this.intent, title.value.trim(), area.value || null, destination.value ? today() : null);
+        else if (this.intent) await this.plugin.saveIntent(this.intent, title.value.trim(), body.value, area.value || null);
+        else await this.plugin.createIntent(title.value.trim(), body.value, area.value || null);
+        this.close();
+      } catch (e) { error.setText(e.message === "intent-conflict" ? t("intentChanged") : t("intentFailed")); }
+      finally { this.saving = false; save.disabled = false; }
+    };
+    if (this.intent && !this.task) buttons.createEl("button", { cls: "ft-intent-delete", text: t("delete") }).onclick = () => {
+      if (this.saving) return;
+      new ConfirmModal(this.app, t("intentDeleteQ"), t(this.intent.legacy ? "intentDeleteTodo" : "intentDeleteDesc"), t("delete"), async () => {
+        this.saving = true; save.disabled = true; error.setText("");
+        try { await this.plugin.removeIntent(this.intent); this.close(); }
+        catch (e) { error.setText(e.message === "intent-conflict" ? t("intentChanged") : t("intentFailed")); }
+        finally { this.saving = false; save.disabled = false; }
+      }).open();
+    };
+    buttons.createEl("button", { text: t("cancel") }).onclick = () => { if (!this.saving) this.close(); };
+    setTimeout(() => (title.disabled ? body : title)?.focus(), 0);
+  }
+  onClose() { this.contentEl.empty(); this.finish?.(); }
+}
+
 class NameModal extends Modal {
   constructor(app, title, placeholder, onSubmit, action, value = "") {
     super(app);
@@ -892,12 +1007,14 @@ class FocusRenderer extends MarkdownRenderChild {
       const where = x.project ? `${x.area} › ${x.project}` : x.area;
       items.push({ kind: "task", title: x.text, where, when: day(x), search: `${x.text} ${x.project || ""} ${bare(x.area)}`, uid: x.uid, waiting: waitingBack(x) });
     }
+    for (const x of await p.intentCards()) items.push({ kind: "intent", title: x.title, where: [t("intents"), x.area || t("intentLoose")].join(" · "), search: `${x.title} ${x.body} ${x.area || ""}`, uid: x.uid, area: x.area });
     new FindModal(p.app, items, (item) => this.reveal(item)).open();
   }
 
   // Shows a found item in the list: whatever hides it is opened (the area, «All», the pile, the
   // project's steps, the «Waiting» shelf), then it is scrolled to and selected.
   async reveal(item, openNote = true) {
+    if (item.kind === "intent") return this.revealIntent(item);
     const p = this.plugin;
     const focus = (await p.collect(false)).map((a) => a.name);
     const wide = p.everything();
@@ -948,6 +1065,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // «Focus» clicked: the focus alone, as «All» turned off does it — the other areas and every ⏳ pile
   // go, the focus areas open; «Done» and «Waiting» close too.
   async focusOnly(areas, rest) {
+    this.plugin.setIntentsShown(false);
     const p = this.plugin;
     for (const a of areas) {
       delete p.data.folded["area:" + a.name];
@@ -983,6 +1101,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // and throw the scroll back to the top on every change.
   async build() {
     this.calendar = await this.plugin.calendarState();
+    this.intentNotes = this.plugin.intentsShown() ? await this.plugin.intentCards() : [];
     if (this.blockSrc !== null) this.page = this.plugin.blockPage(this.blockSrc, this.sourcePath);
     if (this.page) return this.page.area ? this.buildAreaPage() : this.buildPage();
     const p = this.plugin;
@@ -1060,6 +1179,12 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     const lost = p.orphans();
     if (lost.length) await this.orphanBlock(el, lost);
+    if (p.intentsShown()) {
+      const present = new Set(shownAreas.filter(a => p.isShown("area:" + a.name, rest.includes(a))).map(a => a.name));
+      const names = [...new Set(this.intentNotes.map(i => i.area || ""))];
+      if (!names.length) names.push("");
+      for (const name of names) if (!present.has(name)) await this.intentsBlock(el, name || null, true);
+    }
     // The day's closed work, all of it, in one block under the areas: nothing closed keeps an area
     // or a project on screen, so this is the one place to see it — and to untick a slip.
     const closed = p.closedToday();
@@ -1089,6 +1214,9 @@ class FocusRenderer extends MarkdownRenderChild {
       }
     }
     const foot = el.createDiv({ cls: "ft-foot" });
+    const ideas = foot.createEl("button", { cls: "ft-foot-button ft-intents-toggle", attr: { "aria-pressed": String(p.intentsShown()) } });
+    setIcon(ideas.createSpan(), "lightbulb"); ideas.createSpan({ text: t("intents") });
+    ideas.onclick = () => p.setIntentsShown(!p.intentsShown());
     // The bottom buttons keep their spot on screen: what opens or closes above them grows or shrinks
     // out of sight, and after «All» the place of the button is taken by «Other areas».
     const pin = (selector) => { this.pin = { selector, y: foot.getBoundingClientRect().top }; document.activeElement?.blur(); };
@@ -1192,6 +1320,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (area.rows.length) await this.list(box, area.rows, { area, all: true, pile: "all" });
     const add = box.createDiv({ cls: "ft-empty ft-empty-add", text: "+ " + t("addTask") });
     add.onclick = () => this.draft(last(), target);
+    await this.intentsBlock(box, area.name);
     const done = p.tasks().filter((x) => x.status === STATUS_DONE && x.area === area.name)
       .sort((x, y) => String(y.doneDate || "").localeCompare(String(x.doneDate || "")) || collator()(x.text, y.text));
     if (done.length) {
@@ -1704,6 +1833,66 @@ class FocusRenderer extends MarkdownRenderChild {
       };
     }
     if (!all && futureShown && area.ahead.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), area.ahead, area);
+    await this.intentsBlock(box, area.name);
+  }
+
+  openIntent(intent = null, area = null, task = false) {
+    if (this.editing || this.held) return;
+    this.clearSelection(); this.editing = true;
+    const modal = new IntentModal(this.plugin, intent, area, () => {
+      this.editing = false; this.plugin.setIntentsShown(true); this.render();
+    }, task);
+    try { modal.open(); } catch (e) { this.editing = false; throw e; }
+  }
+
+  async intentsBlock(el, area, separate = false) {
+    if (!this.plugin.intentsShown() && !this.page) return;
+    const p = this.plugin, key = "intents:" + (area || ""), open = p.intentsShown() && !p.data.folded[key];
+    const block = el.createDiv({ cls: "ft-intents", attr: { "data-intent-area": area || "" } });
+    const head = block.createDiv({ cls: "ft-intents-head" });
+    const toggle = head.createEl("button", { cls: "ft-intents-open", attr: { "aria-expanded": String(open) } });
+    setIcon(toggle.createSpan(), "lightbulb");
+    toggle.createSpan({ text: separate ? (area || t("intentLoose")) + " · " + t("intents") : t("intents") });
+    toggle.onclick = () => {
+      if (open) p.data.folded[key] = true; else delete p.data.folded[key];
+      p.saveFolds(); p.setIntentsShown(true);
+    };
+    const add = head.createEl("button", { cls: "ft-intents-add", attr: { "aria-label": t("addIntent") } });
+    setIcon(add, "plus"); add.onclick = () => this.openIntent(null, area);
+    if (!open) return;
+    const cards = (this.intentNotes || []).filter(i => (i.area || null) === (area || null));
+    if (!cards.length) block.createDiv({ cls: "ft-intents-hint", text: t("intentHint") });
+    for (const intent of cards) {
+      const card = block.createEl("article", { cls: "ft-intent-card", attr: { "data-intent-id": intent.uid } });
+      const cardHead = card.createDiv({ cls: "ft-intent-card-head" });
+      const title = cardHead.createEl("button", { cls: "ft-intent-title", text: intent.title });
+      title.onclick = () => this.openIntent(intent, area);
+      const task = cardHead.createEl("button", { cls: "ft-intent-task", attr: { "aria-label": t("intentTask") } });
+      setIcon(task, "list-plus"); task.onclick = () => this.openIntent(intent, area, true);
+      const body = card.createDiv({ cls: "ft-intent-body" });
+      // Old checkbox syntax is displayed as prose; it never becomes another executable queue.
+      const prose = intentProse(intent.body);
+      await MarkdownRenderer.render(p.app, prose, body, intent.file.path, this.inner);
+      this.bindMarkdownLinks(body, intent.file.path);
+      for (const input of body.querySelectorAll('input[type="checkbox"]')) input.remove();
+      const context = intent.sourceFile || intent.file;
+      const source = card.createEl("button", { cls: "ft-intent-source", text: t("intentSource", context.basename) });
+      source.onclick = () => p.app.workspace.getLeaf(this.leaf ? "tab" : false).openFile(context);
+    }
+  }
+
+  async revealIntent(item) {
+    const p = this.plugin, intent = (await p.intentCards()).find(i => i.uid === item.uid);
+    if (!intent) { new Notice(t("findGone")); return false; }
+    if (this.page && (!this.page.area || this.page.area.path !== p.notes().find(n => !n.project && n.area === intent.area)?.file.path)) {
+      const leaf = await p.openView(); return leaf.view.renderer.revealIntent(item);
+    }
+    delete p.data.folded["intents:" + (intent.area || "")]; p.saveFolds(); p.setIntentsShown(true);
+    await this.rerendered();
+    const card = [...this.containerEl.querySelectorAll(".ft-intent-card")].find(e => e.getAttribute("data-intent-id") === intent.uid);
+    if (!card) return false;
+    card.scrollIntoView({ block: "center" }); card.addClass("ft-found");
+    setTimeout(() => card.removeClass("ft-found"), 1400); return true;
   }
 
   // The day's closed work, in the block at the bottom of the screen: the tasks checked off today in
@@ -1797,6 +1986,20 @@ class FocusRenderer extends MarkdownRenderChild {
     if (note) tag.onclick = (e) => { if (picking(e)) return; e.stopPropagation(); this.open(note.file, e); };
   }
 
+  bindMarkdownLinks(text, source, pickRows = false) {
+    for (const a of text.querySelectorAll("a.internal-link")) {
+      const href = a.getAttr("data-href") || a.getAttr("href");
+      if (!href) continue;
+      a.addEventListener("click", e => {
+        e.preventDefault();
+        if (pickRows && picking(e)) return;
+        e.stopPropagation(); this.openLink(href, source, e);
+      });
+      a.addEventListener("mouseover", e => this.plugin.app.workspace.trigger("hover-link", {
+        event: e, source: "preview", hoverParent: this.inner, targetEl: a, linktext: href, sourcePath: source }));
+    }
+  }
+
   // A click on a row's text: a link inside it is left to itself, a task with a description opens as
   // a note, any other text goes into edit in place.
   textClick(task, text, e) {
@@ -1823,18 +2026,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // A [[link]] in the text opens its note. In a note's reading view Obsidian answers that click
     // itself; in the pane nobody does, and the link was dead. Opened the way a task's note is (never
     // over the pane itself), with the page preview on hover as anywhere else.
-    for (const a of text.querySelectorAll("a.internal-link")) {
-      const href = a.getAttr("data-href") || a.getAttr("href");
-      if (!href) continue;
-      a.addEventListener("click", (e) => {
-        e.preventDefault();
-        if (picking(e)) return;   // Shift/⌘-click picks the row, as anywhere on it
-        e.stopPropagation();
-        this.openLink(href, task.file.path, e);
-      });
-      a.addEventListener("mouseover", (e) => this.plugin.app.workspace.trigger("hover-link", {
-        event: e, source: "preview", hoverParent: this.inner, targetEl: a, linktext: href, sourcePath: task.file.path }));
-    }
+    this.bindMarkdownLinks(text, task.file.path, true);
     // the link is the words, not the cell: the rendered text is wrapped so a click can tell them apart
     if (task.described) {
       const link = createSpan({ cls: "ft-text-link" });
@@ -3128,6 +3320,9 @@ class FocusSettingTab extends PluginSettingTab {
         this.display();
       }));
     text("sAreaName", "sAreaNameDesc", "areaNoteName");
+    new Setting(containerEl).setName(t("intentTodos")).setDesc(t("intentTodosDesc")).addToggle(c => c.setValue(s.todoIdeas !== false).onChange(async value => {
+      s.todoIdeas = value; await p.saveAll(); p.refresh();
+    }));
     new Setting(containerEl).setName(t("sAreaFm")).setDesc(t("sAreaFmDesc")).addTextArea((c) => c
       .setPlaceholder('parents:\n  - "[[Projects]]"').setValue(s.areaFrontmatter).onChange(async (v) => {
         s.areaFrontmatter = v.replace(/\s+$/, "");
@@ -3272,6 +3467,9 @@ module.exports = class FocusTasks extends Plugin {
     this.addCommand({ id: "fold-all", name: t("cmdFoldAll"), callback: () => this.foldAll(folds(), false) });
     this.addCommand({ id: "unfold-all", name: t("cmdUnfoldAll"), callback: () => this.foldAll(folds(), true) });
     this.addCommand({ id: "add-task", name: t("cmdAddTask"), callback: () => this.addTask(today()) });
+    this.addCommand({ id: "add-intent", name: t("addIntent"), callback: async () => {
+      const leaf = await this.openView(); leaf.view.renderer.openIntent();
+    } });
     this.addCommand({ id: "add-area", name: t("cmdAddArea"), callback: () => this.newArea() });
     this.addCommand({ id: "find", name: t("cmdFind"), callback: async () => {
       await this.openView();
@@ -3445,6 +3643,7 @@ module.exports = class FocusTasks extends Plugin {
   // is an area — an area is one of your own notes (a hub in Base/, say), not a copy of it.
   classify(file, fields = null) {
     const fm = fields || this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (String(fm?.type || "").toLowerCase() === INTENT_TYPE) return null;
     if (!fm || !fm.area) return null;
     if (!this.inFolder(file) && !this.isAreaType(fm.type)) return null;
     if (this.isTaskType(fm.type)) return null;  // a task note carries `area:` too
@@ -3462,7 +3661,7 @@ module.exports = class FocusTasks extends Plugin {
 
   isTaskType(type) {
     const s = String(type ?? "").trim().toLowerCase();
-    return TASK_WORDS.includes(s) || s === String(this.settings.typeTask ?? "").trim().toLowerCase();
+    return !!s && (TASK_WORDS.includes(s) || s === String(this.settings.typeTask ?? "").trim().toLowerCase());
   }
 
   // Tasks nobody can see: no area of their own and no project to take one from. The view lists them
@@ -3479,14 +3678,17 @@ module.exports = class FocusTasks extends Plugin {
   // pass is thousands of cache lookups.
   read() {
     if (this.scan) return this.scan;
-    const notes = [], tasks = [], closed = [];
+    const notes = [], tasks = [], closed = [], intents = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
-      const task = this.taskOf(file);
+      const cache = this.app.metadataCache.getFileCache(file), fields = cache?.frontmatter || {};
+      const intent = this.intentOf(file, fields);
+      if (intent) { intents.push(intent); continue; }
+      const task = this.taskOf(file, fields, cache);
       if (task) { tasks.push(task); continue; }
-      const note = this.classify(file);
+      const note = this.classify(file, fields);
       if (note) (note.done ? closed : notes).push(note);
     }
-    this.scan = { notes, tasks, closed };
+    this.scan = { notes, tasks, closed, intents };
     return this.scan;
   }
 
@@ -3570,10 +3772,10 @@ module.exports = class FocusTasks extends Plugin {
 
   // A task = its own note in the tasks folder: `type: задача`, the rest in the frontmatter. `uid` is
   // its identity and never changes; the file name is only a readable label.
-  taskOf(file, fields = null) {
+  taskOf(file, fields = null, cached = null) {
     const folder = this.tasksFolder;
     if (folder && folder !== "/" && !file.path.startsWith(folder + "/")) return null;
-    const cache = this.app.metadataCache.getFileCache(file);
+    const cache = cached || this.app.metadataCache.getFileCache(file);
     const fm = fields || cache?.frontmatter;
     if (!fm || !this.isTaskType(fm.type)) return null;
     // Archived (the `archived` tag, as TaskNotes marks it): history, not a task — the focus never
@@ -3595,6 +3797,196 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   tasks() { return this.read().tasks; }
+
+  intentOf(file, fields = null) {
+    const fm = fields || this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (String(fm?.type || "").trim().toLowerCase() !== INTENT_TYPE) return null;
+    const source = typeof fm.source === "string" && fm.source.match(/^\[\[([^\]|#]+)/)?.[1];
+    return { file, uid: String(fm.uid || file.path), title: String(fm.title || file.basename), area: typeof fm.intentArea === "string" ? fm.intentArea : null, boundArea: JSON.stringify(fm.intentArea || null),
+      sourceFile: source ? this.app.metadataCache.getFirstLinkpathDest(source, file.path) : null };
+  }
+
+  todoEligible(file, fm = {}) {
+    return !this.intentOf(file, fm) && !this.isTaskType(fm.type) && !file.path.startsWith("Internals/") && !isArchived(fm.tags);
+  }
+
+  intentArea(file, fm = {}) {
+    if (typeof fm.intentArea === "string") return fm.intentArea;
+    const own = this.classify(file, fm);
+    if (own) return own.area;
+    const possible = new Set(this.notes().filter(n => this.linked(n.file)?.path === file.path).map(n => n.area));
+    for (const link of [fm.area, ...[fm.areas].flat(), ...[fm.parents].flat()]) {
+      if (typeof link !== "string") continue;
+      const name = link.replace(/^\[\[/, "").replace(/\]\]$/, "").split("|")[0];
+      const target = this.app.metadataCache.getFirstLinkpathDest(name, file.path), area = target && this.classify(target);
+      if (area) possible.add(area.area);
+    }
+    return possible.size === 1 ? [...possible][0] : null;
+  }
+
+  intentsShown() { return this.app.loadLocalStorage("focus-tasks-intents") === "1"; }
+  setIntentsShown(on) { this.app.saveLocalStorage("focus-tasks-intents", on ? "1" : null); this.refresh(); }
+
+  async intentCards() {
+    const cards = [];
+    const read = async file => {
+      if (this.app.vault.getAbstractFileByPath(file.path) !== file) return null;
+      try { return await this.app.vault.cachedRead(file); }
+      catch (e) { if (this.app.vault.getAbstractFileByPath(file.path) !== file) return null; throw e; }
+    };
+    for (const intent of this.read().intents) {
+      const raw = await read(intent.file); if (raw === null) continue;
+      cards.push({ ...intent, raw, body: splitNote(raw)[1] });
+    }
+    if (this.settings.todoIdeas !== false) for (const file of this.app.vault.getMarkdownFiles()) {
+      const cache = this.app.metadataCache.getFileCache(file), fm = cache?.frontmatter || {};
+      if (!this.todoEligible(file, fm) || !cache?.headings?.some(h => /^TODO\b/i.test(h.heading))) continue;
+      const raw = await read(file); if (raw === null) continue;
+      const area = this.intentArea(file, fm);
+      for (const [i, block] of todoBlocks(raw).entries()) if (block.body.trim()) {
+        const suffix = block.heading.replace(/^TODO\s*/i, "").trim();
+        const ownArea = fm.intentAreas && Object.prototype.hasOwnProperty.call(fm.intentAreas, block.heading);
+        const binding = JSON.stringify({ inherited: fm.intentArea || null, own: ownArea ? fm.intentAreas[block.heading] : undefined });
+        cards.push({ file, uid: "todo:" + file.path + ":" + i, title: file.basename + (suffix ? " · " + suffix : ""),
+          area: ownArea ? (typeof fm.intentAreas[block.heading] === "string" ? fm.intentAreas[block.heading] : null) : area, boundArea: binding, body: block.body, legacy: block });
+      }
+    }
+    return cards.sort((a, b) => collator()(a.title, b.title));
+  }
+
+  async createIntent(title, body = "", area = null, tx = null, origin = null) {
+    if (typeof title !== "string" || !title.trim() || typeof body !== "string") throw Error("intent-invalid");
+    title = title.trim();
+    return this.track(t("addIntent"), [], async tx => {
+      await this.ensureFolder(this.folder);
+      const base = fileName(title).slice(0, 60) || t("intents"); let name = base, n = 2;
+      while (this.app.vault.getAbstractFileByPath(normalizePath(this.folder + "/" + name + ".md"))) name = base + " (" + n++ + ")";
+      const fields = { uid: newUid(), type: INTENT_TYPE, title };
+      if (origin) Object.assign(fields, { source: origin.source, sourceHeading: origin.heading, intentImportKey: origin.key });
+      if (area) { fields.intentArea = area; const note = this.notes().find(a => !a.project && a.area === area); if (note) fields.parents = ["[[" + note.file.path.replace(/\.md$/, "") + "]]"]; }
+      const raw = "---\n" + stringifyYaml(fields) + "---\n" + body;
+      const file = await this.createOwned(normalizePath(this.folder + "/" + name + ".md"), raw, tx);
+      return { ...this.intentOf(file, fields), body, raw };
+    }, tx);
+  }
+
+  async migrateTodoFile(file, expected = null) {
+    return this.track(t("intents"), [file], async tx => {
+      if (this.app.vault.getAbstractFileByPath(file.path) !== file) throw Error("intent-conflict");
+      const raw = await this.app.vault.read(file), [front] = splitNote(raw);
+      const fm = front ? parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")) : {};
+      if (expected !== null && raw !== expected) throw Error("intent-conflict");
+      if (!this.todoEligible(file, fm)) throw Error("intent-ineligible");
+      const blocks = todoBlocks(raw), moved = [];
+      this.intentCopies ||= new Map();
+      for (const block of blocks) {
+        if (!block.body.trim()) { moved.push({ heading: block.heading, empty: true }); continue; }
+        const suffix = block.heading.replace(/^TODO\s*/i, "").trim(), title = file.basename + (suffix ? " · " + suffix : "");
+        const own = fm.intentAreas && Object.prototype.hasOwnProperty.call(fm.intentAreas, block.heading);
+        const area = own ? (typeof fm.intentAreas[block.heading] === "string" ? fm.intentAreas[block.heading] : null) : this.intentArea(file, fm);
+        const digest = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(file.path + "\0" + block.start + "\0" + block.snapshot));
+        const key = Array.from(new Uint8Array(digest), x => x.toString(16).padStart(2, "0")).join("");
+        const body = intentProse(block.body), candidates = new Set(this.app.vault.getMarkdownFiles().filter(f => this.app.metadataCache.getFileCache(f)?.frontmatter?.intentImportKey === key));
+        const recovery = this.intentCopies.get(key);
+        if (recovery && this.app.vault.getAbstractFileByPath(recovery.path) === recovery) candidates.add(recovery);
+        const matches = [];
+        for (const candidate of candidates) {
+          const text = await this.app.vault.read(candidate), [head, content] = splitNote(text);
+          const fields = head ? parseYaml(head.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")) : {};
+          if (fields?.intentImportKey === key) matches.push({ file: candidate, text, content, fields });
+        }
+        if (matches.length > 1 || matches.some(m => m.content !== body || m.fields.title !== title || m.fields.type !== INTENT_TYPE)) throw Error("intent-conflict");
+        const intent = matches.length ? { ...this.intentOf(matches[0].file, matches[0].fields), body } :
+          await this.createIntent(title, body, area, tx, { source: "[[" + file.path.replace(/\.md$/, "") + "]]", heading: block.heading, key });
+        this.intentCopies.set(key, intent.file);
+        const text = await this.app.vault.read(intent.file);
+        if (splitNote(text)[1] !== body || !text.includes(key)) throw Error("intent-copy-failed");
+        moved.push({ heading: block.heading, title, area: intent.area, path: intent.file.path, uid: intent.uid });
+      }
+      // Copies survive a failed source write and are reused on retry, never silently deleted.
+      let after = raw;
+      for (const block of [...blocks].reverse()) after = after.slice(0, block.start) + after.slice(block.end);
+      await this.processOwned(file, live => { if (live !== raw) throw Error("intent-conflict"); return after; }, tx);
+      this.forgetScan(); this.refresh();
+      return { source: file.path, before: raw, after, moved };
+    });
+  }
+
+  async saveIntent(intent, title, body, area = null) {
+    return this.track(t("editIntent"), [intent.file], async tx => {
+      if (this.app.vault.getAbstractFileByPath(intent.file.path) !== intent.file) throw Error("intent-conflict");
+      await this.processOwned(intent.file, raw => {
+        let next = raw; const [front, oldBody] = splitNote(raw);
+        const fm = front ? parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")) : {};
+        if (!fm || typeof fm !== "object" || Array.isArray(fm)) throw Error("intent-conflict");
+        const ownArea = intent.legacy && fm.intentAreas && Object.prototype.hasOwnProperty.call(fm.intentAreas, intent.legacy.heading);
+        const binding = intent.legacy ? JSON.stringify({ inherited: fm.intentArea || null, own: ownArea ? fm.intentAreas[intent.legacy.heading] : undefined }) : JSON.stringify(fm.intentArea || null);
+        if (binding !== intent.boundArea) throw Error("intent-conflict");
+        const newline = raw.includes("\r\n") ? "\r\n" : "\n";
+        if (intent.legacy) {
+          if (!this.todoEligible(intent.file, fm)) throw Error("intent-conflict");
+        const matches = todoBlocks(raw).filter(b => b.snapshot === intent.legacy.snapshot);
+          if (matches.length !== 1) throw Error("intent-conflict");
+          const b = matches[0]; let text = body.replace(/\r?\n/g, newline);
+          if (b.end < raw.length && !text.endsWith(newline)) text += newline;
+          next = raw.slice(0, b.bodyStart) + text + raw.slice(b.end);
+          if (area === intent.area) return next;
+          if (todoBlocks(raw).filter(x => x.heading === b.heading).length !== 1) throw Error("intent-conflict");
+          if (fm.intentAreas && (typeof fm.intentAreas !== "object" || Array.isArray(fm.intentAreas))) throw Error("intent-conflict");
+          fm.intentAreas = { ...(fm.intentAreas || {}), [intent.legacy.heading]: area };
+        } else {
+          const actual = this.intentOf(intent.file, fm);
+          if (!actual || actual.uid !== intent.uid || actual.title !== intent.title || oldBody !== intent.body) throw Error("intent-conflict");
+          fm.title = title; next = front + "\n" + body;
+          if (area !== intent.area) {
+            const old = this.notes().find(n => !n.project && n.area === intent.area), to = this.notes().find(n => !n.project && n.area === area);
+            const owned = old ? ["[[" + old.file.basename + "]]", "[[" + old.file.path.replace(/\.md$/, "") + "]]"] : [];
+            if (Array.isArray(fm.parents)) fm.parents = fm.parents.filter(v => !owned.includes(v));
+            if (to) fm.parents = [...new Set([...(Array.isArray(fm.parents) ? fm.parents : []), "[[" + to.file.path.replace(/\.md$/, "") + "]]"])];
+          }
+        }
+        if (!intent.legacy) { if (area) fm.intentArea = area; else delete fm.intentArea; }
+        const bodyNext = splitNote(next)[1];
+        return (raw.startsWith("\uFEFF") ? "\uFEFF" : "") + "---" + newline + stringifyYaml(fm).replace(/\r?\n/g, newline) + "---" + newline + bodyNext;
+      }, tx);
+      return true;
+    });
+  }
+
+  async removeIntent(intent) {
+    return this.undoable(t("intentDeleted"), [intent.file], async tx => {
+      if (this.app.vault.getAbstractFileByPath(intent.file.path) !== intent.file) throw Error("intent-conflict");
+      if (intent.legacy) await this.processOwned(intent.file, raw => {
+        const [front] = splitNote(raw), fm = front ? parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")) : {};
+        if (!this.todoEligible(intent.file, fm)) throw Error("intent-conflict");
+        const matches = todoBlocks(raw).filter(b => b.snapshot === intent.legacy.snapshot);
+        if (matches.length !== 1) throw Error("intent-conflict");
+        return raw.slice(0, matches[0].start) + raw.slice(matches[0].end);
+      }, tx);
+      else {
+        if (typeof intent.raw !== "string") throw Error("intent-conflict");
+        const [front] = splitNote(intent.raw), fm = front ? parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")) : {};
+        if (this.intentOf(intent.file, fm)?.uid !== intent.uid) throw Error("intent-conflict");
+        await this.trashOwned(intent.file, tx, intent.raw);
+      }
+      this.forgetScan(); this.refresh();
+    });
+  }
+
+  async taskFromIntent(intent, title, area = null, day = null) {
+    if (typeof title !== "string" || !title.trim()) throw Error("intent-invalid");
+    return this.track(t("intentTask"), [], async tx => {
+      if (this.app.vault.getAbstractFileByPath(intent.file.path) !== intent.file) throw Error("intent-conflict");
+      if (!intent.legacy) {
+        const [front] = splitNote(await this.app.vault.read(intent.file));
+        const actual = this.intentOf(intent.file, parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")));
+        if (!actual || actual.uid !== intent.uid) throw Error("intent-conflict");
+      }
+      const task = await this.createTask(title, { area }, day, tx);
+      await this.frontOwned(task.file, fm => { fm.source = "[[" + intent.file.path.replace(/\.md$/, "") + "]]"; }, tx);
+      return task;
+    });
+  }
 
   // → [{name, note, rows, ahead, done, projects, focus, later, running}]. Every pile of an area is a
   // list of rows, and a row is a task or a project: a project shows as one row — its name and the
@@ -4935,8 +5327,9 @@ module.exports = class FocusTasks extends Plugin {
     }
   }
 
-  async trashOwned(file, tx) {
+  async trashOwned(file, tx, expected = null) {
     const before = await this.app.vault.read(file);
+    if (expected !== null && before !== expected) throw Error("intent-conflict");
     await this.trash(file);
     tx?.record(file.path, before, null);
   }

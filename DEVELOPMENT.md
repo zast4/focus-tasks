@@ -120,8 +120,34 @@ Other tools read the same notes, so keep these stable:
   other's headers back open — a click that undid itself a second later. The first run on a device
   still inherits whatever `data.json` remembers.
 
-Tasks the plugin does not touch: `cancelled` and `someday` (хотелки in ordinary notes are not migrated
-yet). The Tasks plugin is not part of this model — a task is no longer a checkbox line.
+Tasks the plugin does not touch: `cancelled` and `someday`. The Tasks plugin is not part of this
+model: a task is no longer a checkbox line.
+
+### Ideas are source material, not another task queue
+
+An idea is an ordinary note with `type: замысел`, immutable `uid`, `title`, optional `intentArea`
+and area `parents`. Its body is free Markdown. It has no status, date, priority, completion control
+or Calendar event. **Do not use `area` for this type**: the Python reader interprets untyped notes
+with that field as area/project records. `classify` explicitly excludes ideas.
+The lightbulb footer toggles their per-area cards; search includes title and body. Visibility and
+folds are per device. Deriving an action keeps the idea and writes an independent task with `source`.
+Derivation starts with an empty action title. Card deletion is confirmed and undoable; it checks
+the full read snapshot and leaves derived tasks intact. Legacy deletion removes just the bound block.
+
+Legacy TODO headings can be discovered without writing their source. `migrateTodoFile` transfers
+one heading block to one idea, preserving surrounding source bytes, prose, hierarchy and completed
+history (strikethrough). Fenced examples are untouched. Imported cards add `source`, `sourceHeading`
+and SHA-256 `intentImportKey`; the source block is removed only after verified copies exist.
+Partial failures leave the source and copies intact. Retry reuses unchanged recovery copies;
+conflicting copies or source edits refuse removal. A single-file migration is one Undo action.
+
+`node tools/migrate-todo-to-intents.mjs` prints a read-only plan for an open native vault.
+`--execute` creates and verifies private backups outside the vault before any removal and records
+each result in the backup's report. It excludes task notes, internal files and archived sources.
+Never commit private backups or migration reports into the public plugin repository.
+
+Run `node --test test/intents.mjs` for identity, concurrency and migration failure scenarios;
+the shared `test/intents-ui.mjs` drives native desktop and touch scenarios inside disposable vaults.
 
 ### TaskNotes on the same notes
 

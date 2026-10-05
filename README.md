@@ -104,6 +104,20 @@ the link. Missing, ambiguous or closed tasks produce a notice; unfinished edits 
 There is no separate reminder menu.
 An event notification and a native Apple Reminders checkbox are different integrations.
 
+## Ideas
+
+The lightbulb button opens free idea cards grouped by area, including an unassigned group.
+Cards have a title and Markdown body, with no dates, checkboxes or completion counters. Search
+finds both title and body and reveals the card inside Focus. The plus creates a card; its action
+button derives a concrete task into the backlog or today's Focus while keeping the idea.
+The action asks for its own text. The editor also deletes cards with confirmation and Undo;
+derived tasks remain independent. A changed source refuses stale deletion.
+Area pages include the same cards. Visibility and folding stay on each device.
+
+Existing TODO headings can appear as source cards without changing their notes. Completed items
+are historical prose, not executable checkboxes. Explicit migration creates one idea note per
+block, retains a link to its source and removes only that block after verifying the copy.
+
 ## Settings
 
 | Setting | Default | |
@@ -322,6 +336,21 @@ Shift+клик выделяет все задачи от последней кл
 Установка руками: распаковать `focus-tasks-<версия>.zip` в `<хранилище>/.obsidian/plugins/`
 (получится папка `focus-tasks`), перезапустить Obsidian и включить плагин в
 *Настройки → Сторонние плагины*.
+
+### Замыслы
+
+Кнопка с лампочкой открывает свободные карточки по областям, включая "Без области".
+У карточки есть заголовок и текст Markdown, без дат, галочек и счётчиков выполнения.
+Общий поиск находит заголовок и содержимое и показывает карточку внутри Фокуса.
+Плюс добавляет замысел. Кнопка создания задачи сохраняет карточку и добавляет самостоятельное
+действие в отложку или сегодняшний Фокус. Замыслы также доступны в view заметки области.
+Для задачи нужно написать конкретное действие. В редакторе карточки есть удаление с
+подтверждением и отменой; созданные задачи сохраняются. Чужая правка запрещает старое удаление.
+Видимость и свёртка сохраняются отдельно на каждом устройстве.
+
+Старые TODO-блоки могут отображаться без записи в исходные заметки. При явном переносе каждый
+блок становится отдельной заметкой-замыслом со ссылкой на источник. Выполненные пункты остаются
+зачёркнутой историей. После проверки копии убирается только перенесённый блок.
 
 ### Страницы областей, телефон и напоминания
 

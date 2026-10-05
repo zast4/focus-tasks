@@ -557,6 +557,31 @@ body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-grip {
 }
 
 .focus-tasks-view .ft-focus-title { cursor: pointer; }
+.focus-tasks-view .ft-intents { margin: 0.8rem 0; min-width: 0; }
+.focus-tasks-view .ft-intents-head { display: flex; align-items: center; gap: 0.4rem; }
+.focus-tasks-view .ft-intents-head button { background: none; box-shadow: none; color: var(--text-muted); }
+.focus-tasks-view .ft-intents-open { flex: 1; display: flex; align-items: center; justify-content: flex-start; gap: 0.5rem; text-align: left; min-width: 0; height: auto; white-space: normal; }
+.focus-tasks-view .ft-intents-head svg { width: 1rem; height: 1rem; flex: none; }
+.focus-tasks-view .ft-intents-hint { padding: 0.5rem; color: var(--text-muted); font-size: 0.85em; }
+.focus-tasks-view .ft-intent-card { margin: 0.5rem 0; padding: 0.75rem; border: 1px solid var(--background-modifier-border); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; background: var(--background-primary-alt); }
+.focus-tasks-view .ft-intent-card-head { display: flex; align-items: flex-start; gap: 0.5rem; min-width: 0; }
+.focus-tasks-view .ft-intent-title { flex: 1; min-width: 0; justify-content: flex-start; white-space: normal; height: auto; text-align: left; font: inherit; line-height: var(--ft-line); padding: 0; background: none; box-shadow: none; overflow-wrap: anywhere; }
+.focus-tasks-view .ft-intent-task { flex: none; display: flex; align-items: center; justify-content: center; background: none; box-shadow: none; padding: 0.25rem; }
+.focus-tasks-view .ft-intent-task svg { width: 1rem; height: 1rem; }
+.focus-tasks-view .ft-intent-body { color: var(--text-muted); margin: 0.6rem 0; overflow-wrap: anywhere; }
+.ft-intent-modal .modal-button-container { flex-wrap: wrap; gap: 0.5rem; }
+.focus-tasks-view .ft-intent-body > :first-child { margin-top: 0; }
+.focus-tasks-view .ft-intent-body > :last-child { margin-bottom: 0; }
+.focus-tasks-view .ft-intent-body img { max-width: 100%; }
+.focus-tasks-view .ft-intent-body pre { overflow-x: auto; max-width: 100%; }
+.focus-tasks-view .ft-intent-source { padding: 0; height: auto; max-width: 100%; white-space: normal; overflow-wrap: anywhere; background: none; box-shadow: none; color: var(--text-faint); font-size: 0.8em; text-align: left; }
+.ft-intent-modal .ft-intent-body-input { width: 100%; min-height: 12rem; resize: vertical; margin: 0.7rem 0; }
+.ft-intent-modal .ft-input, .ft-intent-modal select { width: 100%; margin: 0.4rem 0 0.8rem; }
+.ft-intent-modal label { display: block; }
+.ft-intent-error { color: var(--text-error); white-space: normal; overflow-wrap: anywhere; }
+body.is-mobile .focus-tasks-view .ft-intent-task, body.is-mobile .focus-tasks-view .ft-intents-add { min-width: 44px; min-height: 44px; }
+body.is-mobile .focus-tasks-view .ft-intent-title { min-height: 44px; }
+body.is-mobile .ft-intent-modal textarea { font-size: 16px; min-height: 8rem; }
 .focus-tasks-view .ft-focus-title:hover { color: var(--text-normal); }
 
 /* ⌘F: the finder. Icon, name, where it lives underneath, the day on the right. */

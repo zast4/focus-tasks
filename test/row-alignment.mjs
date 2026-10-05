@@ -13,12 +13,13 @@ export async function checkRowAlignment(page, today, tomorrow, shots) {
     const tasks=[];
     for(const [i,name] of ${J(names)}.entries()) {
       const task=await p.createTask(name,{area:'Alignment Area',project:i===0?'Alignment Project':null},${J(today)});
-      await p.setFields(task,{scheduled:${J(today+'T01:00')},...(i<2?{status:i===1?'waiting':'open',priority:'low',due:${J(tomorrow)}}:{})});tasks.push(task);
+      // Midnight is always due today; 01:00 incorrectly hides the Waiting fixture before 1 AM.
+      await p.setFields(task,{scheduled:${J(today+'T00:00')},...(i<2?{status:i===1?'waiting':'open',priority:'low',due:${J(tomorrow)}}:{})});tasks.push(task);
     }
     await p.createTask('Alignment future project step',{area:'Alignment Area',project:'Alignment Project'},${J(tomorrow)});
     await p.setEverything(true);await p.setOpen('area:Alignment Area',true);p.data.opened['steps:'+project.path]=false;p.saveFolds();
     for(const dir of ['Internals','Internals/FocusTasks'])if(!app.vault.getAbstractFileByPath(dir))await app.vault.createFolder(dir);
-    const receipt={schema:2,contract:'focus-view-at-start-v1',enabled:true,connected:true,tasks:Object.fromEntries(tasks.map((t,i)=>[t.uid,{file:t.file.path,title:t.text,scheduled:${J(today+'T01:00')},waiting:i===1,status:'synced',checkedAt:new Date().toISOString()}]))};
+    const receipt={schema:2,contract:'focus-view-at-start-v1',enabled:true,connected:true,tasks:Object.fromEntries(tasks.map((t,i)=>[t.uid,{file:t.file.path,title:t.text,scheduled:${J(today+'T00:00')},waiting:i===1,status:'synced',checkedAt:new Date().toISOString()}]))};
     const file='Internals/FocusTasks/calendar-status.md',text=${J('---\ntype: focus-tasks-calendar-status\n---\n\n```json\n')}+JSON.stringify(receipt)+${J('\n```\n')};
     const old=app.vault.getAbstractFileByPath(file);if(old)await app.vault.modify(old,text);else await app.vault.create(file,text);
     p.refresh();return {area:area.path,project:project.path};

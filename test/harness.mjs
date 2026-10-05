@@ -120,7 +120,8 @@ class FakeMetadataCache {
     const sections = [];
     if (front !== null) sections.push({ type: "yaml" });
     if (body.trim()) sections.push({ type: "paragraph" });
-    try { return front === null ? { sections } : { frontmatter: parseYaml(front), sections }; }
+    const headings = [...body.matchAll(/^(#{1,6})\s+(.+)$/gm)].map(m => ({ level: m[1].length, heading: m[2] }));
+    try { return front === null ? { sections, headings } : { frontmatter: parseYaml(front), sections, headings }; }
     catch { return { sections }; }
   }
   // As Obsidian resolves: the full path, then a path ending in the link («b/Plan»), then the name;

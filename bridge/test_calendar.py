@@ -230,6 +230,17 @@ class ScanTests(unittest.TestCase):
         p.write_text(p.read_text().replace("2030-01-04T16:30", "2030-01-04"))
         self.assertEqual(scan(self.vault).desired, {})
 
+    def test_ideas_never_create_or_block_task_reminders(self):
+        self.write()
+        idea = self.vault / "Задачи/Idea.md"
+        idea.write_text('---\ntype: замысел\nuid: one\nintentArea: Work\nscheduled: 2030-01-04T16:30\n---\nPossibilities\n')
+        before = idea.read_bytes()
+        result = scan(self.vault)
+        self.assertEqual(set(result.desired), {"one"})
+        self.assertEqual(result.duplicates, set())
+        self.assertEqual(result.errors, [])
+        self.assertEqual(idea.read_bytes(), before)
+
     def test_timezone_offset_is_preserved(self):
         self.write()
         p = self.vault / "Задачи/One.md"
