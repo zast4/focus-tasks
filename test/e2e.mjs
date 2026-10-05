@@ -2138,7 +2138,7 @@ step("local area rows are flat like the project page while the global focus keep
   if(projectRows.some(r=>Math.abs(r.offset-areaRows[0].offset)>1))throw new Error('area and project pages have different insets: '+J({areaRows,projectRows}));
   await toPane();
   await plugin(`p.setEverything(true);await p.setOpen('area:Audit Area',true);return true;`);
-  await until(()=>page.eval(`return __ft.area('Audit Area')?.closest('.ft-area').querySelectorAll('.ft-steps li.ft-task').length===2;`),'global project hierarchy');
+  await until(()=>page.eval(`const root=__ft.area('Audit Area')?.closest('.ft-area');const steps=[...root.querySelectorAll('.ft-steps li.ft-task')].map(el=>app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.items.get(el)?.task?.text);return ['Audit second project step','Audit third project step','Audit project step'].every(name=>steps.includes(name));`),'global project hierarchy including the single future step');
   const global=await page.eval(`const root=__ft.area('Audit Area').closest('.ft-area');const project=root.querySelector('li.ft-project-row');const step=root.querySelector('.ft-steps li.ft-task');return {project:project.getBoundingClientRect().left,step:step.getBoundingClientRect().left};`);
   if(global.step-global.project<15)throw new Error('the global focus lost its step indentation: '+J(global));
   await plugin(`p.setEverything(${J(previousAll)});return true;`);
@@ -2471,18 +2471,28 @@ step("calendar badges follow cloud receipts, project clocks and grouped reschedu
   await idle();await page.key('Meta+z');await taskIs('Audit calendar standalone',{scheduled:TOMORROW});
 });
 
-// Exercise the OS URI after list interactions; it must activate the plugin from a note.
-step("a Calendar URI opens Focus without creating a task note tab", async () => {
-  const target=await page.eval(`if(app.vault.getName()!==${J(NAME)})throw new Error('wrong URI test vault');const p=app.plugins.plugins['focus-tasks'],task=await p.createTask('Calendar link + spaced name',{area:'Audit Area'},null);await app.workspace.openLinkText(task.file.path,'','tab');return task.file.path;`);
-  await until(()=>page.eval(`return app.workspace.activeLeaf?.view?.file?.path===${J(target)}`),'start outside Focus');
+// Exercise the OS route with a link created before a rename and project move.
+step("a Calendar UID link finds the renamed, moved and folded task without opening a note", async () => {
+  const target=await page.eval(`if(app.vault.getName()!==${J(NAME)})throw new Error('wrong URI test vault');const p=app.plugins.plugins['focus-tasks'];
+    const area=(await p.collect(true,true)).find(a=>a.name==='Audit Area'),project=await p.createProject(area,'UID destination project');
+    const other=await p.createTask('Calendar duplicate name',{area:'Audit Area'},${J(TOMORROW)}),task=await p.createTask('Calendar duplicate name',{area:'Audit Area'},${J(TOMORROW)});
+    await app.workspace.openLinkText(task.file.path,'','tab');return {uid:task.uid,file:task.file.path,otherUid:other.uid,project:project.path};`);
+  await until(()=>page.eval(`return app.workspace.activeLeaf?.view?.file?.path===${J(target.file)}`),'start outside Focus');
   const before=await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort();`);
   const python=process.env.FOCUS_CALENDAR_PYTHON || path.join(process.env.HOME,'ai-hub','.venv-calendar','bin','python');
-  const code="import sys,datetime as dt;sys.path.insert(0,'bridge');from apple_calendar import Reminder,focus_url;print(focus_url(Reminder('native-uri-test','', 'URI test',dt.datetime.now(dt.timezone.utc),False,sys.argv[1])))";
-  const uri=execFileSync(python,['-c',code,NAME],{cwd:ROOT,encoding:'utf8'}).trim();
+  const code="import sys,datetime as dt;sys.path.insert(0,'bridge');from apple_calendar import Reminder,focus_url;print(focus_url(Reminder(sys.argv[2],'', 'Old task title',dt.datetime.now(dt.timezone.utc),False,sys.argv[1])))";
+  const uri=execFileSync(python,['-c',code,NAME,target.uid],{cwd:ROOT,encoding:'utf8'}).trim();
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t=>t.uid===${J(target.uid)})`),'URI target indexed');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.rename(p.tasks().find(t=>t.uid===${J(target.uid)}),'Renamed Calendar UID target');await p.setFields(p.tasks().find(t=>t.uid===${J(target.uid)}),{projects:['[[UID destination project]]'],scheduled:${J(TODAY)}});await p.setProjectDate(app.vault.getAbstractFileByPath(${J(target.project)}),${J(TOMORROW)});p.setEverything(false);p.data.folded['area:Audit Area']=true;delete p.data.opened['future:Audit Area'];p.data.opened['steps:'+${J(target.project)}]=false;p.saveFolds();p.refresh();return true;`);
   execFileSync('open',[uri]);
-  await until(()=>page.eval(`return app.vault.getName()===${J(NAME)} && app.workspace.activeLeaf?.view?.getViewType()==='focus-tasks-view' && !!__ft.view()`),'native URI activates Focus',15000);
-  const after=await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort();`);
+  await until(()=>page.eval(`const v=app.workspace.activeLeaf?.view;return v?.getViewType()==='focus-tasks-view'&&v.renderer?.rows().some(([el,t])=>t.uid===${J(target.uid)}&&el.classList.contains('is-selected'))`),'native URI selects renamed project step',15000);
+  const after=await page.eval(`const v=app.workspace.activeLeaf.view.renderer,row=v.rows().find(([,t])=>t.uid===${J(target.uid)});if(row[1].text!=='Renamed Calendar UID target'||v.selected.size!==1||[...v.selected][0].uid!==${J(target.uid)})throw Error('wrong task selected');return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort();`);
   if(J(before)!==J(after))throw new Error('Calendar link created another note tab');
+  if(await page.eval(`return app.plugins.plugins['focus-tasks'].openTask('missing-calendar-uid')`)!==false)throw new Error('missing task was treated as found');
+  if(J(before)!==J(await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort()`)))throw new Error('missing UID opened a note');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],r=app.workspace.activeLeaf.view.renderer,task=p.tasks().find(t=>t.uid===${J(target.uid)}),el=r.rows().find(([,t])=>t.uid===task.uid)[0].querySelector('.ft-text'),before=await app.vault.read(task.file);
+    await r.editInline(task,el,null);el.textContent='Unfinished Calendar link draft';el.dispatchEvent(new Event('input',{bubbles:true}));
+    if(await p.openTask(${J(target.otherUid)})!==false||!r.editing||document.activeElement!==el||await app.vault.read(task.file)!==before)throw Error('UID navigation interrupted or saved an unfinished edit');await r.endEdit(false);return true;`);
 });
 
 async function openVault() {

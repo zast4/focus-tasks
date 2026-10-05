@@ -52,7 +52,7 @@ class Reminder:
 
     @property
     def fingerprint(self):
-        content = [self.uid, self.path, self.title, self.at.isoformat(), self.waiting, self.vault, self.scheduled, EVENT_DURATION_MINUTES, CALENDAR_CONTRACT]
+        content = [self.uid, self.path, self.title, self.at.isoformat(), self.waiting, self.vault, self.scheduled, EVENT_DURATION_MINUTES, CALENDAR_CONTRACT, focus_url(self)]
         return hashlib.sha256(json.dumps(content, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -125,8 +125,8 @@ def scan(vault: Path, folder="Задачи", timezone="Europe/Moscow", exclude=(
 
 
 def focus_url(reminder: Reminder) -> str:
-    # The vault name needs URI percent encoding; the plugin opens its list, not a task note.
-    return "obsidian://focus-tasks?" + urlencode({"vault": unicodedata.normalize("NFC", reminder.vault)}, quote_via=quote)
+    # Pass the permanent task UID; neither a rename nor a project move changes the destination.
+    return "obsidian://focus-tasks?" + urlencode({"vault": unicodedata.normalize("NFC", reminder.vault), "uid": reminder.uid}, quote_via=quote)
 
 
 note_url = focus_url  # Compatibility for callers of the previous bridge helper.
@@ -145,7 +145,7 @@ def event_ical(reminder: Reminder) -> bytes:
     ev.add("transp", "TRANSPARENT")
     link = focus_url(reminder)
     ev.add("url", link)
-    ev.add("description", "Открыть Фокус: " + link + "\nСкопируй название события и найди задачу через поиск в Фокусе. Дату и время меняй там же.")
+    ev.add("description", "Открыть задачу в Фокусе: " + link + "\nСсылка находит задачу по постоянному UID. Дату и время меняй в Фокусе.")
     # Apple's explicit NONE placeholder disables the device's default alert for this event.
     # The separate DISPLAY alarm is the sole notification, at DTSTART. Both need a UID in iCloud.
     quiet = Alarm()

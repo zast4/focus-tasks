@@ -147,6 +147,11 @@ const STRINGS = {
     calendarOn: "Connected. Dates with a time appear as reminder events after syncing.", calendarProblem: "Reminders have not synced yet. Check the calendar connection.",
     calendarSynced: "Event confirmed in Apple Calendar. Alert at the event time.", calendarPending: "Waiting for Apple Calendar confirmation.",
     calendarFailed: "Apple Calendar could not confirm this event. It will retry.",
+    linkMissing: "Task not found. It may be deleted or not synced to this device yet.",
+    linkDuplicate: "Several tasks share this UID. No task was selected.",
+    linkInactive: "This task is no longer in the active list.",
+    linkBusy: "Finish the current edit, then open the task link again.",
+    linkFailed: "Could not show this task in Focus.",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     pickerSave: "Save", clearTime: "Remove time", mixedTime: "Different times; unchanged hours are preserved",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
@@ -241,6 +246,11 @@ const STRINGS = {
     calendarOn: "Подключён. Даты со временем попадают в календарь после синхронизации.", calendarProblem: "Напоминания пока не синхронизированы. Проверь подключение календаря.",
     calendarSynced: "Событие подтверждено в Apple Calendar. Уведомление в момент события.", calendarPending: "Ожидается подтверждение события из Apple Calendar.",
     calendarFailed: "Apple Calendar не подтвердил событие. Запись будет повторена.",
+    linkMissing: "Задача не найдена. Возможно, она удалена или ещё не пришла через Sync.",
+    linkDuplicate: "У нескольких задач одинаковый UID. Переход отменён.",
+    linkInactive: "Эта задача больше не входит в активный список.",
+    linkBusy: "Закончи текущую правку, затем открой ссылку на задачу ещё раз.",
+    linkFailed: "Не удалось показать задачу в Фокусе.",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     pickerSave: "Сохранить", clearTime: "Убрать время", mixedTime: "Разное время; без правки часы сохранятся",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
@@ -887,16 +897,17 @@ class FocusRenderer extends MarkdownRenderChild {
 
   // Shows a found item in the list: whatever hides it is opened (the area, «All», the pile, the
   // project's steps, the «Waiting» shelf), then it is scrolled to and selected.
-  async reveal(item) {
+  async reveal(item, openNote = true) {
     const p = this.plugin;
     const focus = (await p.collect(false)).map((a) => a.name);
     const wide = p.everything();
     const openArea = (name) => {
+      if (!name) return;
       if (focus.includes(name)) delete p.data.folded["area:" + name];
       else { if (!p.everything()) p.app.saveLocalStorage("focus-tasks-all", "1"); p.data.opened["area:" + name] = true; }
     };
     const task = item.kind === "task" ? p.tasks().find((x) => x.uid === item.uid) : null;
-    if (item.kind === "task" && !task) { new Notice(t("findGone")); return; }
+    if (item.kind === "task" && !task) { new Notice(t("findGone")); return false; }
     if (item.kind === "area") openArea(item.area);
     if (item.kind === "project") {
       const b = (await p.collect(true)).flatMap((a) => a.projects).find((x) => x.file.path === item.path);
@@ -907,8 +918,11 @@ class FocusRenderer extends MarkdownRenderChild {
       else {
         openArea(task.area);
         const inFocusArea = focus.includes(task.area);
-        const today = inFocus(task) || task.status === STATUS_WAITING;
-        if (inFocusArea && !today) {   // it is in the area's ⏳ pile
+        // The project's own day may put a today's step in the area's future pile, or bring
+        // a future step into today's list. Reveal the actual bucket, not the task's day alone.
+        const area = (await p.collect(false, true)).find(a => a.name === task.area);
+        const ahead = area?.ahead.some(row => row.kind === "task" ? row.task.uid === task.uid : row.steps.some(step => step.uid === task.uid));
+        if (inFocusArea && ahead) {   // it is in the area's ⏳ pile
           if (p.everything() || wide) delete p.data.opened["futureoff:" + task.area];
           else p.data.opened["future:" + task.area] = true;
         }
@@ -922,12 +936,13 @@ class FocusRenderer extends MarkdownRenderChild {
     if (item.kind === "area") row = [...this.containerEl.querySelectorAll(".ft-area-title[data-ft]")].find((e) => this.items.get(e)?.area?.name === item.area);
     else if (item.kind === "project") row = [...this.containerEl.querySelectorAll("li.ft-project-row[data-ft]")].find((e) => this.items.get(e)?.project?.file?.path === item.path);
     else row = this.rows().find(([, x]) => x.uid === item.uid)?.[0] || null;
-    if (!row) { if (task) this.open(task.file); return; }
+    if (!row) { if (task && openNote) this.open(task.file); else if (task) new Notice(t("linkInactive")); return false; }
     row.scrollIntoView({ block: "center" });
     row.addClass("ft-found");
     setTimeout(() => row.removeClass("ft-found"), 1400);
     const handle = item.kind === "area" ? null : this.rows().find(([e]) => e === row)?.[1];
     if (handle) this.mark(handle);
+    return true;
   }
 
   // «Focus» clicked: the focus alone, as «All» turned off does it — the other areas and every ⏳ pile
@@ -2907,7 +2922,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const { project, steps } = row;
     const area = opts.area;
     const key = "steps:" + project.file.path;
-    const open = steps.length > 1 && p.isShown(key, true);
+    const open = steps.length > 0 && p.isShown(key, true);
     const step = open ? null : steps[0] || null;
     const li = ul.createEl("li", { cls: "task-list-item ft-task ft-project-row" });
     if (opts.level) li.style.setProperty("--ft-level", String(opts.level));
@@ -3237,7 +3252,8 @@ module.exports = class FocusTasks extends Plugin {
     }));
     this.app.workspace.onLayoutReady?.(()=>ensureArea(this.app.workspace.getActiveFile?.()));
     this.registerView(VIEW_TYPE, (leaf) => new FocusView(leaf, this));
-    this.registerObsidianProtocolHandler("focus-tasks", () => { void this.openView(); });
+    this.registerObsidianProtocolHandler("focus-tasks", (params) =>
+      (params?.uid ? this.openTask(params.uid) : this.openView()).catch(() => { new Notice(t("linkFailed")); }));
     this.registerMarkdownCodeBlockProcessor("focus-tasks", (src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath, null, src || "")));
     this.addCommand({ id: "steps-blocks", name: t("cmdStepsBlocks"), callback: () => this.stepsBlocksEverywhere() });
     this.addRibbonIcon("list-checks", t("open"), () => this.openView());
@@ -3295,6 +3311,61 @@ module.exports = class FocusTasks extends Plugin {
     // Activate explicitly so keyboard actions belong to the visible Focus view.
     this.app.workspace.setActiveLeaf(leaf, { focus: true });
     await this.app.workspace.revealLeaf(leaf);
+    return leaf;
+  }
+
+  // Calendar links identify a note by its permanent UID, independent of its name and location.
+  // Serialize jumps so the last of several incoming links ends up selected.
+  openTask(uid) {
+    return this.taskNavigation = Promise.resolve(this.taskNavigation).catch(() => {}).then(async () => {
+      if (this.app.workspace.onLayoutReady) await new Promise(resolve => this.app.workspace.onLayoutReady(resolve));
+      // Activating another leaf can blur and save an inline editor. Check before changing focus,
+      // including editors in embedded project/area views, not only the destination pane.
+      if ([...this.views].some(view => view.editing || view.held)) { new Notice(t("linkBusy")); return false; }
+      const leaf = await this.openView();
+      let matches = await this.uidMatches(uid);
+      if (matches.length !== 1) { new Notice(t(matches.length ? "linkDuplicate" : "linkMissing")); return false; }
+      if (!await this.taskIndexed(matches[0])) { new Notice(t("linkMissing")); return false; }
+      matches = await this.uidMatches(uid);
+      if (matches.length !== 1) { new Notice(t(matches.length ? "linkDuplicate" : "linkMissing")); return false; }
+      const task = matches[0];
+      if ([STATUS_DONE, STATUS_CANCELLED, STATUS_SOMEDAY].includes(task.status)) { new Notice(t("linkInactive")); return false; }
+      const renderer = leaf?.view?.renderer;
+      if (!renderer) throw new Error("Focus renderer not ready");
+      if (renderer.editing || renderer.held) { new Notice(t("linkBusy")); return false; }
+      return renderer.reveal({ kind: "task", uid }, false);
+    });
+  }
+
+  // Obsidian can temporarily omit frontmatter while reindexing a just-saved note. A missing
+  // cache entry is not evidence that the note was deleted; give the index a bounded chance.
+  async uidMatches(uid) {
+    const until = Date.now() + 2000;
+    do {
+      this.forgetScan();
+      const matches = this.tasks().filter(task => task.uid === uid);
+      if (matches.length) return matches;
+      await new Promise(resolve => setTimeout(resolve, 50));
+    } while (Date.now() < until);
+    return [];
+  }
+
+  // A saved note can be ahead of Obsidian's metadata index, especially on phones. Revealing an
+  // old status would open the wrong shelf, then lose the row when the index catches up mid-render.
+  async taskIndexed(task) {
+    const signature = x => JSON.stringify(x && [x.uid, x.text, x.status, x.area, x.project, x.date, x.at]);
+    const until = Date.now() + 2000;
+    do {
+      const [front] = splitNote(await this.app.vault.read(task.file));
+      if (!front) return false;
+      const fields = parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, ""));
+      if (!fields || typeof fields !== "object" || Array.isArray(fields)) return false;
+      const actual = this.taskOf(task.file, fields);
+      if (!actual || actual.uid !== task.uid) return false;
+      if (signature(actual) === signature(this.taskOf(task.file))) return true;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    } while (Date.now() < until);
+    return false;
   }
 
   refresh() { for (const v of this.views) v.render(); }

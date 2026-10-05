@@ -97,7 +97,10 @@ An explicit scheduled hour automatically creates a 30-minute reminder event with
 at its start; dates alone do not create events. Change the day without losing the hour;
 clear the clock to remove the reminder. The calendar check icon appears only after iCloud
 confirms the current task and time. Pending/error icons never claim success. Calendar links
-open Focus; copy the exact event title into its search. There is no separate reminder menu.
+open the task in Focus by its permanent UID: its area, future pile and project steps unfold,
+then the task is scrolled into view and selected. Renaming or moving the task does not break
+the link. Missing, ambiguous or closed tasks produce a notice; unfinished edits are preserved.
+There is no separate reminder menu.
 An event notification and a native Apple Reminders checkbox are different integrations.
 
 ## Settings
@@ -343,8 +346,10 @@ Apple Calendar подключается отдельным мостом:
 Для этих событий дефолтный алерт отключён; уведомление приходит в момент начала.
 Значок календаря с галочкой означает подтверждённую запись текущей задачи и времени в iCloud.
 До подтверждения виден значок ожидания, при ошибке - значок ошибки. Перенос времени, в том числе
-групповой, обновляет существующие события. Ссылка открывает Фокус; название события совпадает
-с названием задачи, его можно скопировать в поиск списка.
+групповой, обновляет существующие события. Ссылка находит задачу в Фокусе по постоянному UID:
+раскрывает область, отложку и шаги проекта, прокручивает список и выделяет задачу.
+Переименование и перенос задачи ссылку не ломают. Если задача удалена, закрыта или ещё не
+синхронизирована, появится сообщение; незавершённая правка сохраняется.
 
 В фокусе, отложке и "Жду" используется одна карточка даты с полями часов и минут. Выбор дня
 оставляет карточку открытой; "Сохранить" или Enter применяет дату и время. Пустое время означает

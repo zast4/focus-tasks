@@ -2196,6 +2196,67 @@ test("the Calendar protocol opens the Focus view without opening a task note", a
   eq(calls, 1);
 });
 
+test("a UID link selects the task after a rename and project move", async () => {
+  const { app, plugin } = await stand(a => { areaNote(a,"Work");areaNote(a,"Home");projectNote(a,"Next","Home");taskNote(a,"Call",{area:"Work",scheduled:TODAY}); });
+  const original=plugin.tasks()[0],uid=original.uid;
+  await plugin.rename(original,"Changed title");await plugin.setFields(plugin.tasks().find(t=>t.uid===uid),{area:"Home",projects:["[[Next]]"]});
+  let selected=null;plugin.openView=async()=>({view:{renderer:{reveal:async(item,openNote)=>{selected={item,openNote};return true;}}}});
+  eq(await plugin.protocolHandlers["focus-tasks"]({uid,vault:"Test Vault",file:"Tasks/Stale name.md"}),true);
+  eq(selected,{item:{kind:"task",uid},openNote:false});eq(plugin.tasks().find(t=>t.uid===uid).text,"Changed title");eq(plugin.tasks().find(t=>t.uid===uid).area,"Home");
+});
+
+test("a missing, duplicate or inactive UID never selects an arbitrary task", async () => {
+  const { app, plugin } = await stand(a=>{areaNote(a,"Work");taskNote(a,"A",{area:"Work"});});
+  let calls=0;plugin.openView=async()=>({view:{renderer:{reveal:async()=>{calls++;return true;}}}});
+  eq(await plugin.openTask("missing"),false);eq(calls,0);eq(app.notices.length,1);
+  const task=plugin.tasks()[0];
+  for(const status of ["done","cancelled","someday"]){await plugin.setFields(task,{status});eq(await plugin.openTask(task.uid),false);}
+  await plugin.setFields(task,{status:"open"});taskNote(app,"Copy",{uid:task.uid,area:"Work"});plugin.forgetScan();
+  eq(await plugin.openTask(task.uid),false);eq(calls,0);
+});
+
+test("a task link preserves an unfinished edit and held drag", async () => {
+  const { app,plugin }=await stand(a=>{areaNote(a,"Work");taskNote(a,"Call",{area:"Work"});});
+  const task=plugin.tasks()[0],before=[...app.vault.files];let calls=0;
+  for(const state of [{editing:true},{held:{}}]){plugin.openView=async()=>({view:{renderer:{...state,reveal:async()=>{calls++;}}}});eq(await plugin.openTask(task.uid),false);}
+  eq(calls,0);eq([...app.vault.files],before,"no draft or task is rewritten by the link");
+});
+
+test("UID navigation waits for layout and serializes consecutive incoming links", async () => {
+  const { app,plugin }=await stand(a=>{areaNote(a,"Work");taskNote(a,"A",{area:"Work"});taskNote(a,"B",{area:"Work"});});
+  app.workspace.onLayoutReady=callback=>queueMicrotask(callback);
+  const tasks=plugin.tasks(),events=[];let release;
+  plugin.openView=async()=>({view:{renderer:{reveal:async item=>{events.push(item.uid);if(item.uid===tasks[0].uid)await new Promise(r=>release=r);return true;}}}});
+  const first=plugin.openTask(tasks[0].uid),second=plugin.openTask(tasks[1].uid);
+  while(!release)await new Promise(r=>setTimeout(r,0));eq(events,[tasks[0].uid]);release();
+  await Promise.all([first,second]);eq(events,tasks.map(t=>t.uid));
+});
+
+test("a UID link checks embedded edits before activating the Focus leaf", async () => {
+  const { plugin }=await stand(a=>{areaNote(a,"Work");taskNote(a,"A",{area:"Work"});});
+  let activated=0;plugin.openView=async()=>{activated++;throw Error("must not blur editor");};
+  for(const state of [{editing:true},{held:{}}]){plugin.views.add(state);eq(await plugin.openTask(plugin.tasks()[0].uid),false);plugin.views.delete(state);}
+  eq(activated,0,"neither an edit nor a drag is interrupted by changing leaves");
+});
+
+test("a UID link waits for a saved Waiting status to reach the metadata index", async () => {
+  const { app,plugin }=await stand(a=>{areaNote(a,"Work");taskNote(a,"A",{area:"Work",scheduled:TODAY});});
+  const task=plugin.tasks()[0],old=structuredClone(app.metadataCache.getFileCache(task.file));
+  await plugin.setWaiting(task,true,"2099-01-02","20:30");
+  const read=app.metadataCache.getFileCache.bind(app.metadataCache);let stale=4,selected=null;
+  app.metadataCache.getFileCache=file=>file.path===task.file.path&&stale-->0 ? old : read(file);
+  plugin.openView=async()=>({view:{renderer:{reveal:async()=>{selected=plugin.tasks().find(t=>t.uid===task.uid).status;return true;}}}});
+  eq(await plugin.openTask(task.uid),true);eq(selected,"waiting","navigation uses the saved status, not stale metadata");
+});
+
+test("a UID link survives a temporarily missing metadata entry during reindexing", async () => {
+  const { app,plugin }=await stand(a=>{areaNote(a,"Work");taskNote(a,"A",{area:"Work"});});
+  const task=plugin.tasks()[0],read=app.metadataCache.getFileCache.bind(app.metadataCache);let missing=4,selected=null;
+  app.metadataCache.getFileCache=file=>file.path===task.file.path&&missing-->0 ? null : read(file);
+  plugin.openView=async()=>({view:{renderer:{reveal:async item=>{selected=item.uid;return true;}}}});
+  eq(await plugin.openTask(task.uid),true);eq(selected,task.uid);eq(app.notices.length,0);
+});
+
 // --- run ------------------------------------------------------------------------------------------
 
 const filter = process.argv[2];

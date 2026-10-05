@@ -736,6 +736,21 @@ step("confirmed calendar badges fit timed project steps on narrow phones and lar
   }
 });
 
+step("phone UID links reveal a renamed project step and Waiting task without opening notes", async () => {
+  await layoutFixture(page,TODAY);await openLayoutContext(page,'pane');
+  const uid=await page.eval(`if(app.vault.getName()!==${J(NAME)})throw Error('wrong phone vault');const p=app.plugins.plugins['focus-tasks'],area=(await p.collect(true,true)).find(a=>a.name==='🧤Рутина');
+    const project=await p.createProject(area,'Проект UID');await p.createTask('Первый шаг UID',{area:area.name,project:'Проект UID'},null);const task=await p.createTask('Задача по UID',{area:area.name,project:'Проект UID'},null);
+    await p.rename(task,'Переименованная задача по UID');p.data.folded['area:'+area.name]=true;delete p.data.opened['area:'+area.name];p.data.opened['steps:'+project.path]=false;p.saveFolds();p.refresh();return task.uid;`);
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t=>t.uid===${J(uid)})`),'UID phone fixture indexed');
+  const notes=await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort()`);
+  if(!await page.eval(`return app.plugins.plugins['focus-tasks'].openTask(${J(uid)})`))throw Error('phone link did not reveal renamed step');
+  if(!await page.eval(`const v=app.workspace.activeLeaf.view.renderer,row=v.rows().find(([,t])=>t.uid===${J(uid)});return row?.[1].text==='Переименованная задача по UID'&&row[0].classList.contains('is-selected');`))throw Error('phone selected a different task');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setWaiting([p.tasks().find(t=>t.uid===${J(uid)})],true,moment(${J(TODAY)}).add(1,'day').format('YYYY-MM-DD'),'20:30');p.setWaitingShown(false);return true;`);
+  if(!await page.eval(`return app.plugins.plugins['focus-tasks'].openTask(${J(uid)})`))throw Error('phone did not reveal Waiting: '+J(await page.eval(`const p=app.plugins.plugins['focus-tasks'];return {shown:p.waitingShown(),matches:p.tasks().filter(t=>t.uid===${J(uid)}).length,notices:[...document.querySelectorAll('.notice')].map(e=>e.textContent)};`)));
+  if(!await page.eval(`const v=app.workspace.activeLeaf.view.renderer;return !!v.rows().find(([,t])=>t.uid===${J(uid)})?.[0].closest('.ft-waiting');`))throw Error('Waiting shelf stayed hidden');
+  if(J(notes)!==J(await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort()`)))throw Error('phone UID link opened a task note');
+});
+
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));

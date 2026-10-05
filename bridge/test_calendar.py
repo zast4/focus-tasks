@@ -310,7 +310,7 @@ class IcsTests(unittest.TestCase):
                                 path=unicodedata.normalize("NFD", "Задачи/Проверить й.md"))
         ev = Calendar.from_ical(event_ical(r)).walk("VEVENT")[0]
         query = parse_qs(urlparse(str(ev["url"])).query)
-        self.assertEqual(query, {"vault": ["Хранилище й"]})
+        self.assertEqual(query, {"vault": ["Хранилище й"], "uid": [r.uid]})
 
     def test_calendar_uri_matches_obsidians_percent_decoder_for_spaces_and_plus(self):
         import dataclasses
@@ -318,8 +318,33 @@ class IcsTests(unittest.TestCase):
         r=dataclasses.replace(reminder(),vault='Vault space + plus',path='Задачи/Тест + пробел 50%.md')
         url=str(Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]['url'])
         decoded=dict((unquote(k),unquote(v)) for k,v in (part.split('=',1) for part in urlsplit(url).query.split('&')))
-        self.assertEqual(decoded,{'vault':r.vault})
+        self.assertEqual(decoded,{'vault':r.vault,'uid':r.uid})
         self.assertNotIn('+',url)
+
+    def test_task_link_survives_renames_and_moves_and_encodes_opaque_uids(self):
+        import dataclasses
+        from urllib.parse import urlsplit, parse_qs
+        r = dataclasses.replace(reminder(), uid='id + /?&й')
+        renamed = dataclasses.replace(r, title='New task title', path='Задачи/New filename.md')
+        self.assertEqual(str(Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]['url']),
+                         str(Calendar.from_ical(event_ical(renamed)).walk('VEVENT')[0]['url']))
+        query = parse_qs(urlsplit(str(Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]['url'])).query)
+        self.assertEqual(query['uid'], [r.uid])
+        self.assertEqual(r.event_uid, renamed.event_uid)
+
+    def test_plain_focus_link_migrates_in_place_once_without_duplicate_events(self):
+        r = reminder()
+        snapshot, remote, state = Snapshot(desired={r.uid:r}, seen={r.uid}), MemoryCalendar(), {'tasks':{}}
+        reconcile(snapshot,state,remote,now=NOW)
+        legacy=[r.uid,r.path,r.title,r.at.isoformat(),r.waiting,r.vault,r.scheduled,30,CALENDAR_CONTRACT]
+        state['tasks'][r.uid]['fingerprint']=hashlib.sha256(json.dumps(legacy,ensure_ascii=False).encode()).hexdigest()
+        remote.calls.clear()
+        reconcile(snapshot,state,remote,now=NOW+dt.timedelta(seconds=1))
+        self.assertEqual(remote.calls,[('upsert',r.uid)])
+        self.assertEqual(len(remote.items),1)
+        self.assertEqual(remote.items[r.uid].event_uid,r.event_uid)
+        reconcile(snapshot,state,remote,now=NOW+dt.timedelta(seconds=2))
+        self.assertEqual(remote.calls,[('upsert',r.uid)])
 
     def test_readback_rejects_any_extra_active_default_alert(self):
         from icalendar import Alarm

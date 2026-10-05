@@ -74,7 +74,11 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Timed Waiting becomes relevant | Same event identity, exact return moment, no completion automation | M, E, C |
 | Calendar rename/reschedule/complete/cancel/clear | Update/delete only the owned event without duplicates | C, disposable iCloud probe |
 | Existing reminder after format update | Same event uid, 30-minute display, disabled default plus sole at-start alert, Focus link, no busy time | C, live iCloud readback |
-| Follow a Calendar link from a note | Focus becomes active without opening another note; exact event title can be copied into list search | E; native owner-vault probe |
+| Follow a Calendar UID link after rename or project move | Focus selects the exact task; folded area, future pile and project steps open, including a single step and a project dated later than its step; no new note tab | M, E, P; native owner-vault probe |
+| Follow a UID link to Waiting on a phone | Waiting opens and the exact task is selected without a note tab | P |
+| Follow a link immediately after saving Waiting while metadata is delayed | Wait for the index to match the saved note before choosing the shelf; no stale-status navigation | M, P |
+| Missing, duplicate, closed UID; unfinished edit or drag; consecutive links and cold start | Notice instead of arbitrary selection; editing preserved; wait for layout; process links in order | M, E |
+| Existing event has the old plain Focus URL | Update its URL once in place; event identity and reminder policy survive, without duplicates | C |
 | Calendar offline, missing file, malformed note, duplicate uid | Retry/protect; Sync grace; a past timestamp still has an event, without claiming retrospective notification delivery | C |
 | Remote Calendar replacement/write/delete race | ETag condition refuses overwriting/deleting a foreign event | C |
 | Large vault/random histories | Every active note is discoverable; uid, body and custom properties survive | S |

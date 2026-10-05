@@ -26,9 +26,13 @@ writing until the card is applied. Existing timed tasks open with their hour fil
 clock removes the notification while retaining the day; clearing the date removes both.
 
 Dates without a time do not produce events or guessed midnight notifications. Obsidian
-links open `obsidian://focus-tasks?vault=...`. The plugin activates its Focus view without
-opening a task note. Event titles match task titles exactly, so copying them into Focus
-search finds the task. Vault names percent-encode spaces as `%20` and plus signs as `%2B`. The two
+links open `obsidian://focus-tasks?vault=...&uid=...`. The plugin activates its Focus view,
+unfolds the task's area, future pile or Waiting section and project steps, then scrolls to and
+selects the task without opening a task note. A permanent UID keeps the link valid after a
+rename or move; existing events receive the new link in place. Missing, duplicate or inactive
+UIDs produce a notice instead of choosing another task. An unfinished edit or drag is preserved;
+finish it and retry the link. Event titles still match task titles exactly. Query values
+percent-encode spaces as `%20` and plus signs as `%2B`. A link without `uid` opens plain Focus. The two
 return semantics are deliberate: ordinary tasks are relevant for the whole scheduled
 day; Waiting is reviewed at its exact scheduled moment. Completion remains the user's
 action, and Calendar never completes or reopens a task.
