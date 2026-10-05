@@ -5,15 +5,18 @@ No build step: `main.js` is the plugin as Obsidian loads it (plain CommonJS agai
 
 ## Branches: he keeps working while we change things
 
-He uses this plugin every day, so new work must never land in his vault on its own.
+He uses this plugin every day. By default, a change request includes completing the required tests,
+merging `next` into `notes-model`, delivering the stable build and reloading it. If he explicitly
+requests a **«тестовая»** build, deliver it as `test` without merging into stable.
 
 - `shipped` identifies the code the vault actually runs. `notes-model` is the stable integration branch and may lag that verified tag.
-- `next` — where all new work goes. Commit freely, run the suites, do not deploy.
+- `next` — where all new work goes. Commit freely, run the suites, then deliver stable by default.
 - tag `shipped` — the last commit that reached his vault. Everything after it is unreported.
 
-Three words drive it:
+Delivery and review:
 
-- he says nothing → keep committing to `next`; his vault stays exactly as it is.
+- an ordinary change request → suites green → merge `next` into `notes-model` → deliver stable →
+  reload the plugin → move `shipped` → clear the review log. No separate «вливай» is required.
 - every exchange, code or not, is appended to `~/ai-hub/data/focus-tasks/review-log.md` — a commit,
   an answer to a question, an edit of his data. Written as he would need to read it, having read
   nothing else. Without that file the rule below depends on my remembering the conversation.
@@ -25,7 +28,7 @@ Three words drive it:
 - **«вливай»** → merge `next` into `notes-model`, deliver it as the stable build, reload the plugin
   over CDP, then move the tag: `git tag -f shipped notes-model` and empty the review log down to its
   heading. All three suites must be green before the merge.
-- **«покажи» / a test drive** → deliver the current build as `test` without merging. He keeps the
+- **«тестовая» in the request** → deliver the current build as `test` without merging. He keeps the
   stable one a click away and decides afterwards.
 
 ## Two builds in his vault
