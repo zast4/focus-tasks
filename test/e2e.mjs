@@ -2407,6 +2407,9 @@ step("a Calendar URI opens a task with spaces and a literal plus through native 
   const uri=execFileSync(python,['-c',code,NAME,target],{cwd:ROOT,encoding:'utf8'}).trim();
   execFileSync('open',[uri]);
   await until(()=>page.eval(`return app.vault.getName()===${J(NAME)} && app.workspace.activeLeaf?.view?.file?.path===${J(target)}`),'native URI opens the exact task file',15000);
+  await settle();
+  await page.eval(`await app.commands.executeCommandById('focus-tasks:open');return true;`);
+  await until(()=>page.eval(`return app.workspace.activeLeaf?.view?.getViewType()==='focus-tasks-view' && !!__ft.view()`),'the Focus command activates the list again after a native URI');
 });
 
 async function openVault() {

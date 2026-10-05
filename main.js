@@ -3302,7 +3302,10 @@ module.exports = class FocusTasks extends Plugin {
       leaf = this.app.workspace.getLeaf(true);
       await leaf.setViewState({ type: VIEW_TYPE, active: true });
     }
-    this.app.workspace.revealLeaf(leaf);
+    // revealLeaf selects the tab but can leave activeLeaf on the note that a Calendar URI opened.
+    // Activate explicitly so keyboard actions belong to the visible Focus view.
+    this.app.workspace.setActiveLeaf(leaf, { focus: true });
+    await this.app.workspace.revealLeaf(leaf);
   }
 
   refresh() { for (const v of this.views) v.render(); }
