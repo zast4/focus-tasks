@@ -17,6 +17,8 @@ import { Page, PORT, J, sleep, ymd, until } from "./cdp.mjs";
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const KEEP = args.includes("--keep");
+const baselineIndex = args.indexOf('--baseline');
+const BASELINE = baselineIndex >= 0 ? args[baselineIndex + 1] : null;
 const companionPath = (flag, id) => {
   const i = args.indexOf(flag);
   if (i < 0) return null;
@@ -2288,6 +2290,31 @@ step("the shared calendar preserves mixed hours and applies a group clock as one
 });
 
 
+step("editing Waiting dates preserves mixed and synced hours; removing time is explicit", async () => {
+  const later=ymd(new Date(Date.now()+2*864e5));
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];for(const [name,at] of [['Audit clock A','08:10'],['Audit clock B','17:25']])await p.setWaiting(p.tasks().find(t=>t.text===name),true,${J(TOMORROW)},at);await p.setEverything(true);await p.setWaitingShown(true);return true;`);
+  const open=async()=>{
+    await until(()=>page.eval(`return !!__ft.task('Audit clock A') && !!__ft.task('Audit clock B')`),'Waiting clocks');await settle();
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'],v=[...p.views].find(v=>v.rows().some(([el])=>el===__ft.task('Audit clock A'))),tasks=[...new Map(v.rows().map(([,t])=>t).filter(t=>/^Audit clock [AB]$/.test(t.text)).map(t=>[t.uid,t])).values()];if(tasks.length!==2)throw new Error('Waiting fixtures missing');v.selected=new Set(tasks);await v.editDate(tasks[0],__ft.task('Audit clock A').querySelector('.ft-date'));return true;`);
+    await until(()=>page.eval(`return !!document.querySelector('.ft-picker-save')`),'Waiting group card');
+  };
+  await open();
+  if(!await page.eval(`return document.querySelector('.ft-picker-input').value===${J(ddmmyy(TOMORROW))} && document.querySelector('.is-hh').placeholder==='-'`))throw new Error('Opening Waiting rescheduling guesses today or discards mixed hours');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.text==='Audit clock B');await app.vault.process(task.file,text=>text.replace(/^scheduled:.*$/m,'scheduled: '+${J(TOMORROW+'T18:35')}));document.querySelector('.ft-picker-input').value=${J(ddmmyy(later))};return true;`);
+  await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit clock A',{status:'waiting',scheduled:later+'T08:10'});await taskIs('Audit clock B',{status:'waiting',scheduled:later+'T18:35'});await idle();
+  await open();await click(`__ft.at(document.querySelector('.ft-picker-clear-time'))`);await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit clock A',{status:'waiting',scheduled:later});await taskIs('Audit clock B',{status:'waiting',scheduled:later});await idle();
+  await page.key('Meta+z');await taskIs('Audit clock A',{status:'waiting',scheduled:later+'T08:10'});await taskIs('Audit clock B',{status:'waiting',scheduled:later+'T18:35'});await idle();
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setDate(p.tasks().find(t=>t.text==='Audit clock B'),${J(TOMORROW)});return true;`);await idle();
+  await open();
+  if(!await page.eval(`return document.querySelector('.ft-picker-input').value===''`))throw new Error('Mixed Waiting days are replaced by an implicit day');
+  await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker-input.is-invalid')`),'a mixed day requires an explicit choice');await page.key('Escape');
+  await taskIs('Audit clock A',{status:'waiting',scheduled:later+'T08:10'});await taskIs('Audit clock B',{status:'waiting',scheduled:TOMORROW+'T18:35'});
+  await page.eval(`for(const v of app.plugins.plugins['focus-tasks'].views)v.clearSelection();return true;`);
+});
+
 step("invalid typed dates cannot silently save the old date", async () => {
   await click(`__ft.at(__ft.task('Audit reminder').querySelector('.ft-date'))`);
   await until(()=>page.eval(`return !!document.querySelector('.ft-picker-input')`),'date card');
@@ -2379,7 +2406,10 @@ function buildVault() {
   fs.rmSync(VAULT, { recursive: true, force: true });
   const plug = path.join(VAULT, ".obsidian/plugins/focus-tasks");
   fs.mkdirSync(plug, { recursive: true });
-  for (const f of ["main.js", "manifest.json", "styles.css"]) fs.copyFileSync(path.join(ROOT, f), path.join(plug, f));
+  for (const f of ["main.js", "manifest.json", "styles.css"]) {
+    if (BASELINE) fs.writeFileSync(path.join(plug, f), execFileSync('git', ['show', `${BASELINE}:${f}`], { cwd: ROOT }));
+    else fs.copyFileSync(path.join(ROOT, f), path.join(plug, f));
+  }
   for (const c of companions) {
     const dir = path.join(VAULT, '.obsidian/plugins', c.id);
     fs.mkdirSync(dir, { recursive: true });

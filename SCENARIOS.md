@@ -66,7 +66,7 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Timed backlog task becomes relevant | Scheduled day enters Focus; separate cloud event uses the native default alert before its hour | A, E, C |
 | Open a date, Waiting or reminder card on a phone | Shared date/clock/Save layout; 320/390/430px fit, 44px Save, calendar taps keep the keyboard closed | P |
 | Save an ordinary task with empty time | Day-only value, no implicit midnight event; an explicit 00:00 remains a real clock | E, P, C |
-| Change the day of tasks with different hours | Each hour survives; setting/clearing a group clock is one undoable transaction | E |
+| Change the day of open or Waiting tasks with different hours | Each hour survives; setting/clearing a group clock is one undoable transaction | E |
 | Timed Waiting becomes relevant | Same event identity, exact return moment, no completion automation | M, E, C |
 | Calendar rename/reschedule/complete/cancel/clear | Update/delete only the owned event without duplicates | C, disposable iCloud probe |
 | Existing reminder after format update | Same event uid, 30-minute display, native default alert, correctly encoded note link, no busy time | C, live iCloud readback |

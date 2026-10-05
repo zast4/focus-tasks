@@ -227,6 +227,32 @@ test("a task typed under a project's step stays inside that project", async () =
   eq(names(area.projects[0].tasks), ["Aaa step", "Zzz new step", "Ccc step"]);
 });
 
+test("a group clock edit preserves completion received from another device and undoes as one date change", async () => {
+  const { app, plugin } = await stand(a => {
+    areaNote(a, "Work");
+    taskNote(a, "Waiting A", { area: "Work", status: "waiting", scheduled: DAY(1)+"T08:10" }, "Keep A");
+    taskNote(a, "Waiting B", { area: "Work", status: "waiting", scheduled: DAY(1)+"T17:25" }, "Keep B");
+  });
+  const tasks=plugin.tasks();
+  const originalBody=bodyOf(app,'Tasks/Waiting B.md');
+  await app.fileManager.processFrontMatter(tasks.find(t=>t.text==='Waiting B').file, fm=>{fm.status='done';fm.completedDate=TODAY;fm.time_entries=[{id:'external-session',minutes:25}];});
+  await plugin.setDates(tasks, DAY(2), "16:30");
+  eq(frontmatter(app,'Tasks/Waiting A.md').scheduled,DAY(2)+'T16:30');
+  eq(frontmatter(app,'Tasks/Waiting B.md').status,'done');
+  eq(frontmatter(app,'Tasks/Waiting B.md').completedDate,TODAY);
+  eq(frontmatter(app,'Tasks/Waiting B.md').time_entries,[{id:'external-session',minutes:25}]);
+  eq(bodyOf(app,'Tasks/Waiting B.md'),originalBody);
+  eq(plugin.history.length,1);
+  await plugin.undo();
+  eq(frontmatter(app,'Tasks/Waiting A.md').scheduled,DAY(1)+'T08:10');
+  eq(frontmatter(app,'Tasks/Waiting B.md').scheduled,DAY(1)+'T17:25');
+  eq(frontmatter(app,'Tasks/Waiting B.md').status,'done');
+  await plugin.setDates(plugin.tasks(),DAY(3),null);
+  eq(frontmatter(app,'Tasks/Waiting A.md').scheduled,DAY(3));
+  eq(frontmatter(app,'Tasks/Waiting B.md').scheduled,DAY(3));
+  eq(frontmatter(app,'Tasks/Waiting B.md').status,'done');
+});
+
 test("sending a task off names the day it comes back; taking it back puts it in today's focus", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Work");

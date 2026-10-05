@@ -2221,11 +2221,17 @@ class FocusRenderer extends MarkdownRenderChild {
     const anchor = el || this.rowLabel(list[0]);
     if (!list.length || !anchor || this.editing) return;
     const min = today();
-    const one = list.length === 1 ? list[0] : null;
-    const was = one && one.status === STATUS_WAITING && one.date >= min ? one.date : today();
+    const returning = list.every(x => x.status === STATUS_WAITING);
+    const days = [...new Set(list.map(x => x.date || null))];
+    const clocks = [...new Set(list.map(x => x.at || null))];
+    const was = returning ? (days.length === 1 && days[0] >= min ? days[0] : null) : today();
+    const at = returning && clocks.length === 1 ? clocks[0] : null;
     this.anchor = list[0];
     this.card(anchor, () => new DatePicker(anchor, was, async (chosen, at) => {
-      if (chosen && await this.plugin.setWaiting(list, true, chosen, at) === false) return false;
+      const change = returning && at === undefined ? list.filter(x => x.date !== chosen) : list;
+      if (chosen && change.length && await (returning
+        ? this.plugin.setDates(change, chosen, at)
+        : this.plugin.setWaiting(change, true, chosen, at)) === false) return false;
       this.editing = false;
       this.picker = null;
       this.clearSelection();
@@ -2237,8 +2243,9 @@ class FocusRenderer extends MarkdownRenderChild {
       this.render();
     }, {
       title: t("returnWhen"), hint: t("returnHint"), tooEarly: t("returnTooSoon"), min, clear: false,
-      // the hour is the one running task's own; several rows start from a blank hour
-      time: true, futureClock: true, at: one && one.status === STATUS_WAITING ? one.at : null,
+      // Editing an existing return preserves each hour, including a newer value received by Sync.
+      // Sending open tasks off asks for a new return moment instead.
+      time: true, futureClock: true, at, preserveTime: returning, mixedTime: returning && clocks.length > 1,
     }));
   }
 
@@ -2259,10 +2266,7 @@ class FocusRenderer extends MarkdownRenderChild {
       // An explicit clock edit must reach disk even when Sync changed the hour after this card
       // opened. Only an untouched clock can use the row's cached day to skip an unchanged gesture.
       const change = at !== undefined ? tasks : tasks.filter(x => (x.date || null) !== day);
-      if (change.length && await this.plugin.track(t("aDate"), change.map(x => x.file), async tx => {
-        for (const item of change) if (!await (at === undefined ? this.plugin.setDate(item, day, tx) : this.plugin.setScheduled(item, day, at, tx))) return false;
-        return true;
-      }) === false) return false;
+      if (change.length && await this.plugin.setDates(change, day, at) === false) return false;
       this.editing = false;
       this.picker = null;
       this.clearSelection();
@@ -3773,9 +3777,11 @@ module.exports = class FocusTasks extends Plugin {
     return ok;
   }
 
-  async setDates(tasks, day) {
+  async setDates(tasks, day, at = undefined) {
     return this.track(t("aDate"), tasks.map((x) => x.file), async (tx) => {
-      for (const task of tasks) if (!await this.setDate(task, day, tx)) return false;
+      for (const task of tasks) if (!await (at === undefined
+        ? this.setDate(task, day, tx)
+        : this.setScheduled(task, day, at, tx))) return false;
       return true;
     });
   }
