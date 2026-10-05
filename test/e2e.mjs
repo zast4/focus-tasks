@@ -1405,6 +1405,50 @@ step("a project's row selected by its grip is the project: ⌘2 dates the projec
   await settle();
 });
 
+step("project brightness uses the same date as focus membership and its displayed date", async () => {
+  const name = 'Brightness project', task = 'Brightness first step', key = 'future:💪Sport';
+  const wasOpen = await plugin(`return p.data.opened[${J(key)}] ?? null;`);
+  try {
+    await plugin(`
+      const area = (await p.collect(true)).find(a => a.name === '💪Sport');
+      await p.createProject(area, ${J(name)});
+      await p.createTask(${J(task)}, {area: '💪Sport', project: ${J(name)}}, ${J(TOMORROW)});
+      p.data.opened[${J(key)}] = true; p.refresh(); return true;`);
+    await toPane();
+    await page.mouse('mouseMoved', 0, 0, 0); // Hover otherwise hides the dimming regression.
+    for (const [projectDay, stepDay, future] of [
+      [TODAY, TOMORROW, false], [YESTERDAY, TOMORROW, false], [TODAY, null, false],
+      [TOMORROW, TODAY, true], [null, TODAY, false], [null, TOMORROW, true],
+    ]) {
+      await until(() => plugin(`return p.tasks().some(t => t.text === ${J(task)});`), 'first step indexed');
+      await plugin(`
+        await p.setDate(p.tasks().find(t => t.text === ${J(task)}), ${J(stepDay)});
+        await p.setProjectDate(app.vault.getAbstractFileByPath(${J('Tasks/' + name + '.md')}), ${J(projectDay)});
+        return true;`);
+      await taskIs(task, {scheduled: stepDay});
+      await settle();
+      await until(() => page.eval(`return !!__ft.project(${J(name)});`), 'project row rendered');
+      const before = read(taskPath(task));
+      const state = await page.eval(`
+        const r = __ft.project(${J(name)});
+        return {future: !!r.closest('.ft-future-block'), dim: r.classList.contains('is-later'),
+          opacity: Number(getComputedStyle(r).opacity), ownDate: !!r.querySelector('.ft-date.is-project')};`);
+      if (state.future !== future || state.dim !== future || state.opacity !== (future ? 0.7 : 1)
+          || state.ownDate !== !!projectDay) {
+        throw new Error('project=' + projectDay + ', step=' + stepDay + ': ' + J(state));
+      }
+      if (read(taskPath(task)) !== before) throw new Error('rendering changed the first step note');
+    }
+  } finally {
+    await plugin(`
+      const task = p.tasks().find(t => t.text === ${J(task)}); if (task) await p.trash(task.file);
+      const file = app.vault.getAbstractFileByPath(${J('Tasks/' + name + '.md')}); if (file) await p.trash(file);
+      if (${J(wasOpen)} === null) delete p.data.opened[${J(key)}]; else p.data.opened[${J(key)}] = ${J(wasOpen)};
+      p.refresh(); return true;`);
+    await settle();
+  }
+});
+
 step("«Waiting…» from the row's menu while its text is being edited: the editor closes, the card opens", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Edit and wait")), `---\nuid: ft-ew-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${TODAY}\n---\n`);
   await toPane();

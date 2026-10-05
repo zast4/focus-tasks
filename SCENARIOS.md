@@ -36,6 +36,7 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Another device has already completed an unchecked row | Stale check must not reopen it or replace its completion date | A, M |
 | Last project step is completed | Project has a place to add the next step; explicit user action closes the project | M, E |
 | Project's own scheduled date changes | Date belongs to project; step dates are preserved | M, E |
+| Project and first step have different dates | Row brightness follows the project date used for focus and its label; without it, the first step's date applies. Rendering preserves step dates | E, P |
 | Waiting before/at/after return | Separate shelf before; relevant in Focus at/after; never auto-completed | M, E, C |
 | Take Waiting back early | Current open work; obsolete future Calendar reminder removed | M, E, C |
 | Find folded/undated/future/waiting work | Reveal the containing area/project/pile and select the result | M, E |

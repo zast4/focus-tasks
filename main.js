@@ -2886,7 +2886,8 @@ class FocusRenderer extends MarkdownRenderChild {
     if (opts.level) li.style.setProperty("--ft-level", String(opts.level));
     li.toggleClass("is-open", open);
     li.toggleClass("is-empty", !steps.length);
-    if (step && !opts.all && !inFocus(step) && step.status !== STATUS_WAITING) li.addClass("is-later");
+    // The project's own date controls its focus membership and displayed date, before the step's.
+    if (step && !opts.all && !inFocus(project.date ? project : step) && step.status !== STATUS_WAITING) li.addClass("is-later");
     if (step && waitingBack(step)) li.addClass("is-waiting");
     // Open, the row is a heading over its steps: no box to tick, and in the box's column a chevron
     // that folds them — the name stays where it was, so nothing jumps and «−N» sits by it as «+N» did.

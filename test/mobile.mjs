@@ -128,6 +128,57 @@ step("nothing runs off the side of a phone screen", async () => {
   if (over.wide.length) throw new Error("these stick out: " + J(over.wide));
 });
 
+step("mobile project brightness follows its own focus date before the first step's date", async () => {
+  const name = 'Проверка яркости проекта', task = 'Будущий первый шаг';
+  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
+  const nextDay = ymd(tomorrow), key = 'future:🏡Дом';
+  const wasOpen = await page.eval(`return app.plugins.plugins['focus-tasks'].data.opened[${J(key)}] ?? null;`);
+  try {
+    await page.eval(`
+      if (app.vault.getName() !== ${J(NAME)}) throw new Error('wrong test vault');
+      const p = app.plugins.plugins['focus-tasks'];
+      const area = (await p.collect(true)).find(a => a.name === '🏡Дом');
+      await p.createProject(area, ${J(name)});
+      await p.createTask(${J(task)}, {area: '🏡Дом', project: ${J(name)}}, ${J(nextDay)});
+      p.data.opened[${J(key)}] = true;
+      await p.setProjectDate(app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}), ${J(TODAY)});
+      return true;`);
+    const check = async (projectDay, stepDay, future) => {
+      await until(() => page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t => t.text === ${J(task)});`), 'first step indexed');
+      await page.eval(`
+        const p = app.plugins.plugins['focus-tasks'];
+        await p.setDate(p.tasks().find(t => t.text === ${J(task)}), ${J(stepDay)});
+        await p.setProjectDate(app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}), ${J(projectDay)});
+        return true;`);
+      await taskIs(task, {scheduled: stepDay});
+      await sleep(450);
+      await until(() => page.eval(`return !!__m.project(${J(name)});`), 'project row rendered');
+      const before = read(`Задачи/${task}.md`);
+      const state = await page.eval(`
+        const r = __m.project(${J(name)});
+        return {future: !!r.closest('.ft-future-block'), dim: r.classList.contains('is-later'),
+          opacity: Number(getComputedStyle(r).opacity), ownDate: !!r.querySelector('.ft-date.is-project')};`);
+      if (state.future !== future || state.dim !== future || state.opacity !== (future ? 0.7 : 1)
+          || state.ownDate !== !!projectDay) {
+        throw new Error('project=' + projectDay + ', step=' + stepDay + ': ' + J(state));
+      }
+      if (read(`Задачи/${task}.md`) !== before) throw new Error('rendering changed the first step note');
+    };
+    await check(TODAY, nextDay, false);
+    await check(TODAY, null, false);
+    await check(nextDay, TODAY, true);
+    await check(null, TODAY, false);
+    await check(null, nextDay, true);
+  } finally {
+    await page.eval(`
+      const p = app.plugins.plugins['focus-tasks'];
+      const task = p.tasks().find(t => t.text === ${J(task)}); if (task) await p.trash(task.file);
+      const file = app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}); if (file) await p.trash(file);
+      if (${J(wasOpen)} === null) delete p.data.opened[${J(key)}]; else p.data.opened[${J(key)}] = ${J(wasOpen)};
+      p.refresh(); return true;`);
+  }
+});
+
 step("a checkbox and a date are big enough for a finger", async () => {
   const sizes = await page.eval(`
     const row = __m.rows()[0];
