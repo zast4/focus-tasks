@@ -52,6 +52,7 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Malformed YAML, CRLF, BOM, nested/custom properties | Read safely or refuse; preserve description bytes and unknown field values | A, M |
 | UID removed/replaced externally | Refuse a stale destructive/update action rather than change identity | A, M |
 | Optional TaskNotes recurring checkbox | Complete one instance through its real API; preserve series/uid/area; Undo must not touch companion edits or earlier unrelated work | A, M, E with TaskNotes |
+| Desktop row date, clock, Waiting, deadline, calendar badge, marker and grip | One first-line centre, uniform SVG size and separate action cells; 620/1000 px, text 14/18/26 px; pane, area/project notes and user theme with Tasks | E; geometry rejects shipped baseline |
 | One area/project/file name collides with another | No overwrite, lost identity or accidental project resolution | M, A |
 | Midnight, dated completion, exact Waiting hour, explicit timezone offset | Current relevance and displayed local day/hour agree | M, A, E; actual sleep/wake acceptance |
 | All, upcoming toggles, collapse/expand, Focus reset | All remains complete; Focus hides upcoming/rest work; folding is per device | M, E, P |

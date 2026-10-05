@@ -13,12 +13,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { execFileSync } from "node:child_process";
 import { Page, PORT, J, sleep, ymd, until } from "./cdp.mjs";
+import { checkRowAlignment } from "./row-alignment.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
 const KEEP = args.includes("--keep");
 const baselineIndex = args.indexOf('--baseline');
 const BASELINE = baselineIndex >= 0 ? args[baselineIndex + 1] : null;
+const themeIndex = args.indexOf('--theme');
+const THEME = themeIndex >= 0 ? path.resolve(args[themeIndex + 1]) : null;
 const companionPath = (flag, id) => {
   const i = args.indexOf(flag);
   if (i < 0) return null;
@@ -2477,6 +2480,11 @@ step("commands are registered", async () => {
 
 // --- run ------------------------------------------------------------------------------------
 
+step("row controls share first-line centres in pane, area and project views", async () => {
+  fs.mkdirSync(SHOTS,{recursive:true});
+  await checkRowAlignment(page,TODAY,TOMORROW,SHOTS);
+});
+
 function buildVault() {
   fs.rmSync(VAULT, { recursive: true, force: true });
   const plug = path.join(VAULT, ".obsidian/plugins/focus-tasks");
@@ -2496,6 +2504,11 @@ function buildVault() {
     if (c.settings) fs.writeFileSync(path.join(dir, 'data.json'), J(c.settings));
   }
   fs.writeFileSync(path.join(VAULT, ".obsidian/app.json"), J({ nativeMenus: false, trashOption: "local", promptDelete: false, alwaysUpdateLinks: true }));
+  if(THEME) {
+    const name=path.basename(THEME),dir=path.join(VAULT,'.obsidian/themes',name);fs.mkdirSync(dir,{recursive:true});
+    for(const file of ['theme.css','manifest.json'])fs.copyFileSync(path.join(THEME,file),path.join(dir,file));
+    fs.writeFileSync(path.join(VAULT,'.obsidian/appearance.json'),J({cssTheme:name}));
+  }
   fs.mkdirSync(path.join(VAULT, "Notes"));
   fs.writeFileSync(path.join(VAULT, "Notes/Running log.md"), "# Running log\n\nWeek 1: 12 km.\n");
   fs.writeFileSync(path.join(VAULT, "Notes/Home.md"), "# Home\n");
@@ -2579,6 +2592,7 @@ async function openVault() {
   await page.send("Runtime.enable");
   await page.front();
   await until(() => page.eval(`return !!(window.app && app.workspace.layoutReady)`), "layout ready", 20000);
+  if(THEME)await until(()=>page.eval(`return app.customCss.theme===${J(path.basename(THEME))};`),'requested theme active');
   // Obsidian keeps mobile emulation for the whole app: a phone run left on would silently test the
   // wrong build here (no hover, no focus in the picker), so turn it off and wait for the reload.
   if (await page.eval(`return document.body.classList.contains('is-mobile')`)) {
@@ -2626,14 +2640,17 @@ async function closeVault() {
   fs.rmSync(VAULT, { recursive: true, force: true });
 }
 
-let failed = 0;
+let failed = 0, passed = 0;
 try {
   await openVault();
   console.log(`Focus Tasks e2e in ${NAME}`);
-  const runSteps=args.includes('--audit-only') ? steps.slice(steps.findIndex(s=>s.name.startsWith("an area's own note"))) : steps;
+  const available=args.includes('--audit-only') ? steps.slice(steps.findIndex(s=>s.name.startsWith("an area's own note"))) : steps;
+  const match=args.indexOf('--match'),runSteps=match>=0?available.filter(s=>new RegExp(args[match+1]).test(s.name)):available;
+  if(!runSteps.length)throw Error('no matching test scenarios');
   for (const [i, s] of runSteps.entries()) {
     try {
       await s.fn();
+      passed++;
       console.log(`  ✓ ${s.name}`);
     } catch (e) {
       failed++;
@@ -2654,5 +2671,5 @@ try {
   page?.ws.close();
   main?.ws.close();
 }
-console.log(failed ? `\nFAILED` : `\nall ${args.includes('--audit-only') ? steps.length-steps.findIndex(s=>s.name.startsWith("an area's own note")) : steps.length} steps passed`);
+console.log(failed ? `\nFAILED` : `\nall ${passed} steps passed`);
 process.exit(failed ? 1 : 0);

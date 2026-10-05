@@ -520,6 +520,42 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
 .focus-tasks-view :is(li.ft-task, .ft-mobile-meta) > .ft-running { align-self: flex-start; height: calc(var(--ft-line) * 1em); padding-top: 0; padding-bottom: 0;
   display: inline-flex; align-items: center; }
 
+/* Desktop actions share the task's font for their cell height. Shrink only the labels inside:
+   using a smaller control font made clocks sit high, while the old Waiting margin pushed it low.
+   Keep hover visibility intact and leave the phone's separate metadata grid in charge. */
+body:not(.is-mobile) .focus-tasks-view li.ft-task > :is(.ft-plus, .ft-chip, .ft-running, .ft-date, .ft-due, .ft-priority) {
+  font-size: inherit; line-height: 1; box-sizing: border-box; align-self: flex-start;
+  height: calc(var(--ft-line) * 1em); min-width: 1.5rem; padding: 0;
+  margin-block: 0; margin-inline: 0.4rem 0; align-items: center; justify-content: center;
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-date { justify-content: flex-end; gap: 0.2rem; }
+body:not(.is-mobile) .focus-tasks-view li.ft-task :is(.ft-date-text, .ft-due > span:not(.ft-due-icon), .ft-chip > span:not(.ft-chip-icon)) {
+  font-size: 0.8em; line-height: 1;
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task :is(.ft-running, .ft-chip, .ft-plus, .ft-due, .ft-date) svg {
+  width: 1rem; height: 1rem;
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task .ft-calendar-status {
+  margin: 0; width: 1.5rem; height: 100%; display: inline-flex; align-items: center; justify-content: center;
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-priority {
+  position: relative; width: 1.5rem; background: none; box-shadow: none;
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-priority::after {
+  content: ""; position: absolute; width: 0.45rem; height: 0.45rem; border-radius: 50%;
+  top: 50%; left: 50%; transform: translate(-50%, -50%); background: var(--text-faint);
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-priority.is-low::after {
+  background: none; box-shadow: inset 0 0 0 1px var(--text-faint);
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-priority.is-normal::after { background: var(--color-orange); }
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-priority.is-high::after {
+  width: 0.6rem; height: 0.6rem; background: var(--text-error);
+}
+body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-grip {
+  top: 0.25em; height: calc(var(--ft-line) * 1em); padding-block: 0; align-items: center; justify-content: center;
+}
+
 .focus-tasks-view .ft-focus-title { cursor: pointer; }
 .focus-tasks-view .ft-focus-title:hover { color: var(--text-normal); }
 

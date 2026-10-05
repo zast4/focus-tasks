@@ -159,6 +159,8 @@ node test/mobile.mjs                                   # mobile emulation, with 
 node --test test/audit.mjs test/archive-repair.mjs test/delivery.mjs # failures/concurrency/delivery
 node --test test/stress.mjs                              # histories + 10,000 tasks
 node test/e2e.mjs --with-tasks                           # actual installed Tasks
+node test/e2e.mjs --match 'row controls' --baseline shipped # new geometry checks must reject the old layout
+node test/e2e.mjs --match 'row controls' --theme <theme-dir> --with-tasks # same geometry in the user's composition
 node test/e2e.mjs --with-tasknotes                        # actual installed TaskNotes
 python -m unittest discover -s bridge -p test_calendar.py # calendar Python environment required
 ```
@@ -168,6 +170,13 @@ memory with the same frontmatter rules. It is where the nasty cases live — jun
 time, duplicate uids, two projects of one name, renames that collide, order after a move, four fuzz
 rounds over random vaults that hold one invariant: **no open task may be invisible**. It takes a
 second, so run it on every change.
+
+`test/row-alignment.mjs` measures desktop row controls in the pane and embedded area/project views
+at 620/1000 px and 14/18/26 px text. It checks the actual font and width, visible hover controls,
+SVG/text centres on the first line, uniform icon sizes, row bounds and control intersections.
+Geometry and screenshots are saved to `test/shots/desktop-row-*`; a filtered E2E run reports only
+the scenarios actually executed. Keep row cell height based on the task font, with smaller labels
+inside the cell. Never combine a full-line control height with an old vertical margin.
 
 `test/mobile.mjs` turns on Obsidian's own mobile emulation (a setting of the whole app — both suites
 switch it deliberately, or the desktop run silently tests the phone build) and drives the list with
