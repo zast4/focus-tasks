@@ -64,8 +64,12 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Phone offline capture and reload | Note exists locally immediately and survives reload | P; actual iPhone/Sync acceptance |
 | Tick a task halfway down the list | Desktop preserves the top visible row; phone preserves the next action, including a step becoming the project's collapsed action; drift at most 3 px | E, P |
 | Timed backlog task becomes relevant | Scheduled day enters Focus; separate cloud event notifies at its hour | A, E, C |
+| Open a date, Waiting or reminder card on a phone | Shared date/clock/Save layout; 320/390/430px fit, 44px Save, calendar taps keep the keyboard closed | P |
+| Save an ordinary task with empty time | Day-only value, no implicit midnight event; an explicit 00:00 remains a real clock | E, P, C |
+| Change the day of tasks with different hours | Each hour survives; setting/clearing a group clock is one undoable transaction | E |
 | Timed Waiting becomes relevant | Same event identity, exact return moment, no completion automation | M, E, C |
 | Calendar rename/reschedule/complete/cancel/clear | Update/delete only the owned event without duplicates | C, disposable iCloud probe |
+| Existing reminder after format update | Same event uid, 30-minute display, native default alert, correctly encoded note link, no busy time | C, live iCloud readback |
 | Calendar offline, missing file, malformed note, duplicate uid | Retry/protect; Sync grace; past first-arrival is marked missed | C |
 | Remote Calendar replacement/write/delete race | ETag condition refuses overwriting/deleting a foreign event | C |
 | Large vault/random histories | Every active note is discoverable; uid, body and custom properties survive | S |

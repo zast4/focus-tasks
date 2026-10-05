@@ -1,27 +1,31 @@
 # Apple Calendar notifications
 
-The task note owns the date and time. The Mac-host bridge mirrors it into one short,
-transparent Calendar event with a notification at its start. This is a Calendar event;
+The task note owns the date and time. The Mac-host bridge mirrors it into one 30-minute,
+transparent Calendar event using Apple Calendar's account/device default notification.
+The owner's iCloud default is 30 minutes before the event; the bridge adds no VALARM.
+This is a Calendar event;
 it is not a native Apple Reminders item with its own checkbox.
 
 ## The two cases
 
 1. An undated backlog task gets a scheduled day and a reminder hour. On its day the task
-   joins the focus; at the chosen hour Calendar notifies the user.
+   joins the focus; Calendar uses its default alert before the chosen hour.
 2. A waiting task gets the day and optional hour to look again. Before that moment it
    stays in Waiting; at that moment it becomes relevant in Focus. An explicit hour also
-   creates the Calendar notification. Coming back early removes the future notification.
+   creates the Calendar event using its default notification. Coming back early removes the future notification.
 
 The reminder and Waiting cards reject an explicit time that has already passed today.
 Waiting with today's day and no hour can return immediately. Ordinary date edits can
 still backdate work; first delivery of a past timed note is recorded as missed.
 
-The menu offers "Remind in Apple Calendar". The ordinary date card still saves a picked
-day immediately. Its extra reminder action opens the hour/minute card. Existing timed
-tasks open with their hour filled. Changing a day preserves the hour. Emptying the
+The menu offers "Remind in Apple Calendar". Task dates, Waiting and reminders share the
+date/hour/minute card with an explicit Save button (or Enter). Picking a day leaves the
+card open for an optional hour. Existing timed tasks open with their hour filled. Changing a day preserves the hour. Emptying the
 clock removes the notification while retaining the day; clearing the date removes both.
 
-Dates without a time do not produce events or guessed midnight notifications. The two
+Dates without a time do not produce events or guessed midnight notifications. Obsidian
+links percent-encode spaces as `%20` and literal plus signs as `%2B`; form encoding (`+`
+for a space) does not match Obsidian's URI decoder. The two
 return semantics are deliberate: ordinary tasks are relevant for the whole scheduled
 day; Waiting is reviewed at its exact scheduled moment. Completion remains the user's
 action, and Calendar never completes or reopens a task.
@@ -32,10 +36,10 @@ action, and Calendar never completes or reopens a task.
   No Calendar token, password, URL or app-specific password goes into a task or plugin settings.
 - The event UID is a stable hash of the task UID. Rename, move, reschedule and Waiting
   reuse the same event. Duplicate creates a new task/event identity.
-- A DISPLAY alarm has its own UID (required for the tested iCloud round trip).
+- The bridge omits VALARM so Apple Calendar supplies its native default without an extra start alarm.
 - Updating/deleting verifies ownership and uses ETag conditions. A foreign event is
   never overwritten, including a replacement between GET and PUT/DELETE.
-- After saving, GET verifies the event time, identity, fingerprint and actual alarm.
+- After saving, GET verifies the event time, duration, identity, fingerprint, note URL and removal of the old bridge-owned alarm. Native client defaults are preserved.
   State is acknowledged only after this succeeds. This proves server persistence,
   not delivery on a particular Watch or phone.
 - Completion, cancellation, clearing the time/date or archiving removes only the owned

@@ -251,6 +251,72 @@ step("the date picker fits the screen and sets a date by tap", async () => {
   await taskIs("Сходить в зал", { scheduled: TODAY });
 });
 
+step("one calendar card supports date-only, waiting and reminders on narrow phones", async () => {
+  const tomorrow=ymd(new Date(Date.now()+864e5));
+  const original=await page.eval(`const p=app.plugins.plugins['focus-tasks'];const all=p.everything();await p.setEverything(true);await p.setOpen('area:🧤Рутина',true);
+    for(const mode of ['date','waiting','reminder'])await p.createTask('Calendar '+mode,{area:'🧤Рутина'},${J(TODAY)});return all;`);
+  try {
+    for(const width of [320,390,430]) {
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:HEIGHT,deviceScaleFactor:2,mobile:true});await sleep(200);
+      for(const mode of ['date','waiting','reminder']) {
+        await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(x=>x.text===${J('Calendar '+mode)});await p.setWaiting(task,false);await p.setScheduled(task,${J(TODAY)},null);p.refresh();return true;`);
+        await until(()=>page.eval(`return !!__m.task(${J('Calendar '+mode)})`),'calendar fixture');
+        await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(x=>x.text===${J('Calendar '+mode)}),v=[...p.views].find(v=>v.containerEl.getClientRects().length),row=__m.task(${J('Calendar '+mode)}),anchor=row.querySelector('.ft-date')||row;
+          await v[${J(mode==='date'?'editDate':mode==='waiting'?'askReturn':'askReminder')}](task,anchor);return true;`);
+        await until(()=>page.eval(`return !!document.querySelector('.ft-picker')`),'shared calendar');
+        const card=await page.eval(`const p=document.querySelector('.ft-picker'),r=p?.getBoundingClientRect(),button=p?.querySelector('.ft-picker-save'),b=button?.getBoundingClientRect();
+          const fields=[...p.querySelectorAll('input')].map(e=>{const s=getComputedStyle(e),ctx=document.createElement('canvas').getContext('2d');ctx.font=s.font;const text=e.value||e.placeholder;return {value:text,width:e.getBoundingClientRect().width,usable:e.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight),textWidth:ctx.measureText(text).width};});
+          return {parts:p?.querySelectorAll('.ft-picker-part').length,save:!!button,left:r?.left,right:r?.right,top:r?.top,bottom:r?.bottom,w:innerWidth,h:innerHeight,tap:b?.height,focused:document.activeElement?.matches('.ft-picker input'),fields};`);
+        if(card.parts!==2||!card.save)throw new Error(mode+' uses a different calendar: '+J(card));
+        if(card.focused)throw new Error('opening the calendar summons the keyboard on a phone');
+        if(card.left<0||card.right>card.w||card.top<0||card.bottom>card.h||card.tap<44)throw new Error(mode+' calendar cannot be used on '+width+'px: '+J(card));
+        if(card.fields.some(f=>f.usable<f.textWidth+2)||card.fields[0].width<100||card.fields.slice(1).some(f=>f.width<44))throw new Error(mode+' calendar inputs clip their text or cannot be tapped: '+J(card.fields));
+        if(width===390 && mode==='date')await page.shot('/tmp/focus-calendar-phone.png');
+        await page.eval(`const picker=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.picker)?.picker;picker.month.year(${Number(tomorrow.slice(0,4))}).month(${Number(tomorrow.slice(5,7))-1}).startOf('month');picker.draw();return true;`);
+        await tapOn(`[...document.querySelectorAll('.ft-picker-day:not(.is-other)')].find(d=>d.textContent===${J(String(Number(tomorrow.slice(8))))})`,'tomorrow in calendar');
+        if(!await page.eval(`return !!document.querySelector('.ft-picker') && !document.activeElement?.matches('.ft-picker input')`))throw new Error('calendar tap closes the card or summons the keyboard');
+        if(mode==='reminder') {
+          // Empty clock cannot silently become a midnight notification.
+          await page.eval(`document.querySelector('.ft-picker .is-hh').value='';document.querySelector('.ft-picker .is-mm').value='';return true;`);
+          await tapOn(`document.querySelector('.ft-picker-save')`,'save reminder');
+          if(!await page.eval(`return !!document.querySelector('.ft-picker .is-hh.is-invalid')`))throw new Error('blank reminder time became a clock');
+          await tapOn(`document.querySelector('.ft-picker .is-hh')`,'hour');await page.type('16');await page.type('30');
+        } else {
+          await page.eval(`document.querySelector('.ft-picker .is-hh').value='';document.querySelector('.ft-picker .is-mm').value='';return true;`);
+        }
+        await tapOn(`document.querySelector('.ft-picker-save')`,'save calendar');
+        await taskIs('Calendar '+mode,{scheduled:tomorrow+(mode==='reminder'?'T16:30':''),status:mode==='waiting'?'waiting':'open'});
+        await until(()=>page.eval(`return !document.querySelector('.ft-picker')`),'calendar saved');
+      }
+    }
+  } finally {
+    await page.key('Escape');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:WIDTH,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'];for(const task of p.tasks().filter(t=>/^Calendar (date|waiting|reminder)$/.test(t.text)))await app.vault.delete(task.file);await p.setEverything(${J(original)});return true;`);
+  }
+});
+
+step("the calendar remains saveable when the phone keyboard reduces the viewport", async () => {
+  const all=await page.eval(`const p=app.plugins.plugins['focus-tasks'],all=p.everything();await p.createTask('Calendar keyboard',{area:'🧤Рутина'},${J(TODAY)});await p.setEverything(true);await p.setOpen('area:🧤Рутина',true);return all;`);
+  try {
+    await until(()=>page.eval(`return !!__m.task('Calendar keyboard')`),'keyboard fixture');
+    await tapOn(`__m.task('Calendar keyboard').querySelector('.ft-date')`,'calendar date');
+    await until(()=>page.eval(`return !!document.querySelector('.ft-picker-save')`),'calendar Save');
+    await tapOn(`document.querySelector('.ft-picker .is-hh')`,'hour before keyboard scroll');await page.type('16');
+    await page.eval(`document.dispatchEvent(new Event('scroll'));return true;`);await sleep(200);
+    if(!await page.eval(`return !!document.querySelector('.ft-picker')`))throw new Error('keyboard document movement prematurely saves a partial hour');
+    await page.type('30');
+    await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:360,deviceScaleFactor:2,mobile:true});
+    await until(()=>page.eval(`const r=document.querySelector('.ft-picker')?.getBoundingClientRect();return r && r.top>=0 && r.bottom<=innerHeight && r.right<=innerWidth;`),'calendar within reduced viewport');
+    await tapOn(`document.querySelector('.ft-picker-save')`,'Save reachable within card scroll');
+    await until(()=>page.eval(`return !document.querySelector('.ft-picker')`),'saved with reduced viewport');
+    await taskIs('Calendar keyboard',{scheduled:TODAY+'T16:30'});
+  } finally {
+    await page.key('Escape');await page.send('Emulation.setDeviceMetricsOverride',{width:WIDTH,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.text==='Calendar keyboard');if(task)await app.vault.delete(task.file);await p.setEverything(${J(all)});return true;`);
+  }
+});
+
 step("a finger drags a task into a project", async () => {
   // the plain focus is flat, with no project headers to drop onto: the tree is in «All»
   await page.eval(`const p = app.plugins.plugins['focus-tasks']; window.__wasAll = p.everything(); p.setEverything(true); return true;`);

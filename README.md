@@ -57,7 +57,7 @@ What you can do in the view:
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** saves and leaves the row selected (a wiped row keeps its text) |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date, **⌘/Ctrl+5** «Waiting…» (the card asks when to look again), **⌘/Ctrl+Enter** saves and opens the task as a note, **⌘/Ctrl+⌫** deletes the task (Undo in the notice) and moves the editor to the row above; a day that takes the row out of its list sends it off at once and moves the editor to the next row |
 | Undo | **⌘/Ctrl+Z** in the list takes back the last change (a tick, a date, a move, a delete) and selects the rows it touched; while editing, with nothing typed yet, it does the same — typed text keeps the editor's own undo |
-| Date picker | click the date on the right (type `25.12`, `tomorrow`, or pick a day) |
+| Date picker | click the date on the right, type `25.12` / `tomorrow` or pick a day, then Save / Enter; the same task card accepts an optional hour, blank means day-only |
 | Add a task | **+** on an area or a project header; «Empty» in an empty area |
 | Menu | right-click a row; on a phone, long-press its text |
 | Find | **⌘/Ctrl+F** in the list's pane (or the command «Find in the list»): any area, project or open task by part of its name; choosing one opens whatever hides it, scrolls to it and selects it |
@@ -251,7 +251,7 @@ passes (`--keep` leaves it).
 два поля, как в календаре macOS: две цифры, и курсор сам уходит в минуты, ещё две - и Tab закрывает
 карточку, момент выставлен. Всё с клавиатуры, мышь не нужна. Закрыть карточку можно и просто кликнув
 мимо - выставленное сохранится; отменяет только Esc. День можно перебить в поле слева
-(«в пятницу», «+10», «через 5 дней») или выбрать в календаре, курсор вернётся к часам. Пустые часы
+(«в пятницу», «+10», «через 5 дней») или выбрать в календаре, курсор на компьютере вернётся к часам. Пустые часы
 означают весь день. Прошлое карточка не берёт, а закрыл её - не изменилось ничего: статус без дня
 возврата не ставится.
 
@@ -334,9 +334,17 @@ Shift+клик выделяет все задачи от последней кл
 TaskNotes для работы списка не нужен. Если используются повторы, их выполнение
 делегируется TaskNotes; отменять выполнение такого повтора нужно в нём.
 Apple Calendar подключается отдельным мостом:
-[как устроено подключение](CALENDAR_INTEGRATION.md). У задачи со временем появляется короткое
+[как устроено подключение](CALENDAR_INTEGRATION.md). У задачи со временем появляется получасовое
 событие с уведомлением. Обычная дата не создаёт ночных уведомлений. Перенос дня сохраняет
 час; удаление часа убирает напоминание. Это событие Calendar, отдельное от задачи Apple Reminders.
+Напоминание берётся из настройки iCloud в Calendar: у владельца это 30 минут до начала.
+
+В фокусе, отложке и "Жду" используется одна карточка даты с полями часов и минут. Выбор дня
+оставляет карточку открытой; "Сохранить" или Enter применяет дату и время. Пустое время означает
+только дату, без подстановки 00:00. "Убрать время" убирает час, в том числе у группы задач.
+Разные часы выбранных задач показаны прочерками: при переносе дня каждый час сохраняется;
+введённое время применяется ко всем. На телефоне открытие календаря и выбор дня не вызывают
+клавиатуру. Для пункта "Напомнить в Apple Calendar" время обязательно.
 
 ## License
 

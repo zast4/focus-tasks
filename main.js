@@ -143,6 +143,7 @@ const STRINGS = {
     reminderClock: "Choose a time for the reminder", repeatUndo: "Undo this recurring occurrence in TaskNotes.", calendarTitle: "Apple Calendar reminders", calendarOff: "Not connected yet. A date with a time can be prepared in a task.",
     calendarOn: "Connected. Dates with a time appear as reminder events after syncing.", calendarProblem: "Reminders have not synced yet. Check the calendar connection.",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
+    pickerSave: "Save", clearTime: "Remove time", mixedTime: "Different times; unchanged hours are preserved",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
     weekdays: ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"],
     sFolder: "Folder", sFolderDesc: "Where the notes of areas and projects live. Notes linked to them can be anywhere.",
@@ -234,6 +235,7 @@ const STRINGS = {
     reminderClock: "Укажи время напоминания", repeatUndo: "Отмени выполнение этого повтора в TaskNotes.", calendarTitle: "Напоминания Apple Calendar", calendarOff: "Пока не подключён. Дату со временем можно подготовить в задаче.",
     calendarOn: "Подключён. Даты со временем попадают в календарь после синхронизации.", calendarProblem: "Напоминания пока не синхронизированы. Проверь подключение календаря.",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
+    pickerSave: "Сохранить", clearTime: "Убрать время", mixedTime: "Разное время; без правки часы сохранятся",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
     weekdays: ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"],
     sFolder: "Папка", sFolderDesc: "Где лежат заметки областей и проектов. Привязанные к ним заметки могут быть где угодно.",
@@ -410,7 +412,7 @@ class DatePicker {
   // earliest day that answers it at all, `clear: false` takes away «no date» where having none would
   // make no sense, and `time` adds the two fields for an hour of that day.
   constructor(anchor, value, onPick, onCancel, opts = {}) {
-    Object.assign(this, { value, onPick, onCancel, min: opts.min || null, tooEarly: opts.tooEarly || null, timeRequired: !!opts.timeRequired, futureClock: !!opts.futureClock });
+    Object.assign(this, { value, onPick, onCancel, min: opts.min || null, tooEarly: opts.tooEarly || null, timeRequired: !!opts.timeRequired, futureClock: !!opts.futureClock, preserveTime: !!opts.preserveTime });
     this.month = moment(value || opts.min || today()).startOf("month");
     this.el = document.body.createDiv({ cls: "ft-picker" });
     if (opts.title) this.el.createDiv({ cls: "ft-picker-caption", text: opts.title });
@@ -418,8 +420,8 @@ class DatePicker {
     const field = this.el.createDiv({ cls: "ft-picker-field" });
     this.input = field.createEl("input", { type: "text", cls: "ft-picker-input", attr: { placeholder: opts.hint || t("pickerPlaceholder") } });
     this.input.value = value ? moment(value).format("DD.MM.YY") : "";
-    // An hour is asked for only where it means something — the moment a task comes back. Two fields,
-    // not one: type two digits for the hour and the caret moves to the minutes by itself, two more
+    // The task date and its optional reminder/return hour share one card. Type two digits for the
+    // hour and the caret moves to the minutes by itself, two more
     // and Tab closes the card with the time set. Hands stay on the keyboard the whole way.
     if (opts.time) {
       const pair = field.createDiv({ cls: "ft-picker-clock" });
@@ -428,6 +430,11 @@ class DatePicker {
       this.hh = cell("is-hh", (opts.at || "").slice(0, 2));
       pair.createSpan({ cls: "ft-picker-colon", text: ":" });
       this.mm = cell("is-mm", (opts.at || "").slice(3, 5));
+      this.initialClock = `${this.hh.value}:${this.mm.value}`;
+      if (opts.mixedTime) {
+        this.hh.placeholder = this.mm.placeholder = "-";
+        pair.setAttribute("aria-label", t("mixedTime"));
+      }
       // The segments are filled from the keyboard and nothing else: two digits for the hour and the
       // caret moves on by itself, two for the minutes and Tab ends the run. A segment selects itself
       // when it is entered, so typing always replaces what was there.
@@ -438,8 +445,8 @@ class DatePicker {
         const full = el.value.length === 2 || Number(el.value) * 10 > cap(el);   // «3» cannot start an hour
         if (full && el === this.hh) { this.hh.value = this.hh.value.padStart(2, "0"); this.mm.focus(); }
       };
-      this.hh.oninput = () => fill(this.hh);
-      this.mm.oninput = () => digits(this.mm);
+      this.hh.oninput = () => { this.hh.removeClass("is-invalid"); fill(this.hh); };
+      this.mm.oninput = () => { this.hh.removeClass("is-invalid"); digits(this.mm); };
       for (const el of [this.hh, this.mm]) {
         el.onfocus = () => el.select();
         el.onblur = () => { if (el.value) el.value = el.value.padStart(2, "0"); };
@@ -456,12 +463,20 @@ class DatePicker {
     this.head = this.el.createDiv({ cls: "ft-picker-head" });
     this.grid = this.el.createDiv({ cls: "ft-picker-grid" });
     if (opts.clear !== false) this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("clearDate") }).onclick = () => this.pick(null);
+    if (opts.time && !opts.timeRequired) this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("clearTime"), cls: "ft-picker-clear-time" }).onclick = () => {
+      this.hh.value = this.mm.value = "";
+      this.hh.removeClass("is-invalid");
+      this.forceClock = true;
+    };
     if (opts.reminder) this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("reminder"), cls: "ft-picker-reminder" }).onclick = () => {
       this.close();
       opts.reminder();
     };
+    this.el.createDiv({ cls: "ft-picker-actions" }).createEl("button", { text: t("pickerSave"), cls: "ft-picker-save" }).onclick = () => this.submit();
     this.draw();
     this.place(anchor);
+    this.viewport = window.visualViewport;
+    this.resized = () => this.place(anchor);
     this.input.onkeydown = (e) => {
       e.stopPropagation();
       if (e.key === "Escape") { e.preventDefault(); this.close(); return; }
@@ -474,7 +489,10 @@ class DatePicker {
     this.keys = (e) => { if (e.key === "Escape") { e.preventDefault(); this.close(); } };
     // Scrolling another note pane cannot commit this card. Only the card's own anchor moves it.
     this.scrolled = e => {
-      if (!this.el.contains(e.target) && (e.target === document || e.target === window || e.target.contains?.(anchor))) this.commit();
+      // iOS moves the document when its keyboard opens or changes focus between the clock fields.
+      // Keep that partial entry open; scrolling the anchor pane still commits as before.
+      if (Platform.isMobile && (e.target === document || e.target === window) && this.el.contains(document.activeElement)) { this.resized(); return; }
+      if (!(e.target instanceof Node && this.el.contains(e.target)) && (e.target === document || e.target === window || e.target.contains?.(anchor))) this.commit();
     };
     // The click that opened the picker is still travelling, so listening starts a tick later — and
     // only if the picker is still open by then, or the listeners would outlive it.
@@ -484,10 +502,13 @@ class DatePicker {
       document.addEventListener("pointerdown", this.outside, true);
       document.addEventListener("keydown", this.keys, true);
       document.addEventListener("scroll", this.scrolled, true);
+      window.addEventListener("resize", this.resized);
+      this.viewport?.addEventListener("resize", this.resized);
+      this.viewport?.addEventListener("scroll", this.resized);
     }, 0);
     // The day is already answered (today, unless told otherwise); the hour is what is actually being
     // typed, so that is where the caret starts.
-    if (!Platform.isMobile) (this.hh || this.input).focus();  // on a phone the keyboard would cover the month
+    if (!Platform.isMobile) (opts.focusTime === false ? this.input : this.hh || this.input).focus();  // on a phone the keyboard would cover the month
   }
 
   draw() {
@@ -512,16 +533,15 @@ class DatePicker {
       if (iso === now) cell.addClass("is-today");
       if (iso === this.value) cell.addClass("is-selected");
       if (!this.allowed(iso)) cell.addClass("is-blocked");
-      // With an hour still to type, a day is an answer to half the question: it fills the field and
-      // hands the caret back to the clock instead of closing the card.
-      else if (this.hh) cell.onclick = () => {
+      // Picking a day fills the card. The same Save/Enter gesture confirms it everywhere, leaving
+      // time to add an hour. A phone must not summon its keyboard merely for a calendar tap.
+      else cell.onclick = () => {
         this.value = iso;
         this.input.value = moment(iso).format("DD.MM.YY");
         this.input.removeClass("is-invalid");
         this.draw();
-        this.hh.focus();
+        if (!Platform.isMobile && this.hh) this.hh.focus();
       };
-      else cell.onclick = () => this.pick(iso);
     }
   }
 
@@ -529,11 +549,16 @@ class DatePicker {
   allowed(iso) { return !this.min || iso >= this.min; }
 
   place(anchor) {
+    const viewport = window.visualViewport;
+    const vw = viewport?.width || window.innerWidth, vh = viewport?.height || window.innerHeight;
+    const vx = viewport?.offsetLeft || 0, vy = viewport?.offsetTop || 0;
+    this.el.style.maxHeight = `${Math.max(80, vh - 16)}px`;
     const r = anchor.getBoundingClientRect();
     const w = this.el.offsetWidth, h = this.el.offsetHeight;
-    const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+    const left = Math.max(vx + 8, Math.min(r.right - w, vx + vw - w - 8));
     let top = r.bottom + 6;
-    if (top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+    if (top + h > vy + vh - 8) top = r.top - h - 6;
+    top = Math.max(vy + 8, Math.min(top, vy + vh - h - 8));
     Object.assign(this.el.style, { left: `${left}px`, top: `${top}px` });
   }
 
@@ -564,7 +589,10 @@ class DatePicker {
     }
     this.busy = true;
     try {
-      if (await this.onPick(day, at) === false) return false;
+      // An untouched mixed clock means each selected task keeps its own hour. It also preserves
+      // a reminder received through Sync since this card opened; clearing the fields is explicit.
+      const keepClock = this.preserveTime && !this.forceClock && `${this.hh.value}:${this.mm.value}` === this.initialClock;
+      if (await this.onPick(day, keepClock ? undefined : at) === false) return false;
       this.close(true);
       return true;
     } catch (e) {
@@ -591,6 +619,9 @@ class DatePicker {
       document.removeEventListener("pointerdown", this.outside, true);
       document.removeEventListener("keydown", this.keys, true);
       document.removeEventListener("scroll", this.scrolled, true);
+      window.removeEventListener("resize", this.resized);
+      this.viewport?.removeEventListener("resize", this.resized);
+      this.viewport?.removeEventListener("scroll", this.resized);
     }
     this.el.remove();
     if (!picked) this.onCancel();
@@ -2222,10 +2253,16 @@ class FocusRenderer extends MarkdownRenderChild {
     if (tasks.every((x) => x.status === STATUS_WAITING)) return this.askReturn(tasks, el);
     const days = [...new Set(tasks.map((x) => x.date || null))];
     this.anchor = task;
-    const timed = tasks.length === 1 && !!task.at;
+    const clocks = [...new Set(tasks.map(x => x.at || null))];
+    const at = clocks.length === 1 ? clocks[0] : null;
     this.card(el, () => new DatePicker(el, days.length === 1 ? days[0] : null, async (day, at) => {
-      const change = tasks.filter((x) => (x.date || null) !== day || timed && x.at !== at);
-      if (change.length && await (timed ? this.plugin.setScheduled(task, day, at) : this.plugin.setDates(change, day)) === false) return false;
+      // An explicit clock edit must reach disk even when Sync changed the hour after this card
+      // opened. Only an untouched clock can use the row's cached day to skip an unchanged gesture.
+      const change = at !== undefined ? tasks : tasks.filter(x => (x.date || null) !== day);
+      if (change.length && await this.plugin.track(t("aDate"), change.map(x => x.file), async tx => {
+        for (const item of change) if (!await (at === undefined ? this.plugin.setDate(item, day, tx) : this.plugin.setScheduled(item, day, at, tx))) return false;
+        return true;
+      }) === false) return false;
       this.editing = false;
       this.picker = null;
       this.clearSelection();
@@ -2235,7 +2272,7 @@ class FocusRenderer extends MarkdownRenderChild {
       this.picker = null;
       el.removeClass("is-active");
       this.render();
-    }, { time: timed, at: task.at, reminder: timed ? null : () => this.askReminder(tasks, el) }));
+    }, { time: true, at, mixedTime: clocks.length > 1, preserveTime: true, focusTime: !!at }));
   }
 
   async askReminder(tasks, el = null) {

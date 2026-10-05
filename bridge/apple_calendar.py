@@ -25,6 +25,7 @@ from zoneinfo import ZoneInfo
 import yaml
 
 UTC = dt.timezone.utc
+EVENT_DURATION_MINUTES = 30
 OWNER = "X-FOCUS-TASKS-UID"
 FRONT = re.compile(r"^\ufeff?---\r?\n(.*?)\r?\n---(?:\r?\n|$)", re.S)
 
@@ -44,7 +45,7 @@ class Reminder:
 
     @property
     def fingerprint(self):
-        content = [self.uid, self.path, self.title, self.at.isoformat(), self.waiting, self.vault]
+        content = [self.uid, self.path, self.title, self.at.isoformat(), self.waiting, self.vault, EVENT_DURATION_MINUTES, "device-default", "percent-encoded-uri"]
         return hashlib.sha256(json.dumps(content, ensure_ascii=False).encode()).hexdigest()
 
 
@@ -114,8 +115,14 @@ def scan(vault: Path, folder="Задачи", timezone="Europe/Moscow", exclude=(
     return out
 
 
+def note_url(reminder: Reminder) -> str:
+    # Obsidian uses percent-decoding, not HTML form decoding: '+' is a literal filename character.
+    return "obsidian://open?" + urlencode({"vault": unicodedata.normalize("NFC", reminder.vault),
+                                          "file": unicodedata.normalize("NFC", reminder.path)}, quote_via=quote)
+
+
 def event_ical(reminder: Reminder) -> bytes:
-    from icalendar import Alarm, Calendar, Event
+    from icalendar import Calendar, Event
     ev = Event()
     ev.add("uid", reminder.event_uid)
     ev.add("dtstamp", dt.datetime.now(UTC))
@@ -123,19 +130,14 @@ def event_ical(reminder: Reminder) -> bytes:
     ev.add("X-FOCUS-TASKS-FINGERPRINT", reminder.fingerprint)
     ev.add("summary", ("Вернуться: " if reminder.waiting else "К задаче: ") + reminder.title)
     ev.add("dtstart", reminder.at)
-    ev.add("dtend", reminder.at + dt.timedelta(minutes=1))
+    ev.add("dtend", reminder.at + dt.timedelta(minutes=EVENT_DURATION_MINUTES))
     ev.add("transp", "TRANSPARENT")
     # macOS directory entries can be NFD; Obsidian indexes paths as NFC.
-    link = "obsidian://open?" + urlencode({"vault": unicodedata.normalize("NFC", reminder.vault),
-                                        "file": unicodedata.normalize("NFC", reminder.path)})
+    link = note_url(reminder)
     ev.add("url", link)
     ev.add("description", "Открыть задачу: " + link + "\nДату и время меняй в Focus Tasks. Это напоминание, без рабочего блока.")
-    alarm = Alarm()
-    alarm.add("uid", reminder.event_uid.replace("@", "-alarm@"))
-    alarm.add("action", "DISPLAY")
-    alarm.add("description", reminder.title)
-    alarm.add("trigger", dt.timedelta(0))
-    ev.add_component(alarm)
+    # No VALARM: Apple Calendar supplies the account/device default (the owner's is 30 minutes).
+    # An explicit alarm would add a second notification beside that native default.
     cal = Calendar()
     cal.add("prodid", "-//Focus Tasks//Apple Calendar bridge//RU")
     cal.add("version", "2.0")
@@ -176,9 +178,9 @@ class ICloud:
         return (str(ev.get("uid")) == reminder.event_uid
             and str(ev.get("X-FOCUS-TASKS-FINGERPRINT", "")) == reminder.fingerprint
             and ev.decoded("dtstart") == reminder.at
-            and ev.decoded("dtend") == reminder.at + dt.timedelta(minutes=1)
-            and any(str(a.get("action")) == "DISPLAY" and a.decoded("trigger") == dt.timedelta(0)
-                and a.get("uid") for a in alarms))
+            and ev.decoded("dtend") == reminder.at + dt.timedelta(minutes=EVENT_DURATION_MINUTES)
+            and str(ev.get("url", "")) == note_url(reminder)
+            and not any(str(a.get("uid", "")) == reminder.event_uid.replace("@", "-alarm@") for a in alarms))
 
     def upsert(self, reminder):
         old = self.existing(reminder)

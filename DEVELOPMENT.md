@@ -150,6 +150,7 @@ open -a Obsidian --args --remote-debugging-port=9222   # any vault open
 npm install
 node test/model.mjs                                    # the data layer, no Obsidian needed
 node test/e2e.mjs                                      # --keep leaves the vault open
+                                                       # native Calendar URI probe uses bridge venv; override with FOCUS_CALENDAR_PYTHON
 node test/mobile.mjs                                   # mobile emulation, with touch
 node --test test/audit.mjs test/archive-repair.mjs test/delivery.mjs # failures/concurrency/delivery
 node --test test/stress.mjs                              # histories + 10,000 tasks

@@ -11,6 +11,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { execFileSync } from "node:child_process";
 import { Page, PORT, J, sleep, ymd, until } from "./cdp.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -354,6 +355,7 @@ step("the date on the right: a typed date, a day of the month, Clear date", asyn
   await idle();
   await pick();
   await click(`__ft.at([...document.querySelectorAll('.ft-picker-day:not(.is-other)')].find((d) => d.textContent === '15'))`);
+  await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
   await taskIs("Stretch", { scheduled: TODAY.slice(0, 8) + "15" });
   await idle();
   await pick();
@@ -2239,6 +2241,53 @@ step("changing the reminder day preserves its hour; clearing the hour is explici
   await until(()=>page.eval(`return !document.querySelector('.ft-picker') && !__ft.task('Audit reminder')?.querySelector('.ft-date')?.textContent.includes('16:30')`),'the cleared clock is reflected by the finished card and row');
 });
 
+step("the shared calendar adds optional time and saves day-only without midnight", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.createTask('Audit common calendar',{area:'Audit Area'},${J(TODAY)});return true;`);
+  const open=async()=>{await until(()=>page.eval(`return !!__ft.task('Audit common calendar')`),'calendar task');await click(`__ft.at(__ft.task('Audit common calendar').querySelector('.ft-date'))`);await until(()=>page.eval(`return !!document.querySelector('.ft-picker-save')`),'calendar with Save');};
+  await open();
+  if(!await page.eval(`const p=document.querySelector('.ft-picker');return p.querySelectorAll('.ft-picker-part').length===2 && [...p.querySelectorAll('.ft-picker-part')].every(e=>e.value==='');`))throw new Error('a plain day uses a different card or a hidden default time');
+  await page.eval(`const picker=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.picker)?.picker;picker.month.year(${Number(TOMORROW.slice(0,4))}).month(${Number(TOMORROW.slice(5,7))-1}).startOf('month');picker.draw();return true;`);
+  await click(`__ft.at([...document.querySelectorAll('.ft-picker-day:not(.is-other)')].find(d=>d.textContent===${J(String(Number(TOMORROW.slice(8))))}))`);
+  await taskIs('Audit common calendar',{scheduled:TODAY}); // day selection leaves time editable
+  await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit common calendar',{scheduled:TOMORROW});await idle();
+  await open();await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`);await page.type('16');await page.type('30');
+  await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit common calendar',{scheduled:TOMORROW+'T16:30'});await idle();
+  await open();await click(`__ft.at(document.querySelector('.ft-picker-clear-time'))`);await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit common calendar',{scheduled:TOMORROW});await idle();
+  await open();await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`);await page.type('00');await page.type('00');await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit common calendar',{scheduled:TOMORROW+'T00:00'});await idle();
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setScheduled(p.tasks().find(t=>t.text==='Audit common calendar'),${J(TOMORROW)},null);return true;`);
+  await settle();await open();
+  // A second client adds an hour while this card still displays the original day-only value.
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.text==='Audit common calendar');await app.vault.process(task.file,text=>text.replace(/^scheduled:.*$/m,'scheduled: '+${J(TOMORROW+'T17:25')}));return true;`);
+  await taskIs('Audit common calendar',{scheduled:TOMORROW+'T17:25'});
+  await click(`__ft.at(document.querySelector('.ft-picker-clear-time'))`);await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit common calendar',{scheduled:TOMORROW},'explicit clear removes an hour received after the card opened');await idle();
+});
+
+step("the shared calendar preserves mixed hours and applies a group clock as one undo", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];for(const [name,at] of [['Audit clock A','08:10'],['Audit clock B','17:25']]){const task=await p.createTask(name,{area:'Audit Area'},${J(TODAY)});await p.setScheduled(task,${J(TODAY)},at);}return true;`);
+  const open=async()=>{
+    await until(()=>page.eval(`return !!__ft.task('Audit clock A') && !!__ft.task('Audit clock B')`),'clock tasks');
+    await settle();
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'],v=[...p.views].find(v=>v.rows().some(([el])=>el===__ft.task('Audit clock A'))),tasks=v.rows().map(([,t])=>t).filter(t=>/^Audit clock [AB]$/.test(t.text));if(tasks.length!==2)throw new Error('group fixture is not rendered');v.selected=new Set(tasks);await v.editDate(tasks[0],__ft.task('Audit clock A').querySelector('.ft-date'));return true;`);
+    await until(()=>page.eval(`return !!document.querySelector('.ft-picker-save')`),'group calendar');
+  };
+  await open();
+  if(!await page.eval(`return document.querySelector('.ft-picker .is-hh').placeholder==='-'`))throw new Error('different hours are presented as one clock');
+  await page.eval(`document.querySelector('.ft-picker-input').value=${J(ddmmyy(TOMORROW))};return true;`);await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit clock A',{scheduled:TOMORROW+'T08:10'});await taskIs('Audit clock B',{scheduled:TOMORROW+'T17:25'});await idle();
+  await open();await click(`__ft.at(document.querySelector('.ft-picker-clear-time'))`);await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit clock A',{scheduled:TOMORROW});await taskIs('Audit clock B',{scheduled:TOMORROW});await idle();
+  await open();await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`);await page.type('16');await page.type('30');await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit clock A',{scheduled:TOMORROW+'T16:30'});await taskIs('Audit clock B',{scheduled:TOMORROW+'T16:30'});await idle();
+  await page.key('Meta+z');
+  await taskIs('Audit clock A',{scheduled:TOMORROW});await taskIs('Audit clock B',{scheduled:TOMORROW});
+});
+
+
 step("invalid typed dates cannot silently save the old date", async () => {
   await click(`__ft.at(__ft.task('Audit reminder').querySelector('.ft-date'))`);
   await until(()=>page.eval(`return !!document.querySelector('.ft-picker-input')`),'date card');
@@ -2349,6 +2398,16 @@ function buildVault() {
 }
 
 const isTestWindow = (p) => p.title === `${NAME} - Obsidian` || p.title.includes(` - ${NAME} - Obsidian`) || p.title.startsWith(`${NAME} - Obsidian`);
+
+// The OS URI navigates away from Focus; run this after all list interactions.
+step("a Calendar URI opens a task with spaces and a literal plus through native Obsidian", async () => {
+  const target=await page.eval(`if(app.vault.getName()!==${J(NAME)})throw new Error('wrong URI test vault');const p=app.plugins.plugins['focus-tasks'],task=await p.createTask('Calendar link + spaced name',{area:'Audit Area'},null);return task.file.path;`);
+  const python=process.env.FOCUS_CALENDAR_PYTHON || path.join(process.env.HOME,'ai-hub','.venv-calendar','bin','python');
+  const code="import sys,datetime as dt;sys.path.insert(0,'bridge');from apple_calendar import Reminder,note_url;print(note_url(Reminder('native-uri-test',sys.argv[2],'URI test',dt.datetime.now(dt.timezone.utc),False,sys.argv[1])))";
+  const uri=execFileSync(python,['-c',code,NAME,target],{cwd:ROOT,encoding:'utf8'}).trim();
+  execFileSync('open',[uri]);
+  await until(()=>page.eval(`return app.vault.getName()===${J(NAME)} && app.workspace.activeLeaf?.view?.file?.path===${J(target)}`),'native URI opens the exact task file',15000);
+});
 
 async function openVault() {
   for (const p of (await Page.list()).filter(isTestWindow)) {

@@ -62,6 +62,16 @@ class ReconcileTests(unittest.TestCase):
             self.run_at()
         self.assertEqual(self.remote.calls, [("upsert", "one")])
 
+    def test_old_one_minute_event_is_updated_once_with_the_same_identity(self):
+        self.run_at()
+        old_content=[self.r.uid,self.r.path,self.r.title,self.r.at.isoformat(),self.r.waiting,self.r.vault]
+        self.state['tasks'][self.r.uid]['fingerprint']=hashlib.sha256(json.dumps(old_content,ensure_ascii=False).encode()).hexdigest()
+        event_uid=self.r.event_uid
+        for _ in range(3):self.run_at()
+        self.assertEqual(self.remote.calls, [('upsert','one'),('upsert','one')])
+        self.assertEqual(self.remote.items['one'].event_uid,event_uid)
+        self.assertEqual(self.state['tasks']['one']['fingerprint'],self.r.fingerprint)
+
     def test_reschedule_updates_same_uid(self):
         self.run_at()
         r = reminder(at=NOW + dt.timedelta(days=4))
@@ -262,18 +272,17 @@ class IcsTests(unittest.TestCase):
         self.assertNotIn('CALDAV_PASSWORD',str(data))
         self.assertEqual(job(Path('/tmp/Vault with spaces'),Path('/tmp/python'),"Focus Tasks",Path('/tmp/external.env'),True)[1],label)
 
-    def test_event_has_precise_time_owned_alarm_and_opens_note(self):
+    def test_event_has_precise_time_native_default_alert_and_opens_note(self):
         for waiting in (False, True):
             r = reminder(waiting=waiting)
             ev = Calendar.from_ical(event_ical(r)).walk("VEVENT")[0]
             self.assertEqual(str(ev["uid"]), r.event_uid)
             self.assertEqual(str(ev[OWNER]), r.uid)
             self.assertEqual(ev.decoded("dtstart"), r.at)
+            self.assertEqual(ev.decoded("dtend") - ev.decoded("dtstart"), dt.timedelta(minutes=30))
             self.assertEqual(str(ev["transp"]), "TRANSPARENT")
             self.assertIn("obsidian://open?", str(ev["url"]))
-            alarm = ev.walk("VALARM")[0]
-            self.assertTrue(alarm["uid"])
-            self.assertEqual(alarm.decoded("trigger"), dt.timedelta(0))
+            self.assertEqual(ev.walk("VALARM"), [])  # the native default supplies the sole alert
 
     def test_calendar_link_uses_obsidian_unicode_paths(self):
         import dataclasses
@@ -285,6 +294,37 @@ class IcsTests(unittest.TestCase):
         ev = Calendar.from_ical(event_ical(r)).walk("VEVENT")[0]
         query = parse_qs(urlparse(str(ev["url"])).query)
         self.assertEqual(query, {"vault": ["Хранилище й"], "file": ["Задачи/Проверить й.md"]})
+
+    def test_calendar_uri_matches_obsidians_percent_decoder_for_spaces_and_plus(self):
+        import dataclasses
+        from urllib.parse import urlsplit,unquote
+        r=dataclasses.replace(reminder(),vault='Vault space + plus',path='Задачи/Тест + пробел 50%.md')
+        url=str(Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]['url'])
+        decoded=dict((unquote(k),unquote(v)) for k,v in (part.split('=',1) for part in urlsplit(url).query.split('&')))
+        self.assertEqual(decoded,{'vault':r.vault,'file':r.path})
+        self.assertNotIn('+',url)
+
+    def test_readback_accepts_native_default_but_rejects_our_old_custom_alarm(self):
+        from icalendar import Alarm
+        r=reminder()
+        ev=Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]
+        native=Alarm();native.add('uid','native-client-default');native.add('action','DISPLAY');native.add('trigger',-dt.timedelta(minutes=30))
+        ev.add_component(native)
+        remote=object.__new__(ICloud)
+        with patch.object(ICloud,'existing',return_value={'event':ev}):
+            self.assertTrue(remote.verify(r))
+            native['uid']=r.event_uid.replace('@','-alarm@')
+            self.assertFalse(remote.verify(r))
+
+    def test_cloud_acknowledgement_rejects_old_event_duration(self):
+        r=reminder()
+        ev=Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]
+        remote=object.__new__(ICloud)
+        with patch.object(ICloud,'existing',return_value={'event':ev}):
+            self.assertTrue(remote.verify(r))
+            ev.pop('dtend')
+            ev.add('dtend',r.at+dt.timedelta(minutes=1))
+            self.assertFalse(remote.verify(r))
 
     def test_state_is_complete_atomic_json(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -334,7 +374,7 @@ class HostFailureTests(unittest.TestCase):
 
 class HttpClient:
     def __init__(self):
-        self.raw, self.etag, self.race, self.drop_alarm = None, '"1"', False, False
+        self.raw, self.etag, self.race, self.drop_link = None, '"1"', False, False
         self.headers = []
 
     def request(self, url, method="GET", body="", headers=None):
@@ -351,9 +391,9 @@ class HttpClient:
         if self.race:
             return SimpleNamespace(status=412)
         self.raw = body
-        if self.drop_alarm:
+        if self.drop_link:
             cal = Calendar.from_ical(body)
-            cal.walk("VEVENT")[0].subcomponents = []
+            cal.walk("VEVENT")[0].pop('url')
             self.raw = cal.to_ical()
         return SimpleNamespace(status=201)
 
@@ -391,8 +431,8 @@ class OwnershipTests(unittest.TestCase):
             with self.assertRaises(OwnershipConflict):
                 fn(self.r)
 
-    def test_missing_alarm_readback_is_not_success(self):
-        self.client.drop_alarm = True
+    def test_missing_link_readback_is_not_success(self):
+        self.client.drop_link = True
         with self.assertRaises(RuntimeError):
             self.transport.upsert(self.r)
 
