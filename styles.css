@@ -163,6 +163,11 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
   height: calc(var(--ft-line) * 1em / 0.8); font-variant-numeric: tabular-nums; cursor: pointer; white-space: nowrap;
   display: inline-flex; justify-content: flex-end; align-items: center; }
 .focus-tasks-view .ft-date.is-today { color: var(--color-green); }
+.focus-tasks-view .ft-calendar-status { display: inline-flex; align-items: center; flex: none; margin-right: 0.35em; }
+.focus-tasks-view .ft-calendar-status svg { width: 1em; height: 1em; stroke-width: 1.8; }
+.focus-tasks-view .ft-calendar-status.is-synced { color: var(--color-green); }
+.focus-tasks-view .ft-calendar-status:is(.is-pending, .is-off) { color: var(--text-muted); }
+.focus-tasks-view .ft-calendar-status.is-error { color: var(--text-error); }
 .focus-tasks-view .ft-date.is-past { color: var(--text-error); }
 .focus-tasks-view .ft-date.is-future { color: var(--interactive-accent); }
 /* The day a running task comes back is not a deadline and not today's work: it is quiet, whatever

@@ -93,8 +93,11 @@ TaskNotes is optional. The plugin reads and writes task notes independently.
 If used, recurring-instance completion is delegated to TaskNotes; undo that occurrence
 in TaskNotes. Focus Undo preserves changes owned by the companion.
 Apple Calendar notification support uses the optional host bridge in [the integration guide](CALENDAR_INTEGRATION.md).
-An explicit scheduled hour creates a short reminder event; dates alone do not create
-alarms. Change the day without losing the hour; clear the clock to remove the reminder.
+An explicit scheduled hour automatically creates a 30-minute reminder event with one alert
+at its start; dates alone do not create events. Change the day without losing the hour;
+clear the clock to remove the reminder. The calendar check icon appears only after iCloud
+confirms the current task and time. Pending/error icons never claim success. Calendar links
+open Focus; copy the exact event title into its search. There is no separate reminder menu.
 An event notification and a native Apple Reminders checkbox are different integrations.
 
 ## Settings
@@ -337,14 +340,18 @@ Apple Calendar подключается отдельным мостом:
 [как устроено подключение](CALENDAR_INTEGRATION.md). У задачи со временем появляется получасовое
 событие с уведомлением. Обычная дата не создаёт ночных уведомлений. Перенос дня сохраняет
 час; удаление часа убирает напоминание. Это событие Calendar, отдельное от задачи Apple Reminders.
-Напоминание берётся из настройки iCloud в Calendar: у владельца это 30 минут до начала.
+Для этих событий дефолтный алерт отключён; уведомление приходит в момент начала.
+Значок календаря с галочкой означает подтверждённую запись текущей задачи и времени в iCloud.
+До подтверждения виден значок ожидания, при ошибке - значок ошибки. Перенос времени, в том числе
+групповой, обновляет существующие события. Ссылка открывает Фокус; название события совпадает
+с названием задачи, его можно скопировать в поиск списка.
 
 В фокусе, отложке и "Жду" используется одна карточка даты с полями часов и минут. Выбор дня
 оставляет карточку открытой; "Сохранить" или Enter применяет дату и время. Пустое время означает
 только дату, без подстановки 00:00. "Убрать время" убирает час, в том числе у группы задач.
 Разные часы выбранных задач показаны прочерками: при переносе дня каждый час сохраняется;
 введённое время применяется ко всем. На телефоне открытие календаря и выбор дня не вызывают
-клавиатуру. Для пункта "Напомнить в Apple Calendar" время обязательно.
+клавиатуру. У задачи без даты карточка предлагает сегодня; отдельного пункта напоминания нет.
 
 ## License
 

@@ -83,6 +83,9 @@ and do not reopen one that turned done while you were working.
 - Settings explain the running build, optional TaskNotes and Calendar acknowledgement.
 - `bridge/` owns one-way Apple Calendar notification reconciliation outside Obsidian.
   Credentials and Python environments stay outside the vault and repository.
+  `calendar-status.json` is the private ownership ledger; the derived Markdown receipt syncs
+  to phones and drives badges only for the current confirmed clock. `obsidian://focus-tasks`
+  activates the list. A timed task automatically owns one 30-minute at-start reminder event.
 
 ### TaskNotes in one click
 

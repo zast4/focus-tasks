@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from icalendar import Calendar
 from caldav.lib.url import URL
 
-from apple_calendar import ICloud, OWNER, OwnershipConflict, Reminder, Snapshot, event_ical, reconcile, save_state, scan, main
+from apple_calendar import ICloud, OWNER, OwnershipConflict, Reminder, Snapshot, event_ical, reconcile, save_state, scan, main, publish_status, CALENDAR_CONTRACT, SILENT_TRIGGER
 from install_macos import job
 
 NOW = dt.datetime(2030, 1, 2, 12, tzinfo=dt.timezone.utc)
@@ -120,7 +120,9 @@ class ReconcileTests(unittest.TestCase):
     def test_offline_failure_is_retried_and_not_acknowledged(self):
         self.remote.fail = True
         self.run_at()
-        self.assertEqual(self.state["tasks"], {})
+        self.assertEqual(self.state["tasks"]["one"]["status"], "pending")
+        self.assertEqual(self.state["tasks"]["one"]["error"], "ConnectionError")
+        self.assertNotIn("checkedAt", self.state["tasks"]["one"])
         self.assertEqual(self.state["errors"], ["ConnectionError"])
         self.remote.fail = False
         self.run_at()
@@ -135,16 +137,17 @@ class ReconcileTests(unittest.TestCase):
         self.run_at(Snapshot(seen={"one"}))
         self.assertEqual(self.state["tasks"], {})
 
-    def test_missed_reminder_never_turns_into_a_false_success(self):
+    def test_late_arrival_still_creates_the_event_without_claiming_notification_delivery(self):
         self.r = reminder(at=NOW - dt.timedelta(hours=1))
         self.snapshot = Snapshot(desired={"one": self.r}, seen={"one"})
         for _ in range(10):
             self.run_at()
-        self.assertEqual(self.state["tasks"]["one"]["status"], "missed")
-        self.assertEqual(self.remote.calls, [])
+        self.assertEqual(self.state["tasks"]["one"]["status"], "synced")
+        self.assertEqual(self.remote.calls, [("upsert", "one")])
+        self.assertEqual(self.remote.items["one"].at, self.r.at)
         self.snapshot.desired["one"] = reminder(at=NOW + dt.timedelta(hours=1))
         self.run_at()
-        self.assertEqual(self.state["tasks"]["one"]["status"], "synced")
+        self.assertEqual(len(self.remote.calls), 2)
 
     def test_remote_deleted_event_recreated_at_verification(self):
         self.run_at()
@@ -152,24 +155,28 @@ class ReconcileTests(unittest.TestCase):
         self.run_at(now=NOW + dt.timedelta(minutes=11))
         self.assertEqual(len(self.remote.calls), 2)
 
-    def test_rescheduling_a_synced_future_reminder_to_the_past_removes_old_alarm_and_marks_missed(self):
+    def test_rescheduling_into_the_past_updates_the_same_event(self):
         self.run_at()
+        event_uid = self.r.event_uid
         self.snapshot.desired['one'] = reminder(at=NOW-dt.timedelta(minutes=1))
         self.run_at()
-        self.assertEqual(self.state['tasks']['one']['status'], 'missed')
-        self.assertEqual(self.remote.items, {})
+        self.assertEqual(self.state['tasks']['one']['status'], 'synced')
+        self.assertEqual(self.remote.items['one'], self.snapshot.desired['one'])
+        self.assertEqual(self.remote.items['one'].event_uid, event_uid)
+        self.assertEqual(self.remote.calls, [('upsert', 'one'), ('upsert', 'one')])
 
-    def test_failed_removal_when_rescheduling_into_past_keeps_old_state_for_retry(self):
+    def test_failed_update_keeps_ownership_but_has_no_current_success_until_retry(self):
         self.run_at()
+        previous = self.state['tasks']['one']['fingerprint']
         self.snapshot.desired['one'] = reminder(at=NOW-dt.timedelta(minutes=1))
         self.remote.fail = True
         self.run_at()
-        self.assertEqual(self.state['tasks']['one']['status'], 'synced')
-        self.assertEqual(self.state['errors'], ['ConnectionError'])
+        self.assertEqual(self.state['tasks']['one']['fingerprint'], previous)
+        self.assertEqual(self.state['tasks']['one']['error'], 'ConnectionError')
         self.remote.fail = False
         self.run_at()
-        self.assertEqual(self.state['tasks']['one']['status'], 'missed')
-        self.assertEqual(self.remote.items, {})
+        self.assertEqual(self.state['tasks']['one']['fingerprint'], self.snapshot.desired['one'].fingerprint)
+        self.assertNotIn('error', self.state['tasks']['one'])
 
     def test_offline_during_periodic_verification_keeps_last_acknowledgement(self):
         self.run_at()
@@ -272,7 +279,7 @@ class IcsTests(unittest.TestCase):
         self.assertNotIn('CALDAV_PASSWORD',str(data))
         self.assertEqual(job(Path('/tmp/Vault with spaces'),Path('/tmp/python'),"Focus Tasks",Path('/tmp/external.env'),True)[1],label)
 
-    def test_event_has_precise_time_native_default_alert_and_opens_note(self):
+    def test_event_has_one_at_start_alert_disabled_default_and_opens_focus(self):
         for waiting in (False, True):
             r = reminder(waiting=waiting)
             ev = Calendar.from_ical(event_ical(r)).walk("VEVENT")[0]
@@ -281,8 +288,18 @@ class IcsTests(unittest.TestCase):
             self.assertEqual(ev.decoded("dtstart"), r.at)
             self.assertEqual(ev.decoded("dtend") - ev.decoded("dtstart"), dt.timedelta(minutes=30))
             self.assertEqual(str(ev["transp"]), "TRANSPARENT")
-            self.assertIn("obsidian://open?", str(ev["url"]))
-            self.assertEqual(ev.walk("VALARM"), [])  # the native default supplies the sole alert
+            self.assertIn("obsidian://focus-tasks?", str(ev["url"]))
+            self.assertEqual(str(ev['summary']), r.title)
+            alarms = ev.walk('VALARM')
+            self.assertTrue(all(str(a.get('uid', '')) for a in alarms))
+            active = [a for a in alarms if str(a.get('action', '')) != 'NONE']
+            self.assertEqual(len(active), 1)
+            self.assertEqual(str(active[0]['action']), 'DISPLAY')
+            self.assertEqual(active[0].decoded('trigger'), dt.timedelta(0))
+            quiet = [a for a in alarms if str(a.get('action', '')) == 'NONE']
+            self.assertEqual(len(quiet), 1)
+            self.assertEqual(quiet[0].decoded('trigger'), SILENT_TRIGGER)
+            self.assertEqual(str(quiet[0]['X-APPLE-DEFAULT-ALARM']), 'TRUE')
 
     def test_calendar_link_uses_obsidian_unicode_paths(self):
         import dataclasses
@@ -293,7 +310,7 @@ class IcsTests(unittest.TestCase):
                                 path=unicodedata.normalize("NFD", "Задачи/Проверить й.md"))
         ev = Calendar.from_ical(event_ical(r)).walk("VEVENT")[0]
         query = parse_qs(urlparse(str(ev["url"])).query)
-        self.assertEqual(query, {"vault": ["Хранилище й"], "file": ["Задачи/Проверить й.md"]})
+        self.assertEqual(query, {"vault": ["Хранилище й"]})
 
     def test_calendar_uri_matches_obsidians_percent_decoder_for_spaces_and_plus(self):
         import dataclasses
@@ -301,19 +318,19 @@ class IcsTests(unittest.TestCase):
         r=dataclasses.replace(reminder(),vault='Vault space + plus',path='Задачи/Тест + пробел 50%.md')
         url=str(Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]['url'])
         decoded=dict((unquote(k),unquote(v)) for k,v in (part.split('=',1) for part in urlsplit(url).query.split('&')))
-        self.assertEqual(decoded,{'vault':r.vault,'file':r.path})
+        self.assertEqual(decoded,{'vault':r.vault})
         self.assertNotIn('+',url)
 
-    def test_readback_accepts_native_default_but_rejects_our_old_custom_alarm(self):
+    def test_readback_rejects_any_extra_active_default_alert(self):
         from icalendar import Alarm
-        r=reminder()
-        ev=Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]
-        native=Alarm();native.add('uid','native-client-default');native.add('action','DISPLAY');native.add('trigger',-dt.timedelta(minutes=30))
-        ev.add_component(native)
-        remote=object.__new__(ICloud)
-        with patch.object(ICloud,'existing',return_value={'event':ev}):
+        r = reminder()
+        ev = Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]
+        remote = object.__new__(ICloud)
+        with patch.object(ICloud, 'existing', return_value={'event': ev}):
             self.assertTrue(remote.verify(r))
-            native['uid']=r.event_uid.replace('@','-alarm@')
+            native = Alarm(); native.add('uid', 'native-client-default'); native.add('action', 'DISPLAY')
+            native.add('trigger', -dt.timedelta(minutes=30)); native.add('X-APPLE-DEFAULT-ALARM', 'TRUE')
+            ev.add_component(native)
             self.assertFalse(remote.verify(r))
 
     def test_cloud_acknowledgement_rejects_old_event_duration(self):
@@ -336,6 +353,102 @@ class IcsTests(unittest.TestCase):
             self.assertEqual(len(list(Path(folder).iterdir())), 1)
 
 
+class CalendarReceiptTests(unittest.TestCase):
+    def test_reverting_a_clock_after_uncertain_write_rechecks_cloud_before_acknowledging(self):
+        import dataclasses
+        class UncertainCalendar(MemoryCalendar):
+            uncertain = False
+            def upsert(self, r):
+                super().upsert(r)
+                if self.uncertain: raise ConnectionError('response lost after PUT')
+        remote, state, original = UncertainCalendar(), {'tasks': {}}, reminder()
+        snapshot = Snapshot(desired={'one': original}, seen={'one'})
+        reconcile(snapshot, state, remote, now=NOW)
+        snapshot.desired['one'] = dataclasses.replace(original, at=original.at+dt.timedelta(hours=1))
+        remote.uncertain = True
+        reconcile(snapshot, state, remote, now=NOW)
+        self.assertNotEqual(remote.items['one'], original)
+        self.assertIn('error', state['tasks']['one'])
+        snapshot.desired['one'] = original
+        remote.uncertain = False
+        reconcile(snapshot, state, remote, now=NOW)
+        self.assertEqual(remote.items['one'], original)
+        self.assertEqual(state['tasks']['one']['status'], 'synced')
+        self.assertNotIn('error', state['tasks']['one'])
+
+    def test_fractional_seconds_cannot_make_a_successful_cloud_write_look_failed(self):
+        r = reminder(at=NOW.replace(microsecond=123456))
+        ev = Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]
+        self.assertEqual(ev.decoded('dtstart'), r.at)
+        self.assertEqual(r.at.microsecond, 0)
+        remote = object.__new__(ICloud)
+        with patch.object(ICloud, 'existing', return_value={'event': ev}):
+            self.assertTrue(remote.verify(r))
+
+    def test_group_rescheduling_updates_each_existing_event_and_confirms_each_clock(self):
+        import dataclasses
+        remote, state = MemoryCalendar(), {'tasks': {}}
+        first = dataclasses.replace(reminder('one'), scheduled='2030-01-04T08:10')
+        second = dataclasses.replace(reminder('two', waiting=True), scheduled='2030-01-04T17:25')
+        snapshot = Snapshot(desired={'one': first, 'two': second}, seen={'one', 'two'})
+        reconcile(snapshot, state, remote, now=NOW)
+        identities = [r.event_uid for r in remote.items.values()]
+        for uid, r in list(snapshot.desired.items()):
+            snapshot.desired[uid] = dataclasses.replace(r, at=r.at + dt.timedelta(hours=1), scheduled='2030-01-04T16:30')
+        for _ in range(5): reconcile(snapshot, state, remote, now=NOW)
+        self.assertEqual([r.event_uid for r in remote.items.values()], identities)
+        self.assertEqual(len(remote.calls), 4)
+        for entry in state['tasks'].values():
+            self.assertEqual(entry['scheduled'], '2030-01-04T16:30')
+            self.assertEqual(entry['status'], 'synced')
+        snapshot.desired.clear()
+        reconcile(snapshot, state, remote, now=NOW)
+        self.assertEqual(remote.items, {})
+        self.assertEqual(state['tasks'], {})
+
+    def test_markdown_receipt_contains_only_acknowledgements_and_does_not_churn_on_heartbeat(self):
+        with tempfile.TemporaryDirectory() as folder:
+            p = Path(folder) / 'calendar-status.json'
+            state = {'enabled': True, 'connected': True, 'contract': CALENDAR_CONTRACT, 'binding': 'private-binding',
+                     'updatedAt': NOW.isoformat(), 'errors': [], 'tasks': {'one': {
+                         'file': 'Задачи/Call.md', 'title': 'Call', 'scheduled': '2030-01-04T00:00',
+                         'status': 'synced', 'waiting': False, 'checkedAt': NOW.isoformat(), 'caldavUrl': 'private-account-url'}}}
+            publish_status(p, state)
+            md = p.with_suffix('.md')
+            text, timestamp = md.read_text(), md.stat().st_mtime_ns
+            receipt = json.loads(text.split('```json\n')[1].split('\n```')[0])
+            self.assertEqual(receipt['schema'], 2)
+            self.assertEqual(receipt['tasks']['one']['scheduled'], '2030-01-04T00:00')
+            self.assertNotIn('private-account-url', text)
+            self.assertNotIn('private-binding', text)
+            state['updatedAt'] = (NOW + dt.timedelta(minutes=1)).isoformat()
+            publish_status(p, state)
+            self.assertEqual(md.stat().st_mtime_ns, timestamp)
+            self.assertEqual(len(list(Path(folder).iterdir())), 1)
+
+    def test_readback_requires_the_at_start_alarm_and_disabled_default(self):
+        r = reminder()
+        remote = object.__new__(ICloud)
+        for fault in ['no-active', 'no-quiet', 'before-start', 'related-end', 'repeat']:
+            ev = Calendar.from_ical(event_ical(r)).walk('VEVENT')[0]
+            active = next(a for a in ev.walk('VALARM') if str(a['action']) == 'DISPLAY')
+            quiet = next(a for a in ev.walk('VALARM') if str(a['action']) == 'NONE')
+            if fault == 'no-active': ev.subcomponents.remove(active)
+            elif fault == 'no-quiet': ev.subcomponents.remove(quiet)
+            elif fault == 'before-start': active.pop('trigger'); active.add('trigger', -dt.timedelta(minutes=30))
+            elif fault == 'related-end': active['trigger'].params['RELATED'] = 'END'
+            elif fault == 'repeat': active.add('repeat', 2); active.add('duration', dt.timedelta(minutes=1))
+            with patch.object(ICloud, 'existing', return_value={'event': ev}):
+                self.assertFalse(remote.verify(r), fault)
+
+    def test_an_old_missed_record_is_migrated_to_a_real_event(self):
+        r, remote = reminder(at=NOW-dt.timedelta(hours=1)), MemoryCalendar()
+        state = {'tasks': {'one': {'file': r.path, 'at': r.at.isoformat(), 'fingerprint': r.fingerprint, 'status': 'missed'}}}
+        reconcile(Snapshot(desired={'one': r}, seen={'one'}), state, remote, now=NOW)
+        self.assertEqual(state['tasks']['one']['status'], 'synced')
+        self.assertEqual(len(remote.items), 1)
+
+
 class HostFailureTests(unittest.TestCase):
     def test_connect_failure_is_visible_without_losing_last_acknowledgement(self):
         with tempfile.TemporaryDirectory() as folder:
@@ -354,6 +467,8 @@ class HostFailureTests(unittest.TestCase):
             self.assertEqual(state['tasks'], previous['tasks'])
             self.assertEqual(state['errors'], ['ConnectionError'])
             self.assertTrue(state['enabled'])
+            self.assertFalse(state['connected'])
+            self.assertFalse(json.loads(state_path.with_suffix('.md').read_text().split('```json\n')[1].split('\n```')[0])['connected'])
             self.assertNotIn('private account URL', state_path.read_text())
 
     def test_preparing_disabled_job_stops_an_old_launchctl_override(self):

@@ -51,6 +51,9 @@ const {
 } = require("obsidian");
 
 const VIEW_TYPE = "focus-tasks-view";
+const CALENDAR_STATUS = "Internals/FocusTasks/calendar-status.json";
+const CALENDAR_RECEIPT = "Internals/FocusTasks/calendar-status.md";
+const CALENDAR_CONTRACT = "focus-view-at-start-v1";
 const PROJECT_WORDS = ["project", "проект"];
 const TASK_WORDS = ["task", "задача"];
 const TASK_TYPE = "задача";   // what a new task note gets; TASK_WORDS is what we also read
@@ -142,6 +145,8 @@ const STRINGS = {
     reminder: "Remind in Apple Calendar…", reminderCaption: "Remind in Apple Calendar", reminderInfo: "A timed event will remind you after the task syncs.",
     reminderClock: "Choose a time for the reminder", repeatUndo: "Undo this recurring occurrence in TaskNotes.", calendarTitle: "Apple Calendar reminders", calendarOff: "Not connected yet. A date with a time can be prepared in a task.",
     calendarOn: "Connected. Dates with a time appear as reminder events after syncing.", calendarProblem: "Reminders have not synced yet. Check the calendar connection.",
+    calendarSynced: "Event confirmed in Apple Calendar. Alert at the event time.", calendarPending: "Waiting for Apple Calendar confirmation.",
+    calendarFailed: "Apple Calendar could not confirm this event. It will retry.",
     selected: "Selected: {0}", pickDate: "Date…", clearSelection: "Clear selection",
     pickerSave: "Save", clearTime: "Remove time", mixedTime: "Different times; unchanged hours are preserved",
     months: ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"],
@@ -234,6 +239,8 @@ const STRINGS = {
     reminder: "Напомнить в Apple Calendar…", reminderCaption: "Напомнить в Apple Calendar", reminderInfo: "Событие со временем напомнит после синхронизации задачи.",
     reminderClock: "Укажи время напоминания", repeatUndo: "Отмени выполнение этого повтора в TaskNotes.", calendarTitle: "Напоминания Apple Calendar", calendarOff: "Пока не подключён. Дату со временем можно подготовить в задаче.",
     calendarOn: "Подключён. Даты со временем попадают в календарь после синхронизации.", calendarProblem: "Напоминания пока не синхронизированы. Проверь подключение календаря.",
+    calendarSynced: "Событие подтверждено в Apple Calendar. Уведомление в момент события.", calendarPending: "Ожидается подтверждение события из Apple Calendar.",
+    calendarFailed: "Apple Calendar не подтвердил событие. Запись будет повторена.",
     selected: "Выбрано: {0}", pickDate: "Дата…", clearSelection: "Снять выделение",
     pickerSave: "Сохранить", clearTime: "Убрать время", mixedTime: "Разное время; без правки часы сохранятся",
     months: ["Январь", "Февраль", "Март", "Апрель", "Май", "Июнь", "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь"],
@@ -468,10 +475,6 @@ class DatePicker {
       this.hh.removeClass("is-invalid");
       this.forceClock = true;
     };
-    if (opts.reminder) this.el.createDiv({ cls: "ft-picker-foot" }).createEl("button", { text: t("reminder"), cls: "ft-picker-reminder" }).onclick = () => {
-      this.close();
-      opts.reminder();
-    };
     this.el.createDiv({ cls: "ft-picker-actions" }).createEl("button", { text: t("pickerSave"), cls: "ft-picker-save" }).onclick = () => this.submit();
     this.draw();
     this.place(anchor);
@@ -508,7 +511,10 @@ class DatePicker {
     }, 0);
     // The day is already answered (today, unless told otherwise); the hour is what is actually being
     // typed, so that is where the caret starts.
-    if (!Platform.isMobile) (opts.focusTime === false ? this.input : this.hh || this.input).focus();  // on a phone the keyboard would cover the month
+    if (!Platform.isMobile) {
+      const input = opts.focusTime === false ? this.input : this.hh || this.input;
+      input.focus(); input.select(); // type a replacement for the suggested day; phone keeps its keyboard closed
+    }
   }
 
   draw() {
@@ -809,6 +815,9 @@ class FocusRenderer extends MarkdownRenderChild {
     this.registerEvent(this.plugin.app.metadataCache.on("changed", later));
     this.registerEvent(this.plugin.app.vault.on("delete", later));
     this.registerEvent(this.plugin.app.vault.on("rename", later));
+    for (const event of ["create", "modify"]) this.registerEvent(this.plugin.app.vault.on(event, file => {
+      if (file?.path === CALENDAR_STATUS || file?.path === CALENDAR_RECEIPT) later();
+    }));
     // A plain click anywhere else drops the selection, as it does a selected block in Notion — in
     // another pane too, and on the parts of a row that keep their clicks to themselves (a chip, a
     // «+»). Not a click that works on the selection: its grip (a drag, a pick), a selected row's
@@ -958,6 +967,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // Builds off-screen and swaps in one go: emptying the live block first would collapse the page
   // and throw the scroll back to the top on every change.
   async build() {
+    this.calendar = await this.plugin.calendarState();
     if (this.blockSrc !== null) this.page = this.plugin.blockPage(this.blockSrc, this.sourcePath);
     if (this.page) return this.page.area ? this.buildAreaPage() : this.buildPage();
     const p = this.plugin;
@@ -1548,9 +1558,7 @@ class FocusRenderer extends MarkdownRenderChild {
   async dateSelection(day) {
     const chosen = this.chosen();
     this.clearSelection();
-    const tasks = chosen.filter((x) => !x.isProject);
-    if (tasks.length) await this.plugin.setDates(tasks, day);
-    for (const h of chosen.filter((x) => x.isProject)) await this.plugin.setProjectDate(h.file, day);
+    if (chosen.length) await this.plugin.setDates(chosen, day);
   }
 
   // The picker for the selected rows, at the date of `task` (the top one by default).
@@ -2151,7 +2159,7 @@ class FocusRenderer extends MarkdownRenderChild {
       : moment(day).format(this.plugin.settings.dateFormat || "DD.MM.YY");
   }
 
-  dateLabel(el, task) {
+  dateLabel(el, task, prefix = null) {
     el.empty();
     el.className = "ft-date";
     if (!task.date) {
@@ -2165,25 +2173,31 @@ class FocusRenderer extends MarkdownRenderChild {
     // is the full date, «25.09.26», year always: one width, one habit. The full date is in the tooltip.
     const now = today();
     const full = moment(task.date).format(this.plugin.settings.dateFormat || "DD.MM.YY");
-    el.setAttr("aria-label", task.at ? `${full} ${task.at}` : full);
+    let hint = task.at ? `${full} ${task.at}` : full;
+    let text;
     // A task still waiting to come back has a moment, not a due date: in the green of today's work it
     // read as work for today, in a group that is explicitly not today.
     if (waitingBack(task)) el.addClass("is-ahead");
     else el.addClass(task.date === now ? "is-today" : task.date < now ? "is-past" : "is-future");
     // Today says so, short and green: a row with nothing on the right read as a task with no date.
     if (task.date === now) {
-      el.setText(task.at ? `${t("todayShort")} ${task.at}` : t("todayShort"));
-      return;
-    }
-    if (task.date < now) {
+      text = task.at ? `${t("todayShort")} ${task.at}` : t("todayShort");
+    } else if (task.date < now) {
       // Late is said in words as well as in red: colour alone is not something everyone can read, and
       // the number of days is the ZFG signal that a task is stuck.
       const late = moment(now).diff(moment(task.date), "days");
-      el.setText(`${late}${t("daysShort")}`);
-      el.setAttr("aria-label", `${full} · ${t("overdueBy", late)}`);
-      return;
+      text = `${late}${t("daysShort")}${task.at ? ` ${task.at}` : ""}`;
+      hint += ` · ${t("overdueBy", late)}`;
+    } else text = task.at ? `${full} ${task.at}` : full;
+    const state = this.plugin.calendarStatus(task, this.calendar);
+    if (state) {
+      const message = t(state === "synced" ? "calendarSynced" : state === "error" ? "calendarFailed" : state === "off" ? "calendarOff" : "calendarPending");
+      const icon = el.createSpan({ cls: `ft-calendar-status is-${state}`, attr: { "aria-hidden": "true" } });
+      setIcon(icon, state === "synced" ? "calendar-check" : state === "error" || state === "off" ? "calendar-x" : "calendar-clock");
+      hint += ` · ${message}`;
     }
-    el.setText(task.at ? `${full} ${task.at}` : full);
+    el.createSpan({ cls: "ft-date-text", text: prefix ? t(prefix, text) : text });
+    el.setAttr("aria-label", hint);
   }
 
   // Redraw as soon as one of the waiting tasks is due, and not a moment later.
@@ -2260,9 +2274,10 @@ class FocusRenderer extends MarkdownRenderChild {
     if (tasks.every((x) => x.status === STATUS_WAITING)) return this.askReturn(tasks, el);
     const days = [...new Set(tasks.map((x) => x.date || null))];
     this.anchor = task;
-    const clocks = [...new Set(tasks.map(x => x.at || null))];
+    const clockTasks = tasks.filter(x => !x.isProject);
+    const clocks = [...new Set(clockTasks.map(x => x.at || null))];
     const at = clocks.length === 1 ? clocks[0] : null;
-    this.card(el, () => new DatePicker(el, days.length === 1 ? days[0] : null, async (day, at) => {
+    this.card(el, () => new DatePicker(el, days.length === 1 ? days[0] || today() : null, async (day, at) => {
       // An explicit clock edit must reach disk even when Sync changed the hour after this card
       // opened. Only an untouched clock can use the row's cached day to skip an unchanged gesture.
       const change = at !== undefined ? tasks : tasks.filter(x => (x.date || null) !== day);
@@ -2276,33 +2291,7 @@ class FocusRenderer extends MarkdownRenderChild {
       this.picker = null;
       el.removeClass("is-active");
       this.render();
-    }, { time: true, at, mixedTime: clocks.length > 1, preserveTime: true, focusTime: !!at }));
-  }
-
-  async askReminder(tasks, el = null) {
-    const list = (Array.isArray(tasks) ? tasks : [tasks]).filter(x => x && !x.isProject);
-    if (this.editing) { if (!this.endEdit) return; await this.endEdit(true, false); }
-    const anchor = el || this.rowLabel(list[0]);
-    if (!list.length || !anchor || this.editing) return;
-    const one = list.length === 1 ? list[0] : null;
-    const calendar = await this.plugin.calendarState();
-    if (this.editing || !anchor.isConnected) return;
-    this.card(anchor, () => new DatePicker(anchor, one?.date || today(), async (day, at) => {
-      if (!day || !at) return false;
-      if (await this.plugin.track(t("aDate"), list.map(x => x.file), async tx => {
-        for (const task of list) if (!await this.plugin.setScheduled(task, day, at, tx)) return false;
-        return true;
-      }) === false) return false;
-      this.editing = false;
-      this.picker = null;
-      this.clearSelection();
-      this.render();
-    }, () => {
-      this.editing = false;
-      this.picker = null;
-      anchor.removeClass("is-active");
-      this.render();
-    }, { title: t("reminderCaption"), info: t(calendar?.enabled ? "reminderInfo" : "calendarOff"), time: true, timeRequired: true, futureClock: true, at: one?.at, min: today(), clear: false }));
+    }, { time: clockTasks.length > 0, at, mixedTime: clocks.length > 1, preserveTime: true, focusTime: !!at }));
   }
 
   // A card opens over the row: while it is up the list is «editing» (no re-render, no other keys).
@@ -2765,7 +2754,6 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     menu.addSeparator();
     // A drag is not always possible — a finger loses to the scroll, a keyboard has no drag at all.
-    menu.addItem(i => i.setTitle(t("reminder")).setIcon("bell").onClick(() => this.askReminder(task)));
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("moveUp")).setIcon("arrow-up").onClick(() => this.shift(task, -1)));
     menu.addItem((i) => i.setTitle(t("moveDown")).setIcon("arrow-down").onClick(() => this.shift(task, 1)));
@@ -2820,7 +2808,6 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     menu.addSeparator();
     this.priorityItems(menu, chosen);
-    if (chosen.length) menu.addItem(i => i.setTitle(t("reminder")).setIcon("bell").onClick(() => this.askReminder(chosen)));
     if (chosen.length) { menu.addSeparator(); this.progressItem(menu, chosen); }
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
@@ -2874,8 +2861,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const text = await this.text(li, task);
     this.marks(li, task);
     const date = li.createSpan();
-    this.dateLabel(date, task);
-    if (opts.pile === "waiting" && task.date) date.setText(t("until", date.textContent));
+    this.dateLabel(date, task, opts.pile === "waiting" ? "until" : null);
     // on the shelf a step stands among loose tasks of other areas: its project is named, as in «Done»
     if (opts.pile === "waiting" && task.project) { this.projectTag(li, task); li.appendChild(date); }
     date.onclick = (e) => {
@@ -3013,7 +2999,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
     this.plus(li, t("addStep"), async () => { if (steps.length > 1 && !open) await p.toggleShown(key, true); return target(); }, anchor);
     if (step) {
-      if (project.date) own();
+      if (project.date && !step.at) own();
       else {
         const date = li.createSpan();
         this.dateLabel(date, step);
@@ -3108,9 +3094,7 @@ class FocusSettingTab extends PluginSettingTab {
     const calendar = new Setting(containerEl).setName(t("calendarTitle")).setDesc(t("calendarOff"));
     p.calendarState().then(state => {
       if (!state?.enabled) return;
-      const problem = !Number.isFinite(Date.parse(state.updatedAt)) || state.errors?.length || Object.values(state.tasks || {}).some(x=>x.status==="missed")
-        || Date.now()-Date.parse(state.updatedAt)>20*60*1000;
-      calendar.setDesc(t(problem ? "calendarProblem" : "calendarOn"));
+      calendar.setDesc(t(p.calendarHasProblem(state) ? "calendarProblem" : "calendarOn"));
     });
     new Setting(containerEl).setName(t("sLanguage")).setDesc(t("sLanguageDesc")).addDropdown((d) => d
       .addOptions({ auto: "Auto", en: "English", ru: "Русский" }).setValue(s.language).onChange(async (v) => {
@@ -3253,6 +3237,7 @@ module.exports = class FocusTasks extends Plugin {
     }));
     this.app.workspace.onLayoutReady?.(()=>ensureArea(this.app.workspace.getActiveFile?.()));
     this.registerView(VIEW_TYPE, (leaf) => new FocusView(leaf, this));
+    this.registerObsidianProtocolHandler("focus-tasks", () => { void this.openView(); });
     this.registerMarkdownCodeBlockProcessor("focus-tasks", (src, el, ctx) => ctx.addChild(new FocusRenderer(this, el, ctx.sourcePath, null, src || "")));
     this.addCommand({ id: "steps-blocks", name: t("cmdStepsBlocks"), callback: () => this.stepsBlocksEverywhere() });
     this.addRibbonIcon("list-checks", t("open"), () => this.openView());
@@ -3474,10 +3459,34 @@ module.exports = class FocusTasks extends Plugin {
 
   async calendarState() {
     try {
-      const path="Internals/FocusTasks/calendar-status.json";
-      if (!await this.app.vault.adapter?.exists(path)) return null;
-      return JSON.parse(await this.app.vault.adapter.read(path));
+      if (await this.app.vault.adapter?.exists(CALENDAR_RECEIPT)) {
+        const raw = await this.app.vault.adapter.read(CALENDAR_RECEIPT);
+        const body = raw.match(/```json\s*\n([\s\S]*?)\n```/);
+        return body ? JSON.parse(body[1]) : null;
+      }
+      if (!await this.app.vault.adapter?.exists(CALENDAR_STATUS)) return null;
+      return JSON.parse(await this.app.vault.adapter.read(CALENDAR_STATUS));
     } catch { return null; }
+  }
+
+  calendarStatus(task, state) {
+    if (!task?.file || !task.uid || !task.date || !task.at || task.isProject
+      || [STATUS_DONE, STATUS_CANCELLED, STATUS_SOMEDAY].includes(task.status)) return null;
+    if (!state?.enabled) return "off";
+    if (state.contract !== CALENDAR_CONTRACT) return "pending";
+    if (state.connected === false) return "error";
+    const receipt = state.tasks?.[task.uid];
+    if (receipt?.error) return "error";
+    const same = (a, b) => typeof a === "string" && typeof b === "string" && a.normalize("NFC") === b.normalize("NFC");
+    return receipt?.status === "synced" && same(receipt.file, task.file.path) && same(receipt.title, task.text)
+      && receipt.scheduled === `${task.date}T${task.at}` && receipt.waiting === (task.status === STATUS_WAITING)
+      && Number.isFinite(Date.parse(receipt.checkedAt)) ? "synced" : "pending";
+  }
+
+  // The phone receipt changes only when acknowledgement changes, without a host heartbeat.
+  calendarHasProblem(state) {
+    return !!(state?.enabled && (state.contract !== CALENDAR_CONTRACT || state.connected === false
+      || state.errors?.length || Object.values(state.tasks || {}).some(x => x.error || x.status === "missed")));
   }
 
   // A task = its own note in the tasks folder: `type: задача`, the rest in the frontmatter. `uid` is
@@ -3779,9 +3788,8 @@ module.exports = class FocusTasks extends Plugin {
 
   async setDates(tasks, day, at = undefined) {
     return this.track(t("aDate"), tasks.map((x) => x.file), async (tx) => {
-      for (const task of tasks) if (!await (at === undefined
-        ? this.setDate(task, day, tx)
-        : this.setScheduled(task, day, at, tx))) return false;
+      for (const task of tasks) if (!await (task.isProject ? this.setProjectDate(task.file, day, tx)
+        : at === undefined ? this.setDate(task, day, tx) : this.setScheduled(task, day, at, tx))) return false;
       return true;
     });
   }
@@ -4350,15 +4358,16 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // The project's own day, in its note (`scheduled`); null takes it off.
-  async setProjectDate(file, day) {
-    return this.track(t("aDate"), [file], async tx => {
+  async setProjectDate(file, day, tx = null) {
+    return this.track(t("aDate"), [file], async active => {
       await this.frontOwned(file, (fm) => {
         if (!this.classify(file, fm)?.project) throw new Error(t("changed"));
         if (day) fm.scheduled = day; else delete fm.scheduled;
-      }, tx);
+      }, active);
       this.forgetScan();
       this.refresh();
-    });
+      return true;
+    }, tx);
   }
 
   // Several at once: one notice and one undo for all of them.

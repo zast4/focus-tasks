@@ -208,6 +208,7 @@ function obsidianStub(app) {
     addSettingTab() {}
     addCommand(cmd) { (this.commands = this.commands || []).push(cmd); }
     registerView() {}
+    registerObsidianProtocolHandler(name, handler) { (this.protocolHandlers ||= {})[name] = handler; }
     registerMarkdownCodeBlockProcessor() {}
     registerEvent() {}
   }

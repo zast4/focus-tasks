@@ -262,7 +262,7 @@ step("one calendar card supports date-only, waiting and reminders on narrow phon
         await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(x=>x.text===${J('Calendar '+mode)});await p.setWaiting(task,false);await p.setScheduled(task,${J(TODAY)},null);p.refresh();return true;`);
         await until(()=>page.eval(`return !!__m.task(${J('Calendar '+mode)})`),'calendar fixture');
         await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(x=>x.text===${J('Calendar '+mode)}),v=[...p.views].find(v=>v.containerEl.getClientRects().length),row=__m.task(${J('Calendar '+mode)}),anchor=row.querySelector('.ft-date')||row;
-          await v[${J(mode==='date'?'editDate':mode==='waiting'?'askReturn':'askReminder')}](task,anchor);return true;`);
+          await v[${J(mode==='waiting'?'askReturn':'editDate')}](task,anchor);return true;`);
         await until(()=>page.eval(`return !!document.querySelector('.ft-picker')`),'shared calendar');
         const card=await page.eval(`const p=document.querySelector('.ft-picker'),r=p?.getBoundingClientRect(),button=p?.querySelector('.ft-picker-save'),b=button?.getBoundingClientRect();
           const fields=[...p.querySelectorAll('input')].map(e=>{const s=getComputedStyle(e),ctx=document.createElement('canvas').getContext('2d');ctx.font=s.font;const text=e.value||e.placeholder;return {value:text,width:e.getBoundingClientRect().width,usable:e.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight),textWidth:ctx.measureText(text).width};});
@@ -279,7 +279,10 @@ step("one calendar card supports date-only, waiting and reminders on narrow phon
           // Empty clock cannot silently become a midnight notification.
           await page.eval(`document.querySelector('.ft-picker .is-hh').value='';document.querySelector('.ft-picker .is-mm').value='';return true;`);
           await tapOn(`document.querySelector('.ft-picker-save')`,'save reminder');
-          if(!await page.eval(`return !!document.querySelector('.ft-picker .is-hh.is-invalid')`))throw new Error('blank reminder time became a clock');
+          await taskIs('Calendar '+mode,{scheduled:tomorrow});
+          if(await page.eval(`return !!__m.task(${J('Calendar '+mode)})?.querySelector('.ft-calendar-status')`))throw new Error('date-only task claimed a reminder');
+          await tapOn(`__m.task(${J('Calendar '+mode)}).querySelector('.ft-date')`,'add clock');
+          await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh')`),'optional time card');
           await tapOn(`document.querySelector('.ft-picker .is-hh')`,'hour');await page.type('16');await page.type('30');
         } else {
           await page.eval(`document.querySelector('.ft-picker .is-hh').value='';document.querySelector('.ft-picker .is-mm').value='';return true;`);
@@ -704,6 +707,35 @@ step("mobile metadata completion keeps the next project action in place when the
   await checkCurrentLayout(page,'pane-after-project-completion',SHOTS);
 });
 
+step("confirmed calendar badges fit timed project steps on narrow phones and large text", async () => {
+  const title='Проверить напоминание и расположение календаря на телефоне';
+  await layoutFixture(page,TODAY);
+  await openLayoutContext(page,'pane');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setEverything(true);const area=(await p.collect(true,true)).find(a=>a.name==='🧤Рутина');
+    const project=await p.createProject(area,'Календарный проект');await p.setProjectDate(project,${J(TODAY)});p.data.opened['steps:'+project.path]=false;await p.saveAll();
+    const task=await p.createTask(${J(title)},{area:'🧤Рутина',project:'Календарный проект'},${J(TODAY)});await p.setScheduled(task,${J(TODAY)},'16:30');delete p.data.folded['area:🧤Рутина'];await p.setOpen('area:🧤Рутина',true);
+    for(const folder of ['Internals','Internals/FocusTasks'])if(!app.vault.getAbstractFileByPath(folder))await app.vault.createFolder(folder);
+    const receipt={schema:2,contract:'focus-view-at-start-v1',enabled:true,connected:true,tasks:{[task.uid]:{file:task.file.path,title:task.text,scheduled:${J(TODAY+'T16:30')},waiting:false,status:'synced',checkedAt:new Date().toISOString()}}};
+    const file='Internals/FocusTasks/calendar-status.md',text=${J('---\ntype: focus-tasks-calendar-status\n---\n\n```json\n')}+JSON.stringify(receipt)+${J('\n```\n')};
+    const existing=app.vault.getAbstractFileByPath(file);if(existing)await app.vault.modify(existing,text);else await app.vault.create(file,text);return true;`);
+  await until(()=>page.eval(`return !!__m.task(${J(title)})?.querySelector('.ft-calendar-status.is-synced')`),'confirmed calendar badge');
+  await page.eval(`__m.task(${J(title)}).scrollIntoView({block:'center',behavior:'instant'});return true;`);
+  try {
+    for(const width of [320,390,430])for(const font of [18,26]) {
+      await page.send('Emulation.setDeviceMetricsOverride',{width,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+      await page.eval(`window.__layoutRoot().style.fontSize=${J(font+'px')};return true;`);await sleep(220);
+      const boxes=await page.eval(`const row=__m.task(${J(title)}),date=row.querySelector('.ft-date'),icon=date.querySelector('.ft-calendar-status'),text=date.querySelector('.ft-date-text');const r=e=>{const b=e.getBoundingClientRect();return {left:b.left,right:b.right,top:b.top,bottom:b.bottom,width:b.width,height:b.height};};return {project:row.classList.contains('ft-project-row'),date:r(date),icon:r(icon),text:r(text),clock:text.textContent,viewport:innerWidth};`);
+      if(!boxes.project||!boxes.clock.includes('16:30'))throw new Error('project date hides reminder clock: '+J(boxes));
+      if(boxes.date.left<0||boxes.date.right>boxes.viewport+1||boxes.icon.width<10||boxes.icon.right>boxes.text.left+1)throw new Error('calendar badge overlaps or overflows: '+J(boxes));
+      if(Math.abs((boxes.icon.top+boxes.icon.bottom)/2-(boxes.text.top+boxes.text.bottom)/2)>2)throw new Error('badge and clock do not align: '+J(boxes));
+      if(width===390&&font===18)await page.shot('/tmp/focus-auto-calendar-phone.png');
+    }
+  } finally {
+    await page.eval(`window.__layoutRoot().style.fontSize='';return true;`);
+    await page.send('Emulation.setDeviceMetricsOverride',{width:WIDTH,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  }
+});
+
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));
@@ -783,6 +815,7 @@ async function openVault() {
     p.settings.language = 'ru'; p.applyLanguage();
     p.settings.folder = 'Areas'; p.settings.tasksFolder = 'Задачи';
     p.settings.typeArea = 'область'; p.settings.typeProject = 'проект';
+    app.saveLocalStorage('focus-tasks-all',null);
     await p.saveAll();
     return true;`);
   // A phone screen, and Obsidian's own mobile build: it reloads the window, so reconnect after it.
@@ -812,6 +845,7 @@ async function openVault() {
     p.settings.language = 'ru'; p.applyLanguage();
     p.settings.folder = 'Areas'; p.settings.tasksFolder = 'Задачи';
     p.settings.typeArea = 'область'; p.settings.typeProject = 'проект';
+    app.saveLocalStorage('focus-tasks-all',null);
     await p.saveAll();
     return true;`);
   await until(() => page.eval(`return !!app.plugins.plugins['focus-tasks']`), "the plugin is on in mobile mode", 20000);

@@ -1546,6 +1546,7 @@ step("an empty project's box closes the project", async () => {
 
 step("⌘F finds a task hidden in a folded pile, opens what hides it, scrolls to it and selects it", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Needle in the pile")), `---\nuid: ft-find-1\ntype: задача\nstatus: open\narea: "💪Sport"\n---\n`);
+  await until(() => plugin(`p.forgetScan(); return p.tasks().some(t=>t.uid==='ft-find-1')`), "external search fixture indexed");
   await toPane();
   const key = await plugin(`return 'future:' + (await p.collect(false)).find((a) => a.name.includes('Sport')).name;`);
   const wasAll = await plugin(`return p.everything()`);
@@ -2216,12 +2217,16 @@ step("a backlog task can get an Apple Calendar reminder with one precise time", 
   await page.eval(`const p=app.plugins.plugins['focus-tasks']; p.settings.language='en';p.applyLanguage();await p.saveAll();await p.createTask('Audit reminder',{area:'Audit Area'},null); await p.setEverything(true); await p.setOpen('area:Audit Area',true); return true;`);
   await until(()=>page.eval(`return !!__ft.task('Audit reminder')`),'reminder task');
   await menuOn(`__ft.at(__ft.task('Audit reminder'))`);
-  await menu('Remind in Apple Calendar…');
+  if(await page.eval(`return [...document.querySelectorAll('.menu-item-title')].some(e=>e.textContent.includes('Apple Calendar'))`))throw new Error('separate reminder menu remains');
+  await page.key('Escape');
+  await click(`__ft.at(__ft.task('Audit reminder').querySelector('.ft-date'))`);
   await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh')`),'reminder time');
+  const initial=await page.eval(`const p=app.plugins.plugins['focus-tasks'],t=p.tasks().find(x=>x.text==='Audit reminder');return {day:[...p.views].find(v=>v.picker)?.picker.value,saved:t.date};`);
+  if(initial.day!==TODAY||initial.saved)throw new Error('undated card must suggest today without writing before Save: '+J(initial));
   await click(`__ft.at(document.querySelector('.ft-picker-input'))`);
   await page.eval(`document.querySelector('.ft-picker-input').select();return true;`); await page.type(ddmmyy(TOMORROW));
   await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`);
-  await page.type('16'); await page.type('30'); await page.key('Tab');
+  await page.type('16'); await page.type('30'); await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
   await taskIs('Audit reminder',{scheduled:TOMORROW+'T16:30',status:'open'});
   await until(()=>page.eval(`return !document.querySelector('.ft-picker')`),'saved reminder');
 });
@@ -2324,17 +2329,19 @@ step("invalid typed dates cannot silently save the old date", async () => {
   await page.key('Escape');
 });
 
-step("a same-day past reminder hour is refused and can be corrected", async () => {
+step("an explicit midnight clock is retained even when today has already started", async () => {
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.createTask('Audit past reminder',{area:'Audit Area'},${J(TODAY)});return true;`);
   await until(()=>page.eval(`return !!__ft.task('Audit past reminder')`),'the reminder fixture');
-  await menuOn(`__ft.at(__ft.task('Audit past reminder'))`); await menu('Remind in Apple Calendar…');
+  await click(`__ft.at(__ft.task('Audit past reminder').querySelector('.ft-date'))`);
   await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh')`),'the clock card');
-  await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`); await page.type('00');await page.type('00');await page.key('Tab');
-  await until(()=>page.eval(`return !!document.querySelector('.ft-picker .is-hh.is-invalid')`),'past hour rejected');
-  await taskIs('Audit past reminder',{scheduled:TODAY});
+  await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`); await page.type('00');await page.type('00');
+  await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit past reminder',{scheduled:TODAY+'T00:00'});
+  await click(`__ft.at(__ft.task('Audit past reminder').querySelector('.ft-date'))`);
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker-input')`),'reopened clock');
   await click(`__ft.at(document.querySelector('.ft-picker-input'))`);await page.eval(`document.querySelector('.ft-picker-input').select();return true;`);await page.type(ddmmyy(TOMORROW));await page.key('Enter');
   await taskIs('Audit past reminder',{scheduled:TOMORROW+'T00:00'});
-  await until(()=>page.eval(`return !document.querySelector('.ft-picker')`),'corrected reminder saved');
+  await until(()=>page.eval(`return !document.querySelector('.ft-picker')`),'midnight saved');
 });
 
 step("a date card keeps its value and stays open when the disk write fails", async () => {
@@ -2429,17 +2436,53 @@ function buildVault() {
 
 const isTestWindow = (p) => p.title === `${NAME} - Obsidian` || p.title.includes(` - ${NAME} - Obsidian`) || p.title.startsWith(`${NAME} - Obsidian`);
 
-// The OS URI navigates away from Focus; run this after all list interactions.
-step("a Calendar URI opens a task with spaces and a literal plus through native Obsidian", async () => {
-  const target=await page.eval(`if(app.vault.getName()!==${J(NAME)})throw new Error('wrong URI test vault');const p=app.plugins.plugins['focus-tasks'],task=await p.createTask('Calendar link + spaced name',{area:'Audit Area'},null);return task.file.path;`);
+step("calendar badges follow cloud receipts, project clocks and grouped rescheduling", async () => {
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setEverything(true);const area=(await p.collect(true,true)).find(a=>a.name==='Audit Area');
+    const project=await p.createProject(area,'Audit calendar project');await p.setProjectDate(project,${J(TOMORROW)});p.data.opened['steps:'+project.path]=false;await p.saveAll();
+    for(const [name,projectName] of [['Audit calendar standalone',null],['Audit calendar step','Audit calendar project']]) {
+      const task=await p.createTask(name,{area:'Audit Area',project:projectName},${J(TODAY)});await p.setScheduled(task,${J(TODAY)},'16:30');
+    }await p.setOpen('area:Audit Area',true);return true;`);
+  const names=['Audit calendar standalone','Audit calendar step'];
+  for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})`),'timed row '+name);
+  if(await page.eval(`return ${J(names)}.some(n=>__ft.task(n)?.querySelector('.ft-calendar-status.is-synced'))`))throw new Error('a clock alone claims calendar success');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];window.__calendarReceipt={schema:2,contract:'focus-view-at-start-v1',enabled:true,connected:true,tasks:{}};
+    for(const task of p.tasks().filter(t=>${J(names)}.includes(t.text)))__calendarReceipt.tasks[task.uid]={file:task.file.path,title:task.text,scheduled:task.date+'T'+task.at,waiting:false,status:'synced',checkedAt:new Date().toISOString()};
+    for(const folder of ['Internals','Internals/FocusTasks'])if(!app.vault.getAbstractFileByPath(folder))await app.vault.createFolder(folder);
+    window.__calendarWrite=async()=>{const path='Internals/FocusTasks/calendar-status.md',text=${J('---\ntype: focus-tasks-calendar-status\n---\n\n```json\n')}+JSON.stringify(__calendarReceipt)+${J('\n```\n')},file=app.vault.getAbstractFileByPath(path);if(file)await app.vault.modify(file,text);else await app.vault.create(path,text);};await __calendarWrite();return true;`);
+  for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})?.querySelector('.ft-calendar-status.is-synced')`),'confirmed event badge '+name);
+  if(!await page.eval(`const row=__ft.task('Audit calendar step');return row.classList.contains('ft-project-row')&&row.querySelector('.ft-date-text')?.textContent.includes('16:30')`))throw new Error('project date hides the timed step and its reminder');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setDates(p.tasks().filter(t=>${J(names)}.includes(t.text)),${J(TOMORROW)},'18:25');return true;`);
+  for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})?.querySelector('.ft-calendar-status.is-pending')`),'changed clock awaits new acknowledgement');
+  await page.eval(`for(const receipt of Object.values(__calendarReceipt.tasks))receipt.scheduled=${J(TOMORROW+'T18:25')};await __calendarWrite();return true;`);
+  for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})?.querySelector('.ft-calendar-status.is-synced')`),'updated event is confirmed');
+  const calendarSetting=async()=>page.eval(`app.setting.open();app.setting.openTabById('focus-tasks');await new Promise(r=>setTimeout(r,300));const row=[...app.setting.activeTab.containerEl.querySelectorAll('.setting-item')].find(r=>r.querySelector('.setting-item-name')?.textContent?.includes('Apple Calendar'));const text=row?.querySelector('.setting-item-description')?.textContent;app.setting.close();return text;`);
+  if(!(await calendarSetting())?.startsWith('Connected.'))throw new Error('valid phone receipt is reported as a connection problem');
+  await page.eval(`__calendarReceipt.connected=false;await __calendarWrite();return true;`);
+  for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})?.querySelector('.ft-calendar-status.is-error')`),'connection error never stays green');
+  if(!(await calendarSetting())?.startsWith('Reminders have not synced yet.'))throw new Error('settings hide a Calendar connection failure');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setDates(p.tasks().filter(t=>${J(names)}.includes(t.text)),${J(TOMORROW)},null);return true;`);
+  for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})&&!__ft.task(${J(name)}).querySelector('.ft-calendar-status')`),'removing time removes the badge');
+  await idle();
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],v=[...p.views].find(v=>v.rows().some(([el])=>el===__ft.task('Audit calendar standalone'))),rows=v.rows(),task=rows.find(([,t])=>t.text==='Audit calendar standalone')?.[1],project=rows.find(([,t])=>t.isProject&&t.text==='Audit calendar project')?.[1];if(!task||!project)throw new Error('mixed calendar selection missing');v.selected=new Set([task,project]);await v.editDate(task,__ft.task('Audit calendar standalone').querySelector('.ft-date'));return true;`);
+  await until(()=>page.eval(`return !!document.querySelector('.ft-picker-save')`),'mixed project and task calendar');
+  await click(`__ft.at(document.querySelector('.ft-picker .is-hh'))`);await page.type('19');await page.type('10');await click(`__ft.at(document.querySelector('.ft-picker-save'))`);
+  await taskIs('Audit calendar standalone',{scheduled:TOMORROW+'T19:10'});
+  if(!await page.eval(`return app.metadataCache.getFileCache(app.vault.getAbstractFileByPath('Tasks/Audit calendar project.md'))?.frontmatter?.scheduled===${J(TOMORROW)}`))throw new Error('group clock was applied to a project');
+  await idle();await page.key('Meta+z');await taskIs('Audit calendar standalone',{scheduled:TOMORROW});
+});
+
+// Exercise the OS URI after list interactions; it must activate the plugin from a note.
+step("a Calendar URI opens Focus without creating a task note tab", async () => {
+  const target=await page.eval(`if(app.vault.getName()!==${J(NAME)})throw new Error('wrong URI test vault');const p=app.plugins.plugins['focus-tasks'],task=await p.createTask('Calendar link + spaced name',{area:'Audit Area'},null);await app.workspace.openLinkText(task.file.path,'','tab');return task.file.path;`);
+  await until(()=>page.eval(`return app.workspace.activeLeaf?.view?.file?.path===${J(target)}`),'start outside Focus');
+  const before=await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort();`);
   const python=process.env.FOCUS_CALENDAR_PYTHON || path.join(process.env.HOME,'ai-hub','.venv-calendar','bin','python');
-  const code="import sys,datetime as dt;sys.path.insert(0,'bridge');from apple_calendar import Reminder,note_url;print(note_url(Reminder('native-uri-test',sys.argv[2],'URI test',dt.datetime.now(dt.timezone.utc),False,sys.argv[1])))";
-  const uri=execFileSync(python,['-c',code,NAME,target],{cwd:ROOT,encoding:'utf8'}).trim();
+  const code="import sys,datetime as dt;sys.path.insert(0,'bridge');from apple_calendar import Reminder,focus_url;print(focus_url(Reminder('native-uri-test','', 'URI test',dt.datetime.now(dt.timezone.utc),False,sys.argv[1])))";
+  const uri=execFileSync(python,['-c',code,NAME],{cwd:ROOT,encoding:'utf8'}).trim();
   execFileSync('open',[uri]);
-  await until(()=>page.eval(`return app.vault.getName()===${J(NAME)} && app.workspace.activeLeaf?.view?.file?.path===${J(target)}`),'native URI opens the exact task file',15000);
-  await settle();
-  await page.eval(`await app.commands.executeCommandById('focus-tasks:open');return true;`);
-  await until(()=>page.eval(`return app.workspace.activeLeaf?.view?.getViewType()==='focus-tasks-view' && !!__ft.view()`),'the Focus command activates the list again after a native URI');
+  await until(()=>page.eval(`return app.vault.getName()===${J(NAME)} && app.workspace.activeLeaf?.view?.getViewType()==='focus-tasks-view' && !!__ft.view()`),'native URI activates Focus',15000);
+  const after=await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort();`);
+  if(J(before)!==J(after))throw new Error('Calendar link created another note tab');
 });
 
 async function openVault() {

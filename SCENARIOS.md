@@ -63,15 +63,19 @@ P = `test/mobile.mjs`; S = `test/stress.mjs`; C = `bridge/test_calendar.py`.
 | Phone with user theme and long inline text | Same columns during editing and expansion; date/status controls respond to touch; finishing edits preserves task properties | P |
 | Phone offline capture and reload | Note exists locally immediately and survives reload | P; actual iPhone/Sync acceptance |
 | Tick a task halfway down the list | Desktop preserves the top visible row; phone preserves the next action, including a step becoming the project's collapsed action; drift at most 3 px | E, P |
-| Timed backlog task becomes relevant | Scheduled day enters Focus; separate cloud event uses the native default alert before its hour | A, E, C |
-| Open a date, Waiting or reminder card on a phone | Shared date/clock/Save layout; 320/390/430px fit, 44px Save, calendar taps keep the keyboard closed | P |
+| Open an undated backlog task's calendar | Today is suggested but Escape makes no write; typing replaces the selected suggestion | E |
+| Timed task before and after cloud acknowledgement | Pending until current UID/path/title/clock/Waiting status is confirmed; no green badge after edits or failure | M, E, C |
+| Timed project step with a project date on narrow phones | Step clock and confirmation badge remain visible, aligned and inside 320/390/430px at 18/26px text | E, P |
+| Group time edit, clear time, complete | Existing event IDs update; old receipts turn pending; clearing time removes badges and owned events | M, E, C |
+| Timed backlog task becomes relevant | Scheduled day enters Focus; its automatic 30-minute event alerts at the chosen hour | A, E, C |
+| Open the date/clock or Waiting card on a phone | Shared date/clock/Save layout; 320/390/430px fit, 44px Save, calendar taps keep the keyboard closed | P |
 | Save an ordinary task with empty time | Day-only value, no implicit midnight event; an explicit 00:00 remains a real clock | E, P, C |
 | Change the day of open or Waiting tasks with different hours | Each hour survives; setting/clearing a group clock is one undoable transaction | E |
 | Timed Waiting becomes relevant | Same event identity, exact return moment, no completion automation | M, E, C |
 | Calendar rename/reschedule/complete/cancel/clear | Update/delete only the owned event without duplicates | C, disposable iCloud probe |
-| Existing reminder after format update | Same event uid, 30-minute display, native default alert, correctly encoded note link, no busy time | C, live iCloud readback |
-| Follow a Calendar link, then reopen Focus | Exact task opens; the Focus command activates the visible list and its keyboard scope | E; native owner-vault probe |
-| Calendar offline, missing file, malformed note, duplicate uid | Retry/protect; Sync grace; past first-arrival is marked missed | C |
+| Existing reminder after format update | Same event uid, 30-minute display, disabled default plus sole at-start alert, Focus link, no busy time | C, live iCloud readback |
+| Follow a Calendar link from a note | Focus becomes active without opening another note; exact event title can be copied into list search | E; native owner-vault probe |
+| Calendar offline, missing file, malformed note, duplicate uid | Retry/protect; Sync grace; a past timestamp still has an event, without claiming retrospective notification delivery | C |
 | Remote Calendar replacement/write/delete race | ETag condition refuses overwriting/deleting a foreign event | C |
 | Large vault/random histories | Every active note is discoverable; uid, body and custom properties survive | S |
 | Bot reads the same notes | Waiting status/hour and start-day semantics agree with the plugin | host scripts tests |

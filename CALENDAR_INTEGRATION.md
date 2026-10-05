@@ -1,31 +1,34 @@
 # Apple Calendar notifications
 
 The task note owns the date and time. The Mac-host bridge mirrors it into one 30-minute,
-transparent Calendar event using Apple Calendar's account/device default notification.
-The owner's iCloud default is 30 minutes before the event; the bridge adds no VALARM.
+transparent Calendar event with one active notification at its start. An Apple NONE
+default placeholder suppresses the native default for this event; a UID-bearing DISPLAY
+alarm triggers at DTSTART. Other calendars retain their default preferences.
 This is a Calendar event;
 it is not a native Apple Reminders item with its own checkbox.
 
 ## The two cases
 
 1. An undated backlog task gets a scheduled day and a reminder hour. On its day the task
-   joins the focus; Calendar uses its default alert before the chosen hour.
+   joins the focus; Calendar alerts at the chosen hour.
 2. A waiting task gets the day and optional hour to look again. Before that moment it
    stays in Waiting; at that moment it becomes relevant in Focus. An explicit hour also
-   creates the Calendar event using its default notification. Coming back early removes the future notification.
+   automatically creates the Calendar event with its at-start notification. Coming back early removes the future notification.
 
-The reminder and Waiting cards reject an explicit time that has already passed today.
-Waiting with today's day and no hour can return immediately. Ordinary date edits can
-still backdate work; first delivery of a past timed note is recorded as missed.
+Waiting rejects a return time that has already passed today; a date without an hour can
+return immediately. An ordinary task with a time always has an event, including a past
+timestamp received through Sync. A past event cannot deliver a notification retrospectively.
 
-The menu offers "Remind in Apple Calendar". Task dates, Waiting and reminders share the
+The task date and Waiting share the
 date/hour/minute card with an explicit Save button (or Enter). Picking a day leaves the
-card open for an optional hour. Existing timed tasks open with their hour filled. Changing a day preserves the hour. Emptying the
+card open for an optional hour. An undated task starts with today suggested, without
+writing until the card is applied. Existing timed tasks open with their hour filled. Changing a day preserves the hour. Emptying the
 clock removes the notification while retaining the day; clearing the date removes both.
 
 Dates without a time do not produce events or guessed midnight notifications. Obsidian
-links percent-encode spaces as `%20` and literal plus signs as `%2B`; form encoding (`+`
-for a space) does not match Obsidian's URI decoder. The two
+links open `obsidian://focus-tasks?vault=...`. The plugin activates its Focus view without
+opening a task note. Event titles match task titles exactly, so copying them into Focus
+search finds the task. Vault names percent-encode spaces as `%20` and plus signs as `%2B`. The two
 return semantics are deliberate: ordinary tasks are relevant for the whole scheduled
 day; Waiting is reviewed at its exact scheduled moment. Completion remains the user's
 action, and Calendar never completes or reopens a task.
@@ -36,23 +39,26 @@ action, and Calendar never completes or reopens a task.
   No Calendar token, password, URL or app-specific password goes into a task or plugin settings.
 - The event UID is a stable hash of the task UID. Rename, move, reschedule and Waiting
   reuse the same event. Duplicate creates a new task/event identity.
-- The bridge omits VALARM so Apple Calendar supplies its native default without an extra start alarm.
+- The bridge writes the disabled-default placeholder and exactly one active at-start alarm.
+  Both alarms have stable UIDs; only DISPLAY is a notification.
 - Updating/deleting verifies ownership and uses ETag conditions. A foreign event is
   never overwritten, including a replacement between GET and PUT/DELETE.
-- After saving, GET verifies the event time, duration, identity, fingerprint, note URL and removal of the old bridge-owned alarm. Native client defaults are preserved.
+- After saving, GET verifies the event time, duration, identity, fingerprint, Focus URL, exact task title, disabled native default and sole active at-start alarm.
   State is acknowledged only after this succeeds. This proves server persistence,
   not delivery on a particular Watch or phone.
 - Completion, cancellation, clearing the time/date or archiving removes only the owned
   event. Disappearing files receive a 120-second grace for Sync renames. Malformed notes,
   duplicate UIDs and incomplete scans prevent speculative removal.
-- Network errors remain pending for retry. A task first received after its reminder
-  time is recorded as `missed`, never falsely marked as notified. Moving it to a future
-  time allows another attempt. Remote events are rechecked at least every ten minutes.
-  Moving a previously synced future reminder into the past removes the old owned alarm.
-  Failed removal keeps its prior acknowledgement and retries; it is not reported done.
-- `Internals/FocusTasks/calendar-status.json` exposes the last acknowledgement and
-  errors to both devices. A local file lock permits one writer; state is bound to the
-  chosen vault/calendar. Default `Архив` subfolder is excluded explicitly.
+- Network errors remain pending for retry. Existing ownership records survive failure, while
+  a failed confirmation is visible as an error. Remote events are rechecked every ten minutes.
+- The private ownership ledger is `Internals/FocusTasks/calendar-status.json`; derived receipts
+  are in `Internals/FocusTasks/calendar-status.md` so they reach iPhone through normal Markdown
+  sync even when arbitrary JSON files are excluded. Credentials and CalDAV URLs never enter
+  receipts. Heartbeat-only changes do not rewrite the Markdown file.
+- The calendar check badge requires the current contract, task UID, path, title, scheduled
+  date/time, Waiting status and successful GET acknowledgement. Changing a clock invalidates
+  the old badge until the event update is confirmed. Date-only/closed tasks have no badge.
+  A local file lock permits one writer; state is bound to the chosen vault/calendar. Default `Архив` subfolder is excluded explicitly.
 - Naive times use the configured timezone, Europe/Moscow by default. Explicit offsets
   are converted to UTC. A nonexistent or ambiguous DST hour needs an explicit offset.
 

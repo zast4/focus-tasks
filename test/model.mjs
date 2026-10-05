@@ -2106,6 +2106,96 @@ test("moving a project uses the destination view without recreating a Projects h
   ok(projectOf(areaOf(await plugin.collect(true), "Home"), "Plan"), "the view includes the moved project");
 });
 
+test("calendar confirmation belongs to the current task, clock and state, not an earlier event", async () => {
+  const { plugin } = await stand(a => { areaNote(a, "Work"); taskNote(a, "Call", { area: "Work", scheduled: TODAY + "T00:00" }); });
+  const task = plugin.tasks()[0];
+  const state = { enabled: true, connected: true, contract: "focus-view-at-start-v1", tasks: { [task.uid]: {
+    file: task.file.path, title: task.text, scheduled: TODAY + "T00:00", waiting: false, status: "synced", checkedAt: new Date().toISOString(),
+  } } };
+  eq(plugin.calendarStatus(task, state), "synced", "explicit midnight is a timed event");
+  for (const patch of [{ file: "Tasks/Other.md" }, { title: "Other" }, { scheduled: TODAY + "T01:00" },
+    { waiting: true }, { status: "pending" }, { checkedAt: "broken" }]) {
+    const stale = { ...state, tasks: { [task.uid]: { ...state.tasks[task.uid], ...patch } } };
+    eq(plugin.calendarStatus(task, stale), "pending", "stale or unverified acknowledgement is never green");
+  }
+  eq(plugin.calendarStatus(task, { ...state, contract: "old-default-alert" }), "pending");
+  eq(plugin.calendarStatus(task, { ...state, connected: false }), "error");
+  eq(plugin.calendarStatus(task, { ...state, tasks: { [task.uid]: { ...state.tasks[task.uid], error: "ConnectionError" } } }), "error");
+  eq(plugin.calendarStatus(task, null), "off");
+  for (const status of ["done", "cancelled", "someday"]) eq(plugin.calendarStatus({ ...task, status }, state), null);
+  eq(plugin.calendarStatus({ ...task, at: null }, state), null, "date-only has no reminder badge");
+  eq(plugin.calendarStatus({ ...task, uid: "copied-uid" }, state), "pending", "a duplicate gets no borrowed acknowledgement");
+  const waiting = { ...task, status: "waiting" };
+  state.tasks[task.uid].waiting = true;
+  eq(plugin.calendarStatus(waiting, state), "synced");
+});
+
+test("Calendar settings accept phone receipts without a heartbeat and show actual connection errors", async () => {
+  const { plugin } = await stand();
+  const state = { enabled: true, connected: true, contract: "focus-view-at-start-v1", tasks: {} };
+  eq(plugin.calendarHasProblem(state), false, "unchanged phone receipt is healthy without updatedAt");
+  eq(plugin.calendarHasProblem({ ...state, updatedAt: "broken" }), false);
+  eq(plugin.calendarHasProblem({ ...state, connected: false }), true);
+  eq(plugin.calendarHasProblem({ ...state, errors: ["ConnectionError"] }), true);
+  eq(plugin.calendarHasProblem({ ...state, tasks: { one: { status: "pending", error: "ConnectionError" } } }), true);
+  eq(plugin.calendarHasProblem({ ...state, contract: "old" }), true);
+  eq(plugin.calendarHasProblem(null), false);
+});
+
+test("group clock changes invalidate every old calendar receipt until the new clock is confirmed", async () => {
+  const { plugin } = await stand(a => {
+    areaNote(a, "Work");
+    taskNote(a, "A", { area: "Work", scheduled: DAY(1) + "T08:10" });
+    taskNote(a, "B", { area: "Work", scheduled: DAY(1) + "T17:25" });
+  });
+  const tasks = plugin.tasks();
+  const state = { enabled: true, connected: true, contract: "focus-view-at-start-v1", tasks: Object.fromEntries(tasks.map(task => [task.uid, {
+    file: task.file.path, title: task.text, scheduled: `${task.date}T${task.at}`, waiting: false, status: "synced", checkedAt: new Date().toISOString(),
+  }])) };
+  for (const task of tasks) eq(plugin.calendarStatus(task, state), "synced");
+  await plugin.setDates(tasks, DAY(2), "16:30");
+  for (const task of plugin.tasks()) eq(plugin.calendarStatus(task, state), "pending");
+  for (const receipt of Object.values(state.tasks)) receipt.scheduled = DAY(2) + "T16:30";
+  for (const task of plugin.tasks()) eq(plugin.calendarStatus(task, state), "synced");
+  await plugin.setDates(plugin.tasks(), DAY(2), null);
+  for (const task of plugin.tasks()) eq(plugin.calendarStatus(task, state), null);
+});
+
+test("grouping a project and task never writes a notification clock into the project", async () => {
+  const { app, plugin } = await stand(a => { areaNote(a, "Work"); projectNote(a, "Work", "Plan");taskNote(a, "Call", { area: "Work", scheduled: DAY(1) + "T08:10" }); });
+  const area = areaOf(await plugin.collect(true), "Work"), project = projectOf(area, "Plan");
+  const handle = { file: project.file, uid: "p:" + project.file.path, isProject: true, project, date: null, at: null, status: "open" };
+  await plugin.setDates([handle, plugin.tasks()[0]], DAY(2), "16:30");
+  eq(frontmatter(app, project.file.path).scheduled, DAY(2));
+  eq(frontmatter(app, "Tasks/Call.md").scheduled, DAY(2) + "T16:30");
+  await plugin.undo();
+  eq(frontmatter(app, project.file.path).scheduled, undefined);
+  eq(frontmatter(app, "Tasks/Call.md").scheduled, DAY(1) + "T08:10");
+});
+
+test("calendar receipts use Markdown on phones and refuse a malformed receipt instead of trusting stale JSON", async () => {
+  const { app, plugin } = await stand(a => areaNote(a, "Work"));
+  const files = new Map(), md = "Internals/FocusTasks/calendar-status.md", json = "Internals/FocusTasks/calendar-status.json";
+  app.vault.adapter = { exists: async path => files.has(path), read: async path => files.get(path) };
+  files.set(json, JSON.stringify({ enabled: true, contract: "legacy" }));
+  eq((await plugin.calendarState()).contract, "legacy");
+  files.set(md, '---\ntype: focus-tasks-calendar-status\n---\n\n```json\n{"enabled":true,"contract":"focus-view-at-start-v1"}\n```\n');
+  eq((await plugin.calendarState()).contract, "focus-view-at-start-v1");
+  files.set(md, "half synced receipt");
+  eq(await plugin.calendarState(), null);
+  files.set(md, "```json\n{invalid}\n```\n");
+  eq(await plugin.calendarState(), null);
+});
+
+test("the Calendar protocol opens the Focus view without opening a task note", async () => {
+  const { plugin } = await stand(a => areaNote(a, "Work"));
+  let calls = 0;
+  plugin.openView = async () => { calls++; };
+  plugin.protocolHandlers["focus-tasks"]({ vault: "Test Vault", file: "Tasks/Ignore.md" });
+  await Promise.resolve();
+  eq(calls, 1);
+});
+
 // --- run ------------------------------------------------------------------------------------------
 
 const filter = process.argv[2];
