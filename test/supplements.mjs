@@ -288,3 +288,31 @@ test('area category switches apply to all its projects, even after a scoped proj
   assert.equal(p.categoryShown(later),false);assert.equal(p.categoryShown(focus),true);
   assert.equal(p.isShown('intents:Work',true),true);
 });
+
+
+test('Focus availability follows effective scope membership, not visibility or task count alone', async () => {
+  const { p, file } = await setup();
+  const target={area:'Work',project:file.basename,projectFile:file};
+  await p.setProjectDate(file,'2099-01-01');
+  await p.createTask('Future step',target,'2099-01-01');
+  let area=(await p.collect(false,true)).find(a=>a.name==='Work');
+  assert.equal(p.scopeTasks(area).hasFocus,false);
+  assert.equal(p.scopeTasks(area,file.path).hasFocus,false);
+  assert.equal(p.scopeTasks(undefined).hasFocus,false);
+  await p.setProjectDate(file,'2000-01-01');
+  area=(await p.collect(false,true)).find(a=>a.name==='Work');
+  assert.equal(p.scopeTasks(area).hasFocus,true);
+  p.data.opened['focusoff:Work']=true;
+  p.data.opened['project-focusoff:'+file.path]=true;
+  assert.equal(p.scopeTasks((await p.collect(false,true)).find(a=>a.name==='Work')).hasFocus,true);
+});
+
+test('a genuinely empty dated project still offers Focus, a completed project does not hold its area', async () => {
+  const { p, file } = await setup();
+  await p.setProjectDate(file,'2000-01-01');
+  let area=(await p.collect(false,true)).find(a=>a.name==='Work');
+  assert.equal(p.scopeTasks(area,file.path).focus.length,0);
+  assert.equal(p.scopeTasks(area,file.path).hasFocus,true);
+  area.rows[0].project.finished=true;
+  assert.equal(p.scopeTasks(area).hasFocus,false);
+});

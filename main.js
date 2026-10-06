@@ -1335,7 +1335,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const later = { key: "area-page-backlogoff:" + file.path, inverted: true, count: counts.backlog.length };
     const focusShown = p.categoryShown(focus), laterShown = p.categoryShown(later);
     const visible = this.scopeRows(area, focusShown, laterShown);
-    this.supplements(head, { key: "intents:" + area.name, focus, later, count: this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name)) });
+    this.supplements(head, { key: "intents:" + area.name, focus, later, presentation: counts.hasFocus ? "focus-area" : "backlog-area", count: this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name)) });
     const target = { area: area.name, project: null, noDate: true };
     const last = () => [...box.querySelectorAll(":scope > ul.ft-list > li")].pop() || head;
     this.plus(head, t("addToArea"), async () => this.creationView(target, "intents:" + area.name, focus, later), last);
@@ -1397,7 +1397,7 @@ class FocusRenderer extends MarkdownRenderChild {
     head.createSpan({ cls: "ft-page-name", text: b.file.basename });
     const intentKey = "project-intents:" + path;
     const counts = this.scopeFor(area.name, path);
-    const focus = { key: "project-focusoff:" + path, onKey: "project-focuson:" + path, defaultOpen: true, count: counts.focus.length };
+    const focus = { key: "project-focusoff:" + path, onKey: "project-focuson:" + path, defaultOpen: true, count: counts.focus.length, available: counts.hasFocus };
     const later = { key: "later:" + path, projectPath: path, defaultOpen: true, count: counts.backlog.length };
     const ideasShown = p.isShown(intentKey, true);
     const pileShown = p.categoryShown(later);
@@ -1848,7 +1848,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const focusShown = p.categoryShown(focus), futureShown = p.categoryShown(later);
     const visible = this.scopeRows(area, focusShown, futureShown);
     this.supplements(title, { key: intentKey, count: this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name)),
-      focus, later, expanded: open, unfold: async () => { if (!open) await p.toggleShown(key, all); } });
+      focus, later, presentation: all ? "backlog-area" : "focus-area", expanded: open, unfold: async () => { if (!open) await p.toggleShown(key, all); } });
     this.plus(title, t("addToArea"), async () => this.creationView({ area: area.name, project: null, noDate: all }, intentKey, focus, later),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
     this.more(title, (menu) => this.areaMenu(menu, area));
@@ -2154,7 +2154,7 @@ class FocusRenderer extends MarkdownRenderChild {
     return { rows, ahead };
   }
 
-  supplements(head, { key, count = 0, later = null, focus = null, expanded = true, unfold = null, onChoose = null }) {
+  supplements(head, { key, count = 0, later = null, focus = null, presentation = "project", expanded = true, unfold = null, onChoose = null }) {
     const p = this.plugin, ideas = p.isShown(key, true);
     if (!this.controlPressListeners) {
       this.controlPressListeners = true;
@@ -2169,7 +2169,11 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     const backlog = p.categoryShown(later);
     const group = head.createSpan({ cls: "ft-supplement-switch", attr: { role: "group", "aria-label": t("extraViews") } });
+    group.addClass("ft-supplement-" + presentation);
     for (const [kind, enabled, n] of [["focus", p.categoryShown(focus), focus?.count || 0], ["backlog", backlog, later?.count || 0], ["intents", ideas, count]]) {
+      // A queue-only scope has no Focus to reveal. Keep zero-count Backlog/Ideas
+      // available: their add actions are how the first task or idea is created.
+      if (kind === "focus" && (presentation === "backlog-area" || focus?.available === false)) continue;
       const active = expanded && enabled;
       const label = kind === "intents" ? t("intents") : kind === "focus" ? t("focusTitle") : t("backlog");
       const button = group.createEl("button", { cls: "ft-chip " + (kind === "intents" ? "ft-intents-chip" : kind === "focus" ? "ft-focus-chip" : "ft-later-chip"),
@@ -3298,7 +3302,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const key = "steps:" + project.file.path;
     const isList = !!project.intentList;
     const counts = isList ? null : this.scopeFor(area.name, project.file.path);
-    const focus = { key: "project-focusoff:" + project.file.path, onKey: "project-focuson:" + project.file.path, defaultOpen: opts.focusVisible !== false, count: counts?.focus.length || 0 };
+    const focus = { key: "project-focusoff:" + project.file.path, onKey: "project-focuson:" + project.file.path, defaultOpen: opts.focusVisible !== false, count: counts?.focus.length || 0, available: counts?.hasFocus };
     const later = { key: "later:" + project.file.path, projectPath: project.file.path, defaultOpen: opts.backlogDefault ?? (!!opts.all || opts.pile === "ahead"), count: counts?.backlog.length || 0 };
     const focusShown = p.categoryShown(focus), laterShown = p.categoryShown(later);
     const inBacklog = !isList && !counts.focus.length && opts.pile === "ahead";
@@ -4273,7 +4277,11 @@ module.exports = class FocusTasks extends Plugin {
     };
     const focused = tasks(area?.rows), later = tasks(area?.ahead);
     for (const uid of focused.keys()) later.delete(uid);
-    return { focus: [...focused.values()], backlog: [...later.values()] };
+    // Empty projects created for today's work are still actionable Focus rows;
+    // finished projects and pending Waiting alone do not put an area in Focus.
+    const hasFocus = focused.size > 0 || (area?.rows || []).some(row => row.kind === "project"
+      && (!path || row.project.file.path === path) && !row.project.finished);
+    return { focus: [...focused.values()], backlog: [...later.values()], hasFocus };
   }
 
   async collect(all, every = false) {

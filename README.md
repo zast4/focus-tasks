@@ -49,7 +49,7 @@ What you can do in the view:
 | | |
 |---|---|
 | Complete a task | click its checkbox; the closed task stays in its area's Done block for the day; its checkbox reopens it. An area without open focus work leaves Focus and remains available through All and Done |
-| See what is ahead in a project | the always-visible clock counter on the project's row opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
+| See what is ahead in a project | the clock counter revealed by hovering the project's row opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
 | A robot's mark | the list shows no priorities; the one dot it draws is `priority: low`, what a script or a bot leaves on a task it added and you have not looked at — a click on the dot (or «Take the robot's mark off» in the menu) removes it |
 | A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note, not to its step. Set, it alone decides whether the project is in the focus (due) or in the area's ⏳ pile with all of its steps; the steps keep their days |
@@ -106,10 +106,14 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 ## Idea lists
 
-Areas and projects expose three plain, always-visible icon counters: **Focus, Backlog, Ideas**.
+Local categories use plain icon counters: **Focus, Backlog, Ideas**. On a computer, focused areas
+keep only Focus visible; other areas keep Backlog and never offer an impossible Focus category.
+Hovering reveals secondary controls. Projects reveal their counters only on hover. Keyboard focus
+also reveals controls. Touch devices keep all available controls visible; zero-count Backlog/Ideas
+remain accessible for adding the first task or idea.
 Each independently shows/hides its tasks. Several categories can be open together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
-When an area is folded, all three controls are dimmed. Clicking one unfolds the area and shows
+When an area is folded, all available controls are dimmed. Clicking one unfolds the area and shows
 that category, preserving the other saved switches. Expanding with the caret restores them all.
 Hiding Focus also hides its projects, unless their Backlog tasks or Ideas are visible. Fold arrows
 appear only for actual steps; hidden categories leave no empty project headers or steps blocks.
@@ -356,10 +360,14 @@ Shift+клик выделяет все задачи от последней кл
 
 ### Замыслы
 
-У областей и проектов три постоянно видимых счётчика с обычными иконками: **Фокус, Отложка, Замыслы**.
+Категории используют обычные иконки со счётчиками: **Фокус, Отложка, Замыслы**. На компьютере
+у фокусной области всегда видна мишень, у остальных областей часы; мишени у них нет.
+Остальные переключатели появляются при наведении, у проектов все переключатели появляются
+при наведении. Переход клавиатурой тоже раскрывает переключатели. На сенсорных устройствах
+доступные переключатели видны постоянно, включая пустые отложку и замыслы для первого добавления.
 Каждый независимо показывает и скрывает свои задачи. Можно открыть несколько категорий одновременно.
 Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.
-У свёрнутой области все три иконки приглушены. Нажатие раскрывает область и выбранную категорию,
+У свёрнутой области все доступные иконки приглушены. Нажатие раскрывает область и выбранную категорию,
 сохраняя остальные переключатели. Раскрытие стрелкой возвращает сохранённое сочетание.
 Скрытие фокуса скрывает и проекты, кроме тех, у которых показана отложка или замыслы.
 Стрелки сворачивания появляются только у настоящих шагов, пустые строки проектов не остаются.

@@ -135,7 +135,11 @@ these as actionable tasks or area/project notes. `read().intentTasks` is separat
 intent entries. Changing an entry's date never promotes it. Explicit promotion preserves UID,
 sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
-Shared plain target/clock/lightbulb counters are always visible in global and scoped area/project views.
+Shared target/clock/lightbulb counters follow effective scope membership in global and scoped views.
+Desktop Focus areas show only the target at rest, Other areas only the clock and no target. Project
+controls and secondary area controls reveal on hover/focus-within without shifting the grid. Touch
+controls remain visible. `scopeTasks.hasFocus` includes actionable empty projects and ignores
+completed-only projects, so impossible Focus controls are omitted without changing saved states.
 Each category independently controls only its visibility; All is never changed.
 While an area is folded, controls are dimmed without changing saved category states; clicking a
 control requests reveal instead of toggle, then unfolds the area. This includes empty Other areas.
