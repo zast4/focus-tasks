@@ -708,15 +708,13 @@ body.is-mobile .focus-tasks-view .ft-link.is-editing { -webkit-user-select: text
 .focus-tasks-view .ft-intent-description { color: var(--text-muted); padding: 0.35rem 0; overflow-wrap: anywhere; }
 .focus-tasks-view .ft-intents-head .ft-project-icon { flex: none; }
 
-/* Local backlog/ideas share a single quiet control. All remains independent. */
+/* The three local categories are plain, always-visible controls. */
 .focus-tasks-view .ft-supplement-switch { display: inline-flex; flex: none; align-items: center; align-self: flex-start;
-  gap: 0; margin: 0.1rem 0.35rem; padding: 2px; border: 1px solid var(--background-modifier-border);
-  border-radius: 7px; background: var(--background-secondary); font-size: 0.75rem; font-weight: 400; }
+  gap: 0.15rem; margin: 0.1rem 0.35rem; padding: 0; border: 0; background: transparent; font-size: 0.75rem; font-weight: 400; }
 .focus-tasks-view .ft-supplement-switch > button.ft-chip { display: inline-flex; align-items: center; justify-content: center;
-  gap: 0.25em; margin: 0; padding: 2px 5px; min-width: 28px; height: 25px; border: 0; border-radius: 4px;
-  background: transparent; box-shadow: none; color: var(--text-muted); opacity: 1; cursor: pointer; }
-.focus-tasks-view .ft-supplement-switch > button + button { border-left: 1px solid var(--background-modifier-border); }
-.focus-tasks-view .ft-supplement-switch > button.is-on { background: var(--background-modifier-hover); color: var(--text-normal); }
+  gap: 0.25em; margin: 0; padding: 2px 5px; min-width: 28px; height: 25px; border: 0; border-radius: 0;
+  background: transparent; box-shadow: none; color: var(--text-normal); opacity: 0.45; cursor: pointer; text-decoration: none; }
+.focus-tasks-view .ft-supplement-switch > button.is-on { opacity: 1; }
 .focus-tasks-view .ft-supplement-switch > button:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 1px; }
 .focus-tasks-view .ft-supplement-switch .ft-chip-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; line-height: 1; }
 .focus-tasks-view .ft-supplement-switch svg { width: 1rem; height: 1rem; }
@@ -786,3 +784,7 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title:has(> .ft-supplement-switc
   body:not(.is-mobile) .focus-tasks-view li.ft-project-row > .ft-date { grid-column: 4; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view li.ft-project-row > .ft-supplement-switch { grid-column: 2 / -1; grid-row: 2; justify-self: end; }
 }
+
+/* A fold arrow carries no second numeric badge beside the category counters. */
+.focus-tasks-view .ft-line > .ft-steps-more { display: inline-flex; align-items: center; justify-content: center; min-width: 1.4rem; }
+.focus-tasks-view .ft-steps-more svg { width: 1rem; height: 1rem; }

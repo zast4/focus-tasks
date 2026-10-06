@@ -392,7 +392,7 @@ step("the box completes a step: the row leaves the list; the day's closed block 
   await until(() => page.eval(`const r = __ft.task('Lace them'); return !!r && !r.closest('.ft-done-today') && !!r.closest('.ft-steps')`), "Lace them open again, among Marathon's steps");
 });
 
-step("a step dated later: in the plain focus its project has a row in the area's ⏳ pile too, showing that step", async () => {
+step("a later step appears once under its existing project when the area backlog opens", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Book the hotel")),
     `---\nuid: ft-later-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${ymd(new Date(Date.now() + 30 * 864e5))}\nprojects:\n  - "[[Marathon]]"\n---\n`);
   await toPane();
@@ -401,14 +401,11 @@ step("a step dated later: in the plain focus its project has a row in the area's
     if (p.everything()) p.setEverything(false);
     if (!p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true);
     p.refresh(); return true;`);
-  // Marathon's steps are open (since the inline-edit step), so its row in the pile is the name alone
-  // and the later steps are rows under it
   await until(() => page.eval(`
-    const pile = __ft.area('Sport')?.closest('.ft-area')?.querySelector('.ft-future-block');
-    const row = pile && __ft.all('li.ft-project-row', pile).find((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Marathon');
-    const step = __ft.task('Book the hotel');
-    return !!row && row.hasClass('is-open') && !!step && step.hasClass('is-later') && step.closest('li.ft-steps')?.previousElementSibling === row;`),
-    "Marathon's row in the area's ⏳ pile, with the later step under it");
+    const area = __ft.area('Sport')?.closest('.ft-area'), row = __ft.project('Marathon'), step = __ft.task('Book the hotel');
+    return !!row && !!step && step.hasClass('is-later') && !!step.closest('li.ft-later-steps.ft-future-block')
+      && __ft.all('li.ft-project-row', area).filter(e=>e.querySelector('.ft-link')?.textContent.trim()==='Marathon').length===1;`),
+    "one Marathon header, with its later step in the backlog underneath");
   if (!(await page.eval(`return __ft.all('li.ft-task', __ft.view()).filter((r) => r.querySelector('.ft-text')?.textContent.trim() === 'Book the hotel').every((r) => r.closest('.ft-future-block'))`)))
     throw new Error("the later step is among today's rows");
   await plugin(`if (p.everything() !== ${wasAll}) p.setEverything(${wasAll}); return true;`);
@@ -545,7 +542,7 @@ step("«Move up» / «Move down» reorder a task without dragging", async () => 
   await toPane();
   // the area's own tasks, in both piles, not the steps of its projects
   const order = () => page.eval(`return __ft.all('li.ft-task:not(.ft-project-row)', __ft.all('.ft-area', __ft.view())[0])
-    .filter((e) => !e.closest('li.ft-steps')).map((e) => e.querySelector('.ft-text').textContent.trim())`);
+    .filter((e) => !e.closest('li.ft-steps, li.ft-later-steps')).map((e) => e.querySelector('.ft-text').textContent.trim())`);
   const before = await order();
   const first = before[0];
   await menuOn(`__ft.at(__ft.task(${J(first)}))`);
@@ -1874,7 +1871,7 @@ step("the ⏳ of an area folds its upcoming work — in «All» too, where the f
   await settle();
 });
 
-step("a project is one row: its name and its first step; +N opens the rest; the box takes the next one", async () => {
+step("a project has one header: its first step, a fold arrow and unified category counters", async () => {
   const saved = await plugin(`return JSON.stringify({ all: p.everything(), folded: { ...p.data.folded }, opened: { ...p.data.opened } });`);
   fs.writeFileSync(path.join(VAULT, "Tasks/Flatland.md"), '---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n');
   const step = (name, uid, day) => fs.writeFileSync(path.join(VAULT, taskPath(name)),
@@ -1891,8 +1888,8 @@ step("a project is one row: its name and its first step; +N opens the rest; the 
     p.saveFolds(); p.refresh(); return true;`);
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
-    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && row.querySelector('.ft-steps-more')?.textContent.trim() === '+1';`),
-    "one row: the project, its first step, +1");
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && !!row.querySelector('.ft-steps-more svg') && row.querySelector('.ft-steps-more').textContent.trim()==='' && [...row.querySelectorAll('.ft-supplement-count')].map(e=>e.textContent).join('|')==='2|1|0';`),
+    "one row: the project, first step, fold arrow and task-category counts");
   if (await page.eval(`return !!__ft.task('Flat two')`)) throw new Error("the second step is on screen while the row is folded");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-project')`)) throw new Error("a project header is still drawn somewhere");
   // +1 opens the steps under the row, and the row is then the name alone
@@ -1926,19 +1923,17 @@ step("a project is one row: its name and its first step; +N opens the rest; the 
     const row = __ft.project('Flatland');
     return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat two' && !row.querySelector('.ft-steps-more');`),
     "the next step took the row");
-  // the later step: the project's row in the area's ⏳ pile
   await plugin(`if (!p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true); p.refresh(); return true;`);
   await until(() => page.eval(`
-    const pile = __ft.area('Sport').closest('.ft-area').querySelector('.ft-future-block');
-    const row = pile && __ft.all('li.ft-project-row', pile).find((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Flatland');
-    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat later';`), "the project's row in the ⏳ pile shows the later step");
-  // «All»: the same rows, no tree
+    const row = __ft.task('Flat later');
+    return !!row && !!row.closest('.ft-later-steps.ft-future-block');`), "the later step is in its project's backlog");
   await plugin(`p.setEverything(true); return true;`);
-  // an area of the focus keeps its two piles in «All», the ⏳ one open: the project has a row in each
   await until(() => page.eval(`
     const rows = __ft.all('li.ft-project-row', __ft.view()).filter((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Flatland' && !e.closest('.ft-done-today'));
-    return rows.length === 2 && rows.map((r) => r.querySelector('.ft-text')?.textContent.trim()).join('|') === 'Flat two|Flat later' && !__ft.view().querySelector('.ft-project');`),
-    "the same rows in «All», one per pile, and no project headers anywhere");
+    const later = __ft.task('Flat later');
+    return rows.length === 1 && rows[0].querySelector('.ft-text')?.textContent.trim()==='Flat two'
+      && !!later?.closest('.ft-later-steps.ft-future-block') && !__ft.view().querySelector('.ft-project');`),
+    "All keeps one project header and one copy of each category's tasks");
   await plugin(`
     const was = JSON.parse(${J(saved)});
     p.data.folded = was.folded; p.data.opened = was.opened;
@@ -2197,7 +2192,7 @@ step("local area rows are flat like the project page while the global focus keep
   const previousAll = await plugin('return p.everything();');
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];const file=p.notes().find(n=>!n.project&&n.area==='Audit Area').file;
     const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
-  await until(()=>page.eval(`const e=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return e?.querySelectorAll('.ft-steps li.ft-task').length===3;`),'expanded project steps on the area page');
+  await until(()=>page.eval(`const e=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return e?.querySelectorAll('.ft-steps li.ft-task, .ft-later-steps li.ft-task').length===3;`),'expanded project steps on the area page');
   const measure = (selector) => page.eval(`const root=[...document.querySelectorAll(${J(selector)})].find(e=>e.getClientRects().length);
     const left=root.getBoundingClientRect().left;return [...root.querySelectorAll('li.ft-task')].map(e=>({text:e.textContent,offset:e.getBoundingClientRect().left-left}));`);
   const areaRows = await measure('.ft-area-page');
@@ -2213,7 +2208,7 @@ step("local area rows are flat like the project page while the global focus keep
   if(projectRows.some(r=>Math.abs(r.offset-areaRows[0].offset)>1))throw new Error('area and project pages have different insets: '+J({areaRows,projectRows}));
   await toPane();
   await plugin(`p.setEverything(true);await p.setOpen('area:Audit Area',true);return true;`);
-  await until(()=>page.eval(`const root=__ft.area('Audit Area')?.closest('.ft-area');const steps=[...root.querySelectorAll('.ft-steps li.ft-task')].map(el=>app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.items.get(el)?.task?.text);return ['Audit second project step','Audit third project step','Audit project step'].every(name=>steps.includes(name));`),'global project hierarchy including the single future step');
+  await until(()=>page.eval(`const root=__ft.area('Audit Area')?.closest('.ft-area');const steps=[...root.querySelectorAll('.ft-steps li.ft-task, .ft-later-steps li.ft-task')].map(el=>app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.items.get(el)?.task?.text);return ['Audit second project step','Audit third project step','Audit project step'].every(name=>steps.includes(name));`),'global project hierarchy including the single future step');
   const global=await page.eval(`const root=__ft.area('Audit Area').closest('.ft-area');const project=root.querySelector('li.ft-project-row');const step=root.querySelector('.ft-steps li.ft-task');return {project:project.getBoundingClientRect().left,step:step.getBoundingClientRect().left};`);
   if(global.step-global.project<15)throw new Error('the global focus lost its step indentation: '+J(global));
   await plugin(`p.setEverything(${J(previousAll)});return true;`);

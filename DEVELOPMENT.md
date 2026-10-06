@@ -135,16 +135,22 @@ these as actionable tasks or area/project notes. `read().intentTasks` is separat
 intent entries. Changing an entry's date never promotes it. Explicit promotion preserves UID,
 sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
-Shared clock/📔 supplement groups toggle `opened["intents:<area>"]` and
-`opened["project-intents:<project-path>"]`, mutually exclusive with local backlog. The clock segment is absent when its backlog is empty; 📔 remains available for first addition.
-Area notes only
-need 📔; project notes share selection with their row. All remains unchanged; no global footer entry.
+Shared plain Focus/clock/notebook counters are always visible in global and scoped area/project views.
+Each category independently controls only its visibility; All is never changed. Focus uses device
+`focusoff:<area>` / `project-focusoff:<path>` (plus explicit project-focuson override). Existing area
+future keys keep the All inversion. Project backlog shares explicit later/pagefold state across
+row/note views; empty counters remain visible. `scopeTasks` counts effective `collect(false,true)`
+row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
+change numbers. A project renders once when its focused and future steps are both visible.
+Area category switches also apply to project overrides in that area. `creationView` opens the
+new task's effective destination without changing the task's date. Switching categories clears
+selection, and UID navigation restores a hidden destination. No extra Ideas heading or global
+footer entry is added.
 `intentProject` is an optional full project wikilink and `intentProjectUid` its authoritative identity.
 The project's own `uid` is assigned only on explicit binding/first addition. One collection per
 project prevents ambiguous addition/order; a project renders its collection directly as task rows.
 Areas include project collections under their current project names. Parent and child idea blocks
-open exclusively, including search/programmatic opening. A project split between Focus and area
-backlog shows its collection once at the clicked alias, falling back to the remaining row when folded. Opening an empty scope is
+open exclusively, including search/programmatic opening. A project has one header and one collection block even when several categories are visible. Opening an empty scope is
 read-only. Existing lists can be bound/unbound. Rename, move, promotion, deletion and Undo include
 project collections. A project replaced under the same filename cannot inherit an old UID's ideas.
 `node --test test/supplements.mjs` and `test/supplements-ui.mjs` cover these contracts.

@@ -10,25 +10,25 @@ async function setup() {
 const target = list => ({ area: list.area, project: list.file.basename, projectFile: list.file, intentList: true, listUid: list.uid });
 async function entry(p, file, title = 'Possibility') { const list = await p.ensureProjectIntentList(file); return { list, task: await p.createTask(title, target(list), null) }; }
 
-test('local supplement toggles are exclusive, collapse on repeat and never touch All', async () => {
+test('local supplement toggles are independent, collapse on repeat and never touch All', async () => {
   const { p } = await setup(); p.setEverything(true);
   const later = { key: 'future:Work' };
   await p.toggleSupplement('intents:Work', 'backlog', later);
   assert.equal(p.isShown(later.key, true), true);
   await p.toggleSupplement('intents:Work', 'intents', later);
-  assert.equal(p.isShown(later.key, true), false); assert.equal(p.isShown('intents:Work', true), true);
+  assert.equal(p.isShown(later.key, true), true); assert.equal(p.isShown('intents:Work', true), true);
   await p.toggleSupplement('intents:Work', 'intents', later);
-  assert.equal(p.isShown('intents:Work', true), false); assert.equal(p.isShown(later.key, true), false);
+  assert.equal(p.isShown('intents:Work', true), false); assert.equal(p.isShown(later.key, true), true);
   assert.equal(p.everything(), true);
 });
 
 test('inverted All backlog folds correctly when selecting and closing ideas', async () => {
   const { p } = await setup(); const later = { key: 'futureoff:Work', inverted: true };
   await p.toggleSupplement('intents:Work', 'intents', later);
-  assert.equal(p.isShown(later.key, true), true);
+  assert.equal(p.isShown(later.key, true), false);
   await p.toggleSupplement('intents:Work', 'backlog', later);
-  assert.equal(p.isShown(later.key, true), false); assert.equal(p.isShown('intents:Work', true), false);
-  await p.toggleSupplement('intents:Work', 'backlog', later); assert.equal(p.isShown(later.key, true), true);
+  assert.equal(p.isShown(later.key, true), true); assert.equal(p.isShown('intents:Work', true), true);
+  await p.toggleSupplement('intents:Work', 'backlog', later); assert.equal(p.isShown(later.key, true), false);
 });
 
 test('project note and common row share supplement selection; other areas stay independent', async () => {
@@ -37,7 +37,7 @@ test('project note and common row share supplement selection; other areas stay i
   await p.toggleSupplement(key, 'intents', { key: 'pagefold:' + file.path, inverted: true });
   assert.equal(p.isShown('later:' + file.path, true), false);
   await p.toggleSupplement(key, 'backlog', { key: 'later:' + file.path });
-  assert.equal(p.isShown('pagefold:' + file.path, true), false); assert.equal(p.isShown(key, true), false);
+  assert.equal(p.isShown('pagefold:' + file.path, true), false); assert.equal(p.isShown(key, true), true);
   assert.equal(p.isShown('intents:Life', true), true);
 });
 
@@ -178,4 +178,90 @@ test('programmatic opening after search or moving a list also respects parent/ch
   const { p, file } = await setup(); const key = 'project-intents:' + file.path;
   await p.setOpen(key, true); await p.setOpen('intents:Work', true); assert.equal(p.isShown(key, true), false);
   await p.setOpen(key, true); assert.equal(p.isShown('intents:Work', true), false);
+});
+
+test('all eight category combinations preserve independent visibility and All', async () => {
+  for (let mask = 0; mask < 8; mask++) {
+    const { p } = await setup(); p.setEverything(true);
+    const later = { key: 'future:Work' }, focus = { key: 'focusoff:Work', inverted: true };
+    if (!(mask & 1)) await p.toggleSupplement('intents:Work', 'focus', later, focus);
+    if (mask & 2) await p.toggleSupplement('intents:Work', 'backlog', later, focus);
+    if (mask & 4) await p.toggleSupplement('intents:Work', 'intents', later, focus);
+    assert.equal(p.categoryShown(focus), !!(mask & 1)); assert.equal(p.categoryShown(later), !!(mask & 2));
+    assert.equal(p.isShown('intents:Work', true), !!(mask & 4)); assert.equal(p.everything(), true);
+  }
+});
+
+test('project focus/backlog overrides have the same state in note and list, without touching ideas', async () => {
+  const { p, file } = await setup(), path = file.path, key = 'project-intents:' + path;
+  const later = { key: 'later:' + path, projectPath: path, defaultOpen: true };
+  const focus = { key: 'project-focusoff:' + path, onKey: 'project-focuson:' + path, defaultOpen: true };
+  await p.toggleSupplement(key, 'intents', later, focus);
+  assert.equal(p.categoryShown(later), true);
+  await p.toggleSupplement(key, 'backlog', later, focus);
+  assert.equal(p.categoryShown({ ...later, defaultOpen: false }), false);
+  assert.equal(p.isShown(key, true), true);
+  await p.toggleSupplement(key, 'focus', later, focus);
+  assert.equal(p.categoryShown(focus), false); assert.equal(p.isShown(key, true), true);
+  await p.toggleSupplement(key, 'focus', later, focus);
+  assert.equal(p.categoryShown({ ...focus, defaultOpen: false }), true);
+  assert.equal(p.categoryShown(later), false);
+});
+
+test('category changes persist only device folds, never task/list/project files or counters', async () => {
+  const { p, app, file } = await setup(); await entry(p, file);
+  const before = [...app.vault.files.entries()];
+  const focus = { key: 'focusoff:Work', inverted: true }, later = { key: 'future:Work' };
+  for (const kind of ['focus', 'backlog', 'intents', 'focus', 'backlog', 'intents']) await p.toggleSupplement('intents:Work', kind, later, focus);
+  assert.deepEqual([...app.vault.files.entries()], before);
+  assert.equal(p.read().intentTasks.length, 1); assert.equal(p.tasks().length, 0);
+});
+
+test('scope counts include hidden steps, returned Waiting, exclude pending Waiting and closed/private records', async () => {
+  const { p, file } = await setup(); const day = new Date().toLocaleDateString('en-CA');
+  const tg = { area: 'Work', project: file.basename, projectFile: file };
+  for (let i = 0; i < 3; i++) await p.createTask('Focus '+i, tg, day);
+  await p.createTask('Later', tg, null);
+  const returned = await p.createTask('Returned', tg, '2000-01-01'); await p.setWaiting(returned, true);
+  const pending = await p.createTask('Pending', tg, '2099-01-01'); await p.setWaiting(pending, true);
+  const done = await p.createTask('Done', tg, day); await p.toggle(done);
+  await entry(p, file);
+  const scope = (await p.collect(false, true)).find(a => a.name === 'Work');
+  assert.deepEqual([p.scopeTasks(scope).focus.length, p.scopeTasks(scope).backlog.length], [4,1]);
+  assert.deepEqual([p.scopeTasks(scope,file.path).focus.length,p.scopeTasks(scope,file.path).backlog.length],[4,1]);
+  const before = p.scopeTasks(scope); p.data.opened['steps:'+file.path] = true; p.data.opened['focusoff:Work'] = true;
+  assert.deepEqual(p.scopeTasks((await p.collect(false,true)).find(a=>a.name==='Work')),before);
+});
+
+test('scope counts follow effective project-date membership and avoid duplicate step identities', async () => {
+  const { p, file } = await setup(), day = new Date().toLocaleDateString('en-CA');
+  await p.createTask('Dated today', { area:'Work', project:file.basename, projectFile:file }, day);
+  await p.createTask('Undated', { area:'Work', project:file.basename, projectFile:file }, null);
+  await p.setProjectDate(file,'2099-01-01');
+  let scope = (await p.collect(false,true)).find(a=>a.name==='Work');
+  assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[0,2]);
+  await p.setProjectDate(file,'2000-01-01');
+  scope = (await p.collect(false,true)).find(a=>a.name==='Work');
+  assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[1,1]);
+  scope.rows.push(scope.rows[0]);scope.ahead.push(scope.ahead[0]);
+  assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[1,1]);
+});
+
+test('area category switches apply to all its projects, even after a scoped project override', async () => {
+  const { p,file } = await setup(), key='project-intents:'+file.path;
+  const focus={key:'project-focusoff:'+file.path,onKey:'project-focuson:'+file.path,defaultOpen:true};
+  const later={key:'later:'+file.path,projectPath:file.path,defaultOpen:false};
+  await p.toggleSupplement(key,'focus',later,focus);
+  await p.toggleSupplement(key,'backlog',later,focus);
+  await p.toggleSupplement('intents:Work','intents');
+  const areaFocus={key:'focusoff:Work',inverted:true}, areaLater={key:'future:Work'};
+  await p.toggleSupplement('intents:Work','focus',areaLater,areaFocus);
+  assert.equal(p.categoryShown(focus),false);assert.equal(p.categoryShown(later),true);
+  await p.toggleSupplement('intents:Work','focus',areaLater,areaFocus);
+  assert.equal(p.categoryShown(focus),true);
+  await p.toggleSupplement('intents:Work','backlog',areaLater,areaFocus);
+  assert.equal(p.categoryShown(later),true);
+  await p.toggleSupplement('intents:Work','backlog',areaLater,areaFocus);
+  assert.equal(p.categoryShown(later),false);assert.equal(p.categoryShown(focus),true);
+  assert.equal(p.isShown('intents:Work',true),true);
 });

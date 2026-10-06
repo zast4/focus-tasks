@@ -49,7 +49,7 @@ What you can do in the view:
 | | |
 |---|---|
 | Complete a task | click its checkbox; the closed task stays in its area's Done block for the day; its checkbox reopens it. An area without open focus work leaves Focus and remains available through All and Done |
-| See what is ahead in a project | the ⏳ on the project's row (under the pointer; the count is in its tooltip) opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
+| See what is ahead in a project | the always-visible clock counter on the project's row opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
 | A robot's mark | the list shows no priorities; the one dot it draws is `priority: low`, what a script or a bot leaves on a task it added and you have not looked at — a click on the dot (or «Take the robot's mark off» in the menu) removes it |
 | A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note, not to its step. Set, it alone decides whether the project is in the focus (due) or in the area's ⏳ pile with all of its steps; the steps keep their days |
@@ -106,12 +106,16 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 ## Idea lists
 
-Areas and projects expose one grouped **clock | 📔** control for backlog and ideas. Click a
-segment to open that content locally; click the active segment again to close it. A scope shows one
-supplement at a time. **All** keeps its existing behavior and has no global Ideas entry.
-An area shows independent named lists and its projects' collections, labelled with their project
-names. A project shows its ideas as ordinary task rows, with no additional list level. The same
-controls appear in project notes; area notes show 📔 because their tasks are already complete.
+Areas and projects expose three plain, always-visible icon counters: **Focus, Backlog, Ideas**.
+Each independently shows/hides its tasks. Several categories can be open together. Open categories
+use full brightness; closed categories are dimmed, with no border, background or underline.
+Counters include hidden task steps, exclude pending Waiting/completed/cancelled records, and stay
+unchanged when folded. Pending Waiting keeps its own shelf; on its return date/time it counts in Focus.
+Adding a task opens its destination category so the new row stays visible. Category switches clear
+task selection; UID links reveal a hidden task. The same controls appear in area/project notes. A project has one header when Focus and Backlog
+are both visible. **All** keeps its existing behavior and has no global Ideas entry.
+Areas show independent lists and project collections under their project names. Inside a project,
+ideas are ordinary task rows with no additional list level or redundant Ideas heading.
 Empty scopes remain accessible, and merely opening them writes no notes. The project collection is
 created on first addition. Existing lists can be linked to a project or kept as area lists.
 Rows share checkboxes, inline editing, dates, selection, drag order, duplicate-above and Undo.
@@ -348,12 +352,17 @@ Shift+клик выделяет все задачи от последней кл
 
 ### Замыслы
 
-У областей и проектов один общий переключатель **часы | 📔**: отложка или замыслы.
-Нажатие открывает раздел на месте, повторное нажатие активного сегмента закрывает его.
-Кнопка «Все» сохраняет прежнее поведение, отдельного общего входа в замыслы нет.
+У областей и проектов три постоянно видимых счётчика с обычными иконками: **Фокус, Отложка, Замыслы**.
+Каждый независимо показывает и скрывает свои задачи. Можно открыть несколько категорий одновременно.
+Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.
+Считаются задачи, включая скрытые шаги, без выполненных и отменённых; свёртка не меняет числа.
+«Жду» до срока остаётся отдельно, после возврата задача учитывается в фокусе.
+Добавление открывает нужную категорию, чтобы новая задача оставалась видна. Переключение снимает
+выделение задач, а ссылка по UID раскрывает скрытую задачу. В заметках областей и проектов тот же
+компонент. Проект с фокусом и отложкой показывается одним
+заголовком. Кнопка «Все» сохраняет прежнее поведение, отдельного общего входа в замыслы нет.
 В области видны самостоятельные списки и подборки её проектов с названиями проектов.
-В проекте замыслы показаны обычными строками, без дополнительного уровня списков.
-В заметках проектов тот же переключатель; в заметках областей достаточно 📔, все задачи уже видны.
+В проекте замыслы показаны обычными строками. Общего заголовка «Замыслы» над списками нет.
 Пустой раздел можно открыть без создания заметок. Подборка проекта создаётся при первом добавлении.
 Существующий список можно привязать к проекту или оставить самостоятельным списком области.
 Галочки, правка, даты, выделение, перетаскивание, дублирование сверху и Undo общие с задачами.
