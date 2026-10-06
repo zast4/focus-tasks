@@ -9,7 +9,7 @@ Four or five areas is a ZFG working norm, never a cap that hides additional work
 
 ## Scenario matrix
 
-Idea lists open through each area's context menu. Containers share project-row geometry with 📔;
+Ideas open locally through a shared backlog/📔 switch on areas and projects. Containers share project-row geometry with 📔;
 entries share task-row editing, checkboxes, dates, duplicate-above, drag order and Undo. Dates never
 promote entries. Explicit promotion preserves identity and description and one Undo returns them.
 Body search reveals hidden lists. Confirmed list deletion and Undo include all owned entries.
@@ -109,3 +109,13 @@ mobile emulation is app-wide. Model/audit/calendar tests can run independently.
 See `AUDIT.md` for reproduced failures and limits, `CALENDAR_INTEGRATION.md` for the
 cloud state machine and physical-device acceptance. No recurrence engine, new Inbox,
 tags, automatic completion or second time tracker is added by this audit.
+
+## Local backlog and ideas / Отложка и замыслы на месте
+
+- Area and project headers share one clock/📔 group; the active segment closes on repeat.
+- Project ideas appear directly as rows. Areas also show their linked project collections.
+- Area notes expose 📔; project notes share local supplement state. All has no new entry.
+- Empty scopes create nothing until addition. Binding is UID-based; foreign replacements never inherit it.
+- Rename, move, promotion, deletion and Undo preserve membership and descriptions.
+- Geometry checks cover 320/390/430px, 18/26px text, 44px phone targets, scoped notes and both themes.
+- Checks: `test/supplements.mjs`, `test/supplements-ui.mjs`, complete desktop and phone suites.

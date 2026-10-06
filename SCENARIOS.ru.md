@@ -8,7 +8,7 @@
 
 ## Что проверяется
 
-Замыслы открываются из меню области. Списки используют строки проектов с 📔, пункты используют
+Замыслы открываются на месте общим переключателем отложки/📔 у области и проекта. Списки используют строки проектов с 📔, пункты используют
 обычные строки задач: правку, галочки, даты, дублирование сверху, перетаскивание и отмену.
 Даты сохраняют пункт в списке. Явный перенос в отложку/фокус сохраняет UID и описание; отмена возвращает.
 Поиск по описанию раскрывает скрытый список. Удаление списка с пунктами подтверждается и отменяется.
@@ -130,3 +130,13 @@ Obsidian Sync между двумя физическими устройства�
 
 Подробности исправлений и сравнения трекеров: [AUDIT.md](AUDIT.md).
 Устройство календарного моста: [CALENDAR_INTEGRATION.md](CALENDAR_INTEGRATION.md).
+
+## Local backlog and ideas / Отложка и замыслы на месте
+
+- Area and project headers share one clock/📔 group; the active segment closes on repeat.
+- Project ideas appear directly as rows. Areas also show their linked project collections.
+- Area notes expose 📔; project notes share local supplement state. All has no new entry.
+- Empty scopes create nothing until addition. Binding is UID-based; foreign replacements never inherit it.
+- Rename, move, promotion, deletion and Undo preserve membership and descriptions.
+- Geometry checks cover 320/390/430px, 18/26px text, 44px phone targets, scoped notes and both themes.
+- Checks: `test/supplements.mjs`, `test/supplements-ui.mjs`, complete desktop and phone suites.

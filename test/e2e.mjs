@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { Page, PORT, J, sleep, ymd, until } from "./cdp.mjs";
 import { checkRowAlignment } from "./row-alignment.mjs";
 import { checkIntentsUI } from "./intents-ui.mjs";
+import { checkSupplementsUI } from "./supplements-ui.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -2484,6 +2485,7 @@ step("commands are registered", async () => {
 // --- run ------------------------------------------------------------------------------------
 
 step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
+step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
 step("row controls share first-line centres in pane, area and project views", async () => {
   fs.mkdirSync(SHOTS,{recursive:true});
   await checkRowAlignment(page,TODAY,TOMORROW,SHOTS);

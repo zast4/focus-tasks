@@ -13,6 +13,7 @@ import { execFileSync } from "node:child_process";
 import { Page, J, sleep, ymd, until } from "./cdp.mjs";
 import { layoutFixture, checkLayoutMatrix, checkCurrentLayout, openLayoutContext } from "./mobile-layout.mjs";
 import { checkIntentsUI } from "./intents-ui.mjs";
+import { checkSupplementsUI } from "./supplements-ui.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -365,9 +366,9 @@ step("«+» on an area adds a task with the on-screen keyboard", async () => {
 
 step("the ⏳ on an area's header opens its upcoming work, by finger", async () => {
   // the counter lives on the header now, among ▷ and ✓ — there is no grey row under the list
-  await tapOn(`__m.all('.ft-area-title .ft-later-chip')[0]`, "the ⏳ of the area");
+  await tapOn(`__m.areaTitle('🧤Рутина').querySelector('.ft-later-chip')`, "the ⏳ of the area");
   await until(() => page.eval(`return !!__m.task('Разобрать кладовку')`), "the undated task is on screen");
-  await tapOn(`__m.all('.ft-area-title .ft-later-chip')[0]`, "the ⏳ again");
+  await tapOn(`__m.areaTitle('🧤Рутина').querySelector('.ft-later-chip')`, "the ⏳ again");
   await until(() => page.eval(`return !__m.task('Разобрать кладовку')`), "hidden again");
 });
 
@@ -753,6 +754,7 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 });
 
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
+step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));
