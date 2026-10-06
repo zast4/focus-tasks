@@ -1503,12 +1503,14 @@ step("project brightness uses the same date as focus membership and its displaye
         return true;`);
       await taskIs(task, {scheduled: stepDay});
       await settle();
-      await until(() => page.eval(`return !!__ft.project(${J(name)});`), 'project row rendered');
       const before = read(taskPath(task));
-      const state = await page.eval(`
+      // Metadata may replace the renderer between two CDP calls. Read presence and geometry
+      // together, so a transient redraw cannot turn a successful presence check into undefined.
+      const state = await until(() => page.eval(`
         const r = __ft.project(${J(name)});
+        if (!r) return false;
         return {future: !!r.closest('.ft-future-block'), dim: r.classList.contains('is-later'),
-          opacity: Number(getComputedStyle(r).opacity), ownDate: !!r.querySelector('.ft-date.is-project')};`);
+          opacity: Number(getComputedStyle(r).opacity), ownDate: !!r.querySelector('.ft-date.is-project')};`), 'project brightness row rendered');
       if (state.future !== future || state.dim !== future || state.opacity !== (future ? 0.7 : 1)
           || state.ownDate !== !!projectDay) {
         throw new Error('project=' + projectDay + ', step=' + stepDay + ': ' + J(state));

@@ -109,6 +109,10 @@ An event notification and a native Apple Reminders checkbox are different integr
 Areas and projects expose three plain, always-visible icon counters: **Focus, Backlog, Ideas**.
 Each independently shows/hides its tasks. Several categories can be open together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
+When an area is folded, all three controls are dimmed. Clicking one unfolds the area and shows
+that category, preserving the other saved switches. Expanding with the caret restores them all.
+Hiding Focus also hides its projects, unless their Backlog tasks or Ideas are visible. Fold arrows
+appear only for actual steps; hidden categories leave no empty project headers or steps blocks.
 Counters include hidden task steps, exclude pending Waiting/completed/cancelled records, and stay
 unchanged when folded. Pending Waiting keeps its own shelf; on its return date/time it counts in Focus.
 Adding a task opens its destination category so the new row stays visible. Category switches clear
@@ -355,6 +359,10 @@ Shift+клик выделяет все задачи от последней кл
 У областей и проектов три постоянно видимых счётчика с обычными иконками: **Фокус, Отложка, Замыслы**.
 Каждый независимо показывает и скрывает свои задачи. Можно открыть несколько категорий одновременно.
 Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.
+У свёрнутой области все три иконки приглушены. Нажатие раскрывает область и выбранную категорию,
+сохраняя остальные переключатели. Раскрытие стрелкой возвращает сохранённое сочетание.
+Скрытие фокуса скрывает и проекты, кроме тех, у которых показана отложка или замыслы.
+Стрелки сворачивания появляются только у настоящих шагов, пустые строки проектов не остаются.
 Считаются задачи, включая скрытые шаги, без выполненных и отменённых; свёртка не меняет числа.
 «Жду» до срока остаётся отдельно, после возврата задача учитывается в фокусе.
 Добавление открывает нужную категорию, чтобы новая задача оставалась видна. Переключение снимает

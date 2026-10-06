@@ -1848,7 +1848,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const focusShown = p.categoryShown(focus), futureShown = p.categoryShown(later);
     const visible = this.scopeRows(area, focusShown, futureShown);
     this.supplements(title, { key: intentKey, count: this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name)),
-      focus, later, unfold: async () => { if (!open) await p.toggleShown(key, all); } });
+      focus, later, expanded: open, unfold: async () => { if (!open) await p.toggleShown(key, all); } });
     this.plus(title, t("addToArea"), async () => this.creationView({ area: area.name, project: null, noDate: all }, intentKey, focus, later),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
     this.more(title, (menu) => this.areaMenu(menu, area));
@@ -2139,15 +2139,22 @@ class FocusRenderer extends MarkdownRenderChild {
 
   scopeRows(area, focus, backlog) {
     const scope = this.scopeAreas.find(x => x.name === area.name) || area;
-    const rows = scope.rows.filter(r => r.kind === "project" || focus);
+    const projectVisible = (row, ahead = false) => {
+      const path = row.project.file.path, counts = this.scopeFor(area.name, path);
+      const focusShown = this.plugin.categoryShown({ key: "project-focusoff:" + path, onKey: "project-focuson:" + path, defaultOpen: focus });
+      const backlogShown = this.plugin.categoryShown({ key: "later:" + path, projectPath: path, defaultOpen: backlog });
+      return (!ahead && focusShown) || (backlogShown && (counts.backlog.length > 0 || (ahead && !counts.focus.length)))
+        || this.plugin.isShown("project-intents:" + path, true);
+    };
+    const rows = scope.rows.filter(r => r.kind === "project" ? projectVisible(r) : focus);
     const paths = new Set(rows.filter(r => r.kind === "project").map(r => r.project.file.path));
     // A project has one header, even when both of its task categories are visible.
     const ahead = scope.ahead.filter(r => r.kind === "task" ? backlog : !paths.has(r.project.file.path)
-      && (backlog || this.plugin.isShown("later:" + r.project.file.path, true) || this.plugin.isShown("project-intents:" + r.project.file.path, true)));
+      && projectVisible(r, true));
     return { rows, ahead };
   }
 
-  supplements(head, { key, count = 0, later = null, focus = null, unfold = null, onChoose = null }) {
+  supplements(head, { key, count = 0, later = null, focus = null, expanded = true, unfold = null, onChoose = null }) {
     const p = this.plugin, ideas = p.isShown(key, true);
     if (!this.controlPressListeners) {
       this.controlPressListeners = true;
@@ -2162,13 +2169,14 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     const backlog = p.categoryShown(later);
     const group = head.createSpan({ cls: "ft-supplement-switch", attr: { role: "group", "aria-label": t("extraViews") } });
-    for (const [kind, active, n] of [["focus", p.categoryShown(focus), focus?.count || 0], ["backlog", backlog, later?.count || 0], ["intents", ideas, count]]) {
+    for (const [kind, enabled, n] of [["focus", p.categoryShown(focus), focus?.count || 0], ["backlog", backlog, later?.count || 0], ["intents", ideas, count]]) {
+      const active = expanded && enabled;
       const label = kind === "intents" ? t("intents") : kind === "focus" ? t("focusTitle") : t("backlog");
       const button = group.createEl("button", { cls: "ft-chip " + (kind === "intents" ? "ft-intents-chip" : kind === "focus" ? "ft-focus-chip" : "ft-later-chip"),
         attr: { "aria-label": label + " · " + n, "aria-pressed": String(!!active), title: label + " · " + n } });
       button.toggleClass("is-on", !!active); button.toggleClass("is-off", !active);
       const icon = button.createSpan({ cls: "ft-chip-icon" });
-      setIcon(icon, kind === "intents" ? "notebook" : kind === "focus" ? "target" : "clock");
+      setIcon(icon, kind === "intents" ? "lightbulb" : kind === "focus" ? "target" : "clock");
       button.createSpan({ cls: "ft-supplement-count", text: String(n) });
       // Preserve the actual node between press/release, including a queued metadata redraw.
       button.addEventListener("pointerdown", () => { this.controlPress = button; });
@@ -2176,7 +2184,7 @@ class FocusRenderer extends MarkdownRenderChild {
         e.stopPropagation();
         if (this.editing || this.held) return;
         this.clearSelection();
-        const on = await p.toggleSupplement(key, kind, later, focus);
+        const on = await p.toggleSupplement(key, kind, later, focus, !expanded);
         if (onChoose) onChoose(kind, on);
         if (on && unfold) await unfold();
         p.refresh();
@@ -3295,8 +3303,8 @@ class FocusRenderer extends MarkdownRenderChild {
     const focusShown = p.categoryShown(focus), laterShown = p.categoryShown(later);
     const inBacklog = !isList && !counts.focus.length && opts.pile === "ahead";
     const steps = isList ? row.steps : inBacklog ? (laterShown ? counts.backlog : []) : (focusShown ? counts.focus : []);
-    const hiddenCategory = !isList && (inBacklog ? !laterShown : !focusShown);
-    const open = hiddenCategory || (isList || steps.length > 0) && p.isShown(key, !isList);
+    const headerOnly = !steps.length && (isList || counts.focus.length > 0 || counts.backlog.length > 0 || (inBacklog ? !laterShown : !focusShown));
+    const open = steps.length > 0 && p.isShown(key, !isList);
     const step = open ? null : steps[0] || null;
     const li = ul.createEl("li", { cls: "task-list-item ft-task ft-project-row" });
     if (isList) { li.addClass("ft-intent-list-row"); li.setAttr("data-intent-id", project.uid); }
@@ -3309,10 +3317,12 @@ class FocusRenderer extends MarkdownRenderChild {
     // Open, the row is a heading over its steps: no box to tick, and in the box's column a chevron
     // that folds them — the name stays where it was, so nothing jumps and «−N» sits by it as «+N» did.
     let box = null;
-    if (open || (isList && !step)) {
+    if (open) {
       const fold = li.createSpan({ cls: "ft-box ft-fold", attr: { "aria-label": t("hideSteps") } });
       setIcon(fold, open ? "chevron-down" : "chevron-right");
       fold.onclick = async (e) => { e.stopPropagation(); await p.toggleShown("steps:" + project.file.path, !isList); p.refresh(); };
+    } else if (headerOnly) {
+      li.createSpan({ cls: "ft-box" });
     } else if (!step) {
       // No step to tick: the box closes the project itself — «Project done», one click, with Undo.
       // The row keeps the task rows' column, not one step in as if it were inside the task above.
@@ -3350,7 +3360,7 @@ class FocusRenderer extends MarkdownRenderChild {
     // it does not move when the row opens. The quiet controls — the ⏳ of the project's pile and the
     // «+» for a step, both under the pointer only — sit after the step, before the date, where their
     // hidden width is whitespace anyway.
-    if (steps.length > 1 || isList) {
+    if (steps.length > 1 || (isList && steps.length > 0)) {
       const hidden = steps.slice(1);
       const more = line.createSpan({ cls: "ft-steps-more" });
       setIcon(more, open ? "chevron-up" : "chevron-down");
@@ -3365,7 +3375,7 @@ class FocusRenderer extends MarkdownRenderChild {
       line.createSpan({ cls: "ft-sep", text: "›" });
       text = await this.text(line, step);
       this.marks(li, step);
-    } else if (!open) {
+    } else if (!open && !headerOnly) {
       line.createSpan({ cls: "ft-sep", text: "›" });
       text = line.createSpan({ cls: "ft-text ft-no-step", text: t("noStep") });
       text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), target()); };
@@ -3387,7 +3397,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (!isList) this.supplements(li, { key: intentKey, count: this.ideaCount(p.projectIntentLists(project)),
       focus, later });
     // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
-    this.plus(li, t("addStep"), async () => { if (!open && (isList || steps.length > 1)) await p.toggleShown(key, !isList); return this.creationView(target(), intentKey, focus, later); }, anchor);
+    this.plus(li, t("addStep"), async () => { if ((isList || steps.length > 1) && !p.isShown(key, !isList)) await p.toggleShown(key, !isList); return this.creationView(target(), intentKey, focus, later); }, anchor);
     if (step) {
       if (project.date && !step.at) own();
       else {
@@ -3429,14 +3439,14 @@ class FocusRenderer extends MarkdownRenderChild {
     if (Platform.isMobile) {
       // A collapsed project's context starts at the checkbox column; its action has the same text
       // column as every other task. Expanded headers reuse the same project caption.
-      li.addClass(open ? "ft-mobile-project-header" : "ft-mobile-project");
+      li.addClass(open || headerOnly ? "ft-mobile-project-header" : "ft-mobile-project");
       const caption = li.createSpan({ cls: "ft-mobile-project-caption" });
       caption.appendChild(name);
       const more = line.querySelector(".ft-steps-more");
       if (more) caption.appendChild(more);
       line.querySelector(".ft-sep")?.remove();
       for (const control of li.querySelectorAll(":scope > .ft-plus, :scope > .ft-later-chip, :scope > .ft-supplement-switch")) caption.appendChild(control);
-      if (open) line.remove();
+      if (open || headerOnly) line.remove();
     }
     this.mobileMeta(li);
   }
@@ -3825,10 +3835,12 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // Each category owns its visibility. Opening ideas never changes focus/backlog or All.
-  async toggleSupplement(intentKey, kind, later = null, focus = null) {
+  async toggleSupplement(intentKey, kind, later = null, focus = null, reveal = false) {
     const view = kind === "focus" ? focus : kind === "backlog" ? later : { key: intentKey };
     if (!view) return false;
-    const on = !this.categoryShown(view);
+    // A collapsed ancestor hides the category without clearing its saved preference.
+    // Its dim control must reveal that category, never toggle an already enabled one off.
+    const on = reveal || !this.categoryShown(view);
     if (view.onKey) {
       if (on) { this.data.opened[view.onKey] = true; delete this.data.opened[view.key]; }
       else { this.data.opened[view.key] = true; delete this.data.opened[view.onKey]; }

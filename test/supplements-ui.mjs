@@ -3,13 +3,18 @@ import { J, sleep, until } from './cdp.mjs';
 export async function checkSupplementsUI(page, mobile=false) {
   const root="(window.__supScoped ? app.workspace.activeLeaf.view.containerEl : app.workspace.getLeavesOfType('focus-tasks-view')[0].view.containerEl)";
   const area=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='Supplements UI')`;
-  const project=`[...${root}.querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent==='SUP Project')`;
+  const project=`[...${root}.querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.getBoundingClientRect().width>0&&e.querySelector('.ft-project-name .ft-link')?.textContent==='SUP Project')`;
   const click=async expr=>{
     await page.front();await page.eval(`if(!window.__supScoped)await app.plugins.plugins['focus-tasks'].openView();const e=${expr};e?.scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(180);
     if(!mobile){const r=await page.eval(`const r=(${expr})?.getBoundingClientRect();return r&&{x:r.left+r.width/2,y:r.top+r.height/2};`);if(r)await page.mouse('mouseMoved',r.x,r.y,0);}
     const at=await until(()=>page.eval(`const e=${expr};if(!e)return false;const r=e.getBoundingClientRect(),at={x:r.left+r.width/2,y:r.top+r.height/2},hit=document.elementFromPoint(at.x,at.y);return r.width&&r.height&&hit&&e.contains(hit)?at:false;`),'supplement control: '+expr);
     if(mobile)await page.tap(at);else await page.click(at);await sleep(120);
-    const active=await page.eval(`return app.workspace.activeLeaf.view.getViewType();`);if(active!=='focus-tasks-view'&&!expr.includes('ft-page')&&!expr.includes('ft-area-page'))throw Error('supplement click switched away from Focus: '+expr+' -> '+active);
+    const active=await page.eval(`return {type:app.workspace.activeLeaf.view.getViewType(),scoped:!!window.__supScoped};`);if(active.type!=='focus-tasks-view'&&!active.scoped)throw Error('supplement click switched away from Focus: '+expr+' -> '+active.type);
+  };
+  const cleanRows=async label=>{
+    const issues=await page.eval(`const root=${root},issues=[];for(const body of root.querySelectorAll('li.ft-steps')){if(body.getBoundingClientRect().width&&!body.querySelector('li.ft-task'))issues.push('empty expanded steps');}
+      for(const row of root.querySelectorAll('li.ft-project-row')){if(!row.getBoundingClientRect().width)continue;const body=row.nextElementSibling?.matches('.ft-steps')?row.nextElementSibling:null;if(row.querySelector(':scope > .ft-fold')&&!body?.querySelector('li.ft-task'))issues.push('fold arrow without steps');if(row.querySelector('.ft-steps-more')&&!row.querySelector('.ft-text:not(.ft-no-step)')&&!body?.querySelector('li.ft-task'))issues.push('extra step arrow without content');}return issues;`);
+    if(issues.length)throw Error(label+': '+issues.join('; '));
   };
   const geometry=async label=>{
     const result=await page.eval(`const root=${root},issues=[];const groups=[...root.querySelectorAll('.ft-supplement-switch')].filter(e=>e.getBoundingClientRect().width);if(!groups.length)issues.push('missing component');
@@ -38,22 +43,67 @@ export async function checkSupplementsUI(page, mobile=false) {
   await until(()=>page.eval(`return !!(${area});`),'supplement fixture visible');
   if(!await page.eval(`return (${area}).querySelector(':scope > .ft-area-title .ft-supplement-switch')?.children.length===3;`))throw Error('area needs one three-category component');
   if(!await page.eval(`return (${project}).querySelector('.ft-supplement-switch')?.children.length===3;`))throw Error('project needs the same three-category component');
+  if(!await page.eval(`return [(${area}).querySelector(':scope > .ft-area-title .ft-intents-chip svg'),(${project}).querySelector('.ft-intents-chip svg')].every(svg=>svg?.classList.contains('lucide-lightbulb'));`))throw Error('Ideas must use the chosen lightbulb icon in area and project controls');
   if(await page.eval(`return !!${root}.querySelector('.ft-foot .ft-intents-chip,.ft-foot .ft-intents-toggle');`))throw Error('global Ideas entry must not be added');
   await until(()=>page.eval(`return JSON.stringify([...(${area}).querySelectorAll(':scope > .ft-area-title .ft-supplement-count')].map(e=>Number(e.textContent)))==='[2,2,2]';`),'indexed counters after fixture writes');
   const counts=await page.eval(`return [...(${area}).querySelectorAll(':scope > .ft-area-title .ft-supplement-count')].map(e=>Number(e.textContent));`);
   if(JSON.stringify(counts)!=='[2,2,2]')throw Error('area counts are task counts, not project rows: '+JSON.stringify(counts));
+  // A folded area hides every category. Its controls must reflect that, while preserving
+  // the saved combination; clicking any dim control reveals it instead of toggling it off.
+  for(const kind of ['later','intents'])await click(`(${area}).querySelector(':scope > .ft-area-title .ft-${kind}-chip')`);
+  for(const kind of ['focus','later','intents']){
+    await click(`(${area}).querySelector(':scope > .ft-area-title > .ft-caret')`);
+    await until(()=>page.eval(`return !(${area}).querySelector(':scope > .ft-list,:scope > .ft-future-block,:scope > .ft-intents');`),'area folded before category reveal');
+    if(!await page.eval(`const a=${area},buttons=[...a.querySelectorAll(':scope > .ft-area-title .ft-supplement-switch button')];return buttons.every(b=>b.getAttribute('aria-pressed')==='false'&&Number(getComputedStyle(b).opacity)===0.45)&&JSON.stringify(buttons.map(b=>Number(b.querySelector('.ft-supplement-count').textContent)))==='[2,2,2]';`))throw Error('folded area categories remain highlighted although their tasks are hidden');
+    await click(`(${area}).querySelector(':scope > .ft-area-title .ft-${kind}-chip')`);
+    await until(()=>page.eval(`const a=${area};return [...a.querySelectorAll(':scope > .ft-area-title .ft-supplement-switch button')].every(b=>b.getAttribute('aria-pressed')==='true')&&[...a.querySelectorAll('.ft-text')].some(e=>e.textContent==='SUP Area later')&&!!a.querySelector(':scope > .ft-intents');`),'dim category opens area and preserves the saved combination: '+kind);
+  }
+  // Other areas inherit an open backlog from All, including empty scopes. The folded
+  // header must still stay dim, and its clock must open the area on the first click.
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.createArea('SUP Zero');p.setEverything(true);p.refresh();return true;`);
+  const zero=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='SUP Zero')`;
+  await until(()=>page.eval(`return !!(${zero});`),'empty other area visible');
+  if(!await page.eval(`return [...(${zero}).querySelectorAll(':scope > .ft-area-title .ft-supplement-switch button')].every(b=>b.getAttribute('aria-pressed')==='false'&&b.querySelector('.ft-supplement-count').textContent==='0'&&Number(getComputedStyle(b).opacity)===0.45);`))throw Error('empty folded area has misleading highlighted counters');
+  await click(`(${zero}).querySelector(':scope > .ft-area-title .ft-later-chip')`);
+  await until(()=>page.eval(`return !!(${zero}).querySelector('.ft-empty-add')&&(${zero}).querySelector('.ft-later-chip').getAttribute('aria-pressed')==='true';`),'empty inherited backlog opens on the first click');
+  await click(`(${zero}).querySelector(':scope > .ft-area-title > .ft-caret')`);
+  await click(`(${zero}).querySelector(':scope > .ft-area-title .ft-intents-chip')`);
+  await until(()=>page.eval(`return !!(${zero}).querySelector(':scope > .ft-intents')&&(${zero}).querySelector('.ft-later-chip').getAttribute('aria-pressed')==='true';`),'empty ideas reveal keeps the inherited backlog');
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];if(p.read().intents.some(x=>x.area==='SUP Zero')||p.tasks().some(x=>x.area==='SUP Zero'))throw Error('empty category reveal wrote tasks/lists');await p.removeArea((await p.collect(true)).find(a=>a.name==='SUP Zero'));p.setEverything(false);p.refresh();return true;`);
+  await until(()=>page.eval(`return !(${zero})&&!!(${area});`),'empty area fixture removed');
   for(let mask=0;mask<8;mask++){
     for(const [kind,on] of [['focus',!!(mask&1)],['later',!!(mask&2)],['intents',!!(mask&4)]]){
       const expr=`(${area}).querySelector(':scope > .ft-area-title .ft-${kind}-chip')`;
       if(await page.eval(`return (${expr}).getAttribute('aria-pressed')==='true';`)!==on)await click(expr);
     }
     await until(()=>page.eval(`const a=${area},text=[...a.querySelectorAll('.ft-text')].map(e=>e.textContent);return text.includes('SUP Area focus')===${!!(mask&1)}&&text.includes('SUP Area later')===${!!(mask&2)}&&!!a.querySelector(':scope > .ft-intents')===${!!(mask&4)};`),'independent category combination '+mask);
+    if(!await page.eval(`return !!(${project})===${!!(mask&3)};`))throw Error('hidden focus retained an empty project header: '+mask);
+    await cleanRows('area category combination '+mask);
     if(!await page.eval(`const a=${area},g=a.querySelector(':scope > .ft-area-title .ft-supplement-switch'),buttons=[...g.children];return JSON.stringify(buttons.map(e=>Number(e.querySelector('.ft-supplement-count').textContent)))==='[2,2,2]'&&buttons.every(e=>{const c=getComputedStyle(e);return !!e.querySelector('svg')&&e.getBoundingClientRect().width>0&&c.backgroundColor==='rgba(0, 0, 0, 0)'&&c.borderTopWidth==='0px'&&!c.textDecorationLine.includes('underline')&&Number(c.opacity)===(e.getAttribute('aria-pressed')==='true'?1:0.45);})&&!a.querySelector('.ft-intents-head');`))throw Error('category numbers, plain icons/style or visibility changed');
+  }
+  // Exercise the project's own controls through real clicks. Restoring the area's Focus
+  // restores its hidden projects; a project with all categories off leaves no empty header.
+  for(let mask=0;mask<8;mask++){
+    for(const kind of ['focus','later','intents']){
+      const b=`(${area}).querySelector(':scope > .ft-area-title .ft-${kind}-chip')`;
+      if(await page.eval(`return (${b}).getAttribute('aria-pressed')==='true';`))await click(b);
+      if(kind==='focus')await click(b);
+    }
+    await until(()=>page.eval(`return !!(${project});`),'project restored by area Focus');
+    for(const [kind,on] of [['intents',!!(mask&4)],['later',!!(mask&2)],['focus',!!(mask&1)]]){
+      const b=`(${project}).querySelector('.ft-${kind}-chip')`;
+      if(await page.eval(`return (${b}).getAttribute('aria-pressed')==='true';`)!==on)await click(b);
+    }
+    await until(()=>page.eval(`const a=${area},text=[...a.querySelectorAll('.ft-text')].map(e=>e.textContent);return !!(${project})===${!!mask}&&text.includes('SUP Focus')===${!!(mask&1)}&&text.includes('SUP Project later')===${!!(mask&2)}&&!!a.querySelector('.ft-project-intents')===${!!(mask&4)};`),'project category combination '+mask);
+    await cleanRows('project category combination '+mask);
+    if(mask===4&&!await page.eval(`return !(${project}).querySelector('.ft-fold,.ft-steps-more,.ft-no-step,input.task-list-item-checkbox');`))throw Error('ideas-only project exposes empty fold/completion controls');
   }
   // Return to the normal Focus-only combination before the interaction regression scenarios.
   for(const [kind,on] of [['focus',true],['later',false],['intents',false]]){
     const expr=`(${area}).querySelector(':scope > .ft-area-title .ft-${kind}-chip')`;
-    if(await page.eval(`return (${expr}).getAttribute('aria-pressed')==='true';`)!==on)await click(expr);
+    // Apply the parent state even if its icon already matches; child overrides may differ.
+    if(await page.eval(`return (${expr}).getAttribute('aria-pressed')==='true';`)===on)await click(expr);
+    await click(expr);
   }
   await click(`(${area}).querySelector(':scope > .ft-area-title .ft-intents-chip')`);
   await until(()=>page.eval(`return (${area}).querySelectorAll('.ft-intent-list-row').length===2;`),'area shows independent and project collections');
@@ -115,6 +165,20 @@ export async function checkSupplementsUI(page, mobile=false) {
     const n=await page.eval(`return ${root}.querySelector(${J(selector+' .ft-supplement-switch')}).children.length;`);
     if(n!==3)throw Error('wrong scoped segment count');
     await geometry(selector);
+    if(path==='area'){
+      const ideas=`[...${root}.querySelectorAll('${selector} > .ft-area-title .ft-intents-chip')].find(e=>e.getBoundingClientRect().width>0)`;
+      if(!await page.eval(`return (${ideas}).getAttribute('aria-pressed')==='true';`))await click(ideas);
+      await click(ideas); // close the parent and clear independently opened project collections
+    }
+    for(let mask=0;mask<8;mask++){
+      for(const [kind,on] of [['focus',!!(mask&1)],['later',!!(mask&2)],['intents',!!(mask&4)]]){
+        const b=`[...${root}.querySelectorAll('${selector} > .ft-area-title .ft-${kind}-chip')].find(e=>e.getBoundingClientRect().width>0)`;
+        if(await page.eval(`return (${b}).getAttribute('aria-pressed')==='true';`)!==on)await click(b);
+      }
+      await until(()=>page.eval(`const block=[...${root}.querySelectorAll('${selector}')].find(e=>e.getBoundingClientRect().width>0),text=[...block.querySelectorAll('.ft-text')].map(e=>e.textContent);return text.includes('SUP Focus')===${!!(mask&1)}&&text.includes('SUP Project later')===${!!(mask&2)}&&!!block.querySelector('${path==='area'?'.ft-intents':'.ft-project-intents'}')===${!!(mask&4)};`),'scoped '+path+' combination '+mask);
+      if(path==='area'&&!await page.eval(`return !!(${project})===${!!(mask&3)};`))throw Error('scoped area retained a hidden project: '+mask);
+      await cleanRows('scoped '+path+' combination '+mask);
+    }
     if(await page.eval(`return [...${root}.querySelectorAll('${selector} .ft-text')].some(e=>e.textContent==='SUP Pending');`))throw Error('pending Waiting leaked into a category');
     const waiting=`[...${root}.querySelectorAll('${selector} .ft-page-waiting')].find(e=>e.getBoundingClientRect().width>0)`;
     await click(waiting);

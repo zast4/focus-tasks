@@ -22,6 +22,29 @@ test('local supplement toggles are independent, collapse on repeat and never tou
   assert.equal(p.everything(), true);
 });
 
+test('revealing a folded area keeps an enabled category on and leaves the others unchanged', async () => {
+  const { p, file } = await setup();
+  const key='intents:Work',later={key:'futureoff:Work',inverted:true},focus={key:'focusoff:Work',inverted:true};
+  await p.toggleSupplement(key,'intents',later,focus);
+  p.data.opened['project-focuson:'+file.path]=true;p.data.opened['later:'+file.path]=true;
+  const before={...p.data.opened};
+  for(const kind of ['focus','backlog','intents']){
+    assert.equal(await p.toggleSupplement(key,kind,later,focus,true),true);
+    assert.equal(p.categoryShown(focus),true);assert.equal(p.categoryShown(later),true);assert.equal(p.isShown(key,true),true);
+  }
+  assert.deepEqual(p.data.opened,before);
+  assert.equal(p.everything(),false);
+});
+
+test('revealing a disabled category enables it without enabling other categories', async () => {
+  const { p } = await setup();
+  const key='intents:Work',later={key:'future:Work'},focus={key:'focusoff:Work',inverted:true};
+  await p.toggleSupplement(key,'focus',later,focus);
+  assert.equal(await p.toggleSupplement(key,'backlog',later,focus,true),true);
+  assert.equal(p.categoryShown(later),true);assert.equal(p.categoryShown(focus),false);assert.equal(p.isShown(key,true),false);
+  assert.equal(await p.toggleSupplement(key,'backlog',later,focus),false);
+});
+
 test('inverted All backlog folds correctly when selecting and closing ideas', async () => {
   const { p } = await setup(); const later = { key: 'futureoff:Work', inverted: true };
   await p.toggleSupplement('intents:Work', 'intents', later);

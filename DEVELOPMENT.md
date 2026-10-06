@@ -135,13 +135,18 @@ these as actionable tasks or area/project notes. `read().intentTasks` is separat
 intent entries. Changing an entry's date never promotes it. Explicit promotion preserves UID,
 sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
-Shared plain Focus/clock/notebook counters are always visible in global and scoped area/project views.
-Each category independently controls only its visibility; All is never changed. Focus uses device
-`focusoff:<area>` / `project-focusoff:<path>` (plus explicit project-focuson override). Existing area
+Shared plain target/clock/lightbulb counters are always visible in global and scoped area/project views.
+Each category independently controls only its visibility; All is never changed.
+While an area is folded, controls are dimmed without changing saved category states; clicking a
+control requests reveal instead of toggle, then unfolds the area. This includes empty Other areas.
+Focus uses device `focusoff:<area>` / `project-focusoff:<path>` (plus explicit project-focuson override). Existing area
 future keys keep the All inversion. Project backlog shares explicit later/pagefold state across
 row/note views; empty counters remain visible. `scopeTasks` counts effective `collect(false,true)`
 row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
 change numbers. A project renders once when its focused and future steps are both visible.
+When a project's Focus is hidden, its row disappears unless its Backlog tasks or Ideas are shown.
+An empty primary category never creates a fold arrow or an empty steps block. Ideas-only headers
+reserve the checkbox column without offering project completion or a false "no step" placeholder.
 Area category switches also apply to project overrides in that area. `creationView` opens the
 new task's effective destination without changing the task's date. Switching categories clears
 selection, and UID navigation restores a hidden destination. No extra Ideas heading or global
