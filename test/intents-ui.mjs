@@ -1,79 +1,154 @@
 import { J, sleep, until } from './cdp.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 
 export async function checkIntentsUI(page, mobile=false) {
   const click=async expr=>{
-    const at=await until(()=>page.eval(`const e=${expr};if(!e)return false;e.scrollIntoView({block:'center',behavior:'instant'});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const b=e.matches('a')?[...e.getClientRects()].find(r=>r.width&&r.height):e.getBoundingClientRect();if(!b)return false;const point={x:b.left+b.width/2,y:b.top+b.height/2};const hit=document.elementFromPoint(point.x,point.y);return hit&&e.contains(hit)?point:false;`),'idea control is visible and uncovered');
+    await page.front();
+    await page.eval(`const e=${expr};e?.scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(180);
+    const hover=await page.eval(`const e=${expr},r=e?.getBoundingClientRect();if(!e||r.width)return null;const parent=e.closest('li.ft-task,.ft-area-title');if(!parent)return null;parent.scrollIntoView({block:'center',behavior:'instant'});const b=parent.getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};`);
+    if(hover&&!mobile){await page.front();await page.mouse('mouseMoved',hover.x,hover.y,0);await sleep(120);}
+    const at=await until(()=>page.eval(`const e=${expr};if(!e)return false;e.scrollIntoView({block:'center',behavior:'instant'});await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));const b=e.matches('a')?[...e.getClientRects()].find(r=>r.width&&r.height):e.getBoundingClientRect();if(!b)return false;const point={x:b.left+b.width/2,y:b.top+b.height/2};const hit=document.elementFromPoint(point.x,point.y);return hit&&e.contains(hit)?point:false;`),'idea control is visible and uncovered: '+expr);
     if(mobile)await page.tap(at);else await page.click(at);
     await sleep(100);
   };
+  const press=async expr=>{
+    await page.front();await page.eval(`(${expr}).scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(180);
+    // Fixture writes and viewport changes may still deliver a queued metadata redraw.
+    // Begin the gesture only after the actual row has remained connected for one debounce window.
+    await page.eval(`window.__intentPressReady=null;return true;`);
+    await until(()=>page.eval(`const row=${expr},now=performance.now();if(!row?.isConnected)return false;if(window.__intentPressReady?.row!==row)window.__intentPressReady={row,at:now};return now-window.__intentPressReady.at>=600;`),'row settled before touch gesture');
+    const point=await until(()=>page.eval(`const e=${expr};if(!e)return false;const b=e.getBoundingClientRect(),p={x:b.left+b.width/2,y:b.top+b.height/2},hit=document.elementFromPoint(p.x,p.y);return hit&&e.contains(hit)?p:false;`),'long press point');
+    await page.touch('touchStart',[point]);await sleep(750);await page.touch('touchEnd',[]);await sleep(180);
+  };
   const root="app.workspace.activeLeaf.view.containerEl";
   const viewport=await page.eval(`return {width:innerWidth,height:innerHeight};`);
-  const card=title=>`[...${root}.querySelectorAll('.ft-intent-card')].find(e=>e.querySelector('.ft-intent-title')?.textContent===${J(title)})`;
-  const set=async(selector,value)=>page.eval(`const e=document.querySelector(${J(selector)});if(!e)throw Error('editor field missing');e.value=${J(value)};e.dispatchEvent(new Event('input',{bubbles:true}));return true;`);
-  const modal=async()=>{await until(()=>page.eval(`return !!document.querySelector('.ft-intent-modal .ft-intent-title-input');`),'idea editor');await sleep(mobile?500:120);};
-  await page.eval(`if(!['focus-tasks-e2e','focus-tasks-mobile'].includes(app.vault.getName()))throw Error('test vault guard');const p=app.plugins.plugins['focus-tasks'];await p.createArea('Ideas UI');await app.commands.executeCommandById('focus-tasks:open');p.setIntentsShown(true);return true;`);
-  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].notes().some(n=>n.area==='Ideas UI'&&!n.project);`),'idea area indexed');
-  await until(()=>page.eval(`return !!${root}.querySelector('.ft-intents-toggle');`),'ideas control');
-  await page.eval(`await app.commands.executeCommandById('focus-tasks:add-intent');return true;`);await modal();
-  await set('.ft-intent-title-input','Ideas UI possibility');await set('.ft-intent-body-input','A long optional possibility with **details** and context.');await set('.ft-intent-area-input','Ideas UI');
-  await click(`document.querySelector('.ft-intent-save')`);
-  await until(()=>page.eval(`return !!(${card('Ideas UI possibility')});`),'created idea card');
-  if(!await page.eval(`const e=(${card('Ideas UI possibility')}).querySelector('.ft-intent-title'),r=document.createRange();r.setStart(e.firstChild,0);r.setEnd(e.firstChild,1);return Math.abs(r.getBoundingClientRect().left-e.getBoundingClientRect().left)<2;`))throw Error('idea title is not aligned to its text column');
-  if(await page.eval(`const e=${card('Ideas UI possibility')};return !!e.querySelector('input,.ft-date,.ft-priority,.ft-calendar-status');`))throw Error('idea looks like an executable task');
-  await click(`(${card('Ideas UI possibility')}).querySelector('.ft-intent-title')`);await modal();
-  await set('.ft-intent-title-input','Ideas UI renamed');await set('.ft-intent-body-input','Edited context');
-  // A failed write must leave the draft and its editor open.
-  await page.eval(`const p=app.plugins.plugins['focus-tasks'];window.__realIntentSave=p.saveIntent;p.saveIntent=async()=>{throw Error('test disk failure')};return true;`);
-  await click(`document.querySelector('.ft-intent-save')`);
-  await until(()=>page.eval(`return !!document.querySelector('.ft-intent-error')?.textContent;`),'save failure visible');
-  if(!await page.eval(`return document.querySelector('.ft-intent-title-input')?.value==='Ideas UI renamed'&&document.querySelector('.ft-intent-body-input')?.value==='Edited context';`))throw Error('idea draft lost');
-  await page.eval(`app.plugins.plugins['focus-tasks'].saveIntent=__realIntentSave;return true;`);
-  await click(`document.querySelector('.ft-intent-save')`);
-  await until(()=>page.eval(`return !!(${card('Ideas UI renamed')});`),'edited card');
-  await click(`(${card('Ideas UI renamed')}).querySelector('.ft-intent-task')`);await modal();
-  if(await page.eval(`return !!document.querySelector('.ft-intent-title-input').value;`))throw Error('deriving a task did not ask for a concrete action');
-  await set('.ft-intent-title-input','Ideas UI concrete action');await click(`document.querySelector('.ft-intent-save')`);
-  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t=>t.text==='Ideas UI concrete action');`),'derived task');
-  if(!await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.text==='Ideas UI concrete action');return !task.date&&task.area==='Ideas UI'&&!!(${card('Ideas UI renamed')});`))throw Error('derived task consumed or scheduled its idea');
-  await click(`(${card('Ideas UI renamed')}).querySelector('.ft-intent-task')`);await modal();
-  await set('.ft-intent-title-input','Ideas UI focus action');await set('.ft-intent-destination','today');await click(`document.querySelector('.ft-intent-save')`);
-  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t=>t.text==='Ideas UI focus action'&&t.date&&!t.at);`),'task enters focus');
-  if(!await page.eval(`return (await app.plugins.plugins['focus-tasks'].collect(false)).some(a=>a.rows.some(r=>r.kind==='task'&&r.task.text==='Ideas UI focus action'));`))throw Error('Focus choice did not activate the action');
-  // Legacy blocks are available without modifying their source or creating task notes.
-  const sourceText='---\nparents:\n  - "[[Ideas UI]]"\n---\n\n# Material\nKeep this\n### TODO\n- [ ] Optional legacy thought [[Ideas UI context]]\n- [x] Past action\n### Rest\nKeep that\n';
-  const source=await page.eval(`if(!app.vault.getAbstractFileByPath('Notes'))await app.vault.createFolder('Notes');await app.vault.create('Notes/Ideas UI context.md','Source material');const file=await app.vault.create('Notes/Ideas UI source.md',${J(sourceText)});window.__ideaSourceBefore=await app.vault.read(file);return file.path;`);
-  await until(()=>page.eval(`return !!(${card('Ideas UI source')});`),'legacy source card');
-  if(!await page.eval(`const e=${card('Ideas UI source')};return !e.querySelector('input[type=checkbox]')&&e.textContent.includes('Optional legacy thought');`))throw Error('legacy checkboxes stayed executable');
-  await page.eval(`const p=app.plugins.plugins['focus-tasks'];p.setIntentsShown(false);const v=app.workspace.activeLeaf.view.renderer;await v.find();return true;`);
+  const area=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='Ideas UI')`;
+  const list=`[...${root}.querySelectorAll('.ft-intent-list-row')].find(e=>e.querySelector('.ft-link')?.textContent==='UI List')`;
+  const row=title=>`[...${root}.querySelectorAll('li.ft-task')].find(e=>e.querySelector(':scope > .ft-text')?.textContent===${J(title)})`;
+  const words={'📔 Ideas':['📔 Ideas','📔 Замыслы'],'Move to backlog':['Move to backlog','Перенести в отложку'],'Delete list':['Delete list','Удалить список'],'Reorder':['Reorder','Переставить']};
+  const menu=title=>`[...document.querySelectorAll('.menu-item')].find(e=>${J(words[title]||[title])}.some(t=>e.textContent.includes(t)))`;
+  await page.eval(`if(!['focus-tasks-e2e','focus-tasks-mobile'].includes(app.vault.getName()))throw Error('test vault guard');const p=app.plugins.plugins['focus-tasks'];window.__intentUITaskCount=p.tasks().length;delete p.data.opened['intents:Ideas UI'];p.saveFolds();await p.createArea('Ideas UI');await app.commands.executeCommandById('focus-tasks:open');p.app.saveLocalStorage('focus-tasks-all','1');p.data.opened['area:Ideas UI']=true;p.saveFolds();p.refresh();return true;`);
+  await until(()=>page.eval(`return !!(${area});`),'idea area visible');
+  if(await page.eval(`return !!${root}.querySelector('.ft-intents-toggle,.ft-intent-card');`))throw Error('old card interface remains');
+  if(await page.eval(`return !!(${area}).querySelector('.ft-intents');`))throw Error('ideas opened without area command');
+  if(mobile)await click(`(${area}).querySelector(':scope > .ft-area-title .ft-more')`);
+  else {const at=await page.eval(`const e=(${area}).querySelector(':scope > .ft-area-title');e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);await page.rightClick(at);}
+  await until(()=>page.eval(`return !!(${menu('📔 Ideas')});`),'area ideas menu');
+  await click(menu('📔 Ideas'));await until(()=>page.eval(`return !!(${area}).querySelector('.ft-intents');`),'ideas opened per area');
+  await click(`(${area}).querySelector('.ft-intents-add')`);
+  await until(()=>page.eval(`return !!document.querySelector('.modal input.ft-input');`),'new list editor');await sleep(mobile?400:100);
+  await click(`document.querySelector('.modal input.ft-input')`);await page.type('UI List');await click(`document.querySelector('.modal button.mod-cta')`);
+  await until(()=>page.eval(`return !!(${list});`),'list created');
+  if(!await page.eval(`return (${list}).querySelector('.ft-project-icon')?.textContent==='📔';`))throw Error('wrong list emoji');
+  await click(`(${list}).querySelector('.ft-plus')`);
+  await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'ordinary inline entry');
+  await page.type('UI First action');await page.key('Enter');
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.some(x=>x.text==='UI First action');`),'inline entry persisted');await page.key('Escape');
+  await until(()=>page.eval(`return !!(${row('UI First action')});`),'ordinary idea row');
+  if(!await page.eval(`const e=${row('UI First action')};return !!e.querySelector('input[type=checkbox]')&&!!e.querySelector('.ft-date');`))throw Error('idea is not an ordinary task row');
+  if(!await page.eval(`return app.plugins.plugins['focus-tasks'].tasks().length===__intentUITaskCount;`))throw Error('inline entry leaked into normal tasks');
+  // The shared editor and date shortcut keep the row in its list.
+  if(mobile){await click(`(${list}).querySelector('.ft-steps-more')`);await until(()=>page.eval(`return !(${list}).classList.contains('is-open');`),'single-entry list folded');await click(`(${list}).querySelector('.ft-steps-more')`);await until(()=>page.eval(`return (${list}).classList.contains('is-open');`),'single-entry list reopened');}
+  await click(`(${row('UI First action')}).querySelector('.ft-text')`);await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'editing entry');
+  await page.key('Meta+1');
+  if(!await page.eval(`return !!${root}.querySelector('[contenteditable=true]')&&app.plugins.plugins['focus-tasks'].tasks().length===__intentUITaskCount;`))throw Error('date shortcut promoted or displaced the idea');
+  const originalUid=await page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.find(x=>x.text==='UI First action').uid;`);
+  await page.key('Meta+d');
+  await until(()=>page.eval(`const v=app.workspace.activeLeaf.view.renderer,e=${root}.querySelector('[contenteditable=true]'),task=e&&v.items.get(e.closest('li.ft-task'))?.task;return app.plugins.plugins['focus-tasks'].read().intentTasks.filter(x=>x.text==='UI First action').length===2&&task&&task.uid!==${J(originalUid)};`),'duplicate starts editing');
+  // CDP does not invoke Electron's native Select All menu accelerator.
+  await page.eval(`const e=${root}.querySelector('[contenteditable=true]');e.focus();getSelection().selectAllChildren(e);return true;`);await page.type('UI Copy action');await page.key('Enter');await page.key('Escape');
+  await until(()=>page.eval(`return !!(${row('UI Copy action')});`),'copy renamed');
+  if(!await page.eval(`const v=app.workspace.activeLeaf.view.renderer,r=v.rows().map(([,x])=>x.text);return r.indexOf('UI Copy action')<r.indexOf('UI First action');`))throw Error('duplicate is not above original');
+  // Completion uses the same checkbox and the same reversible completed shelf.
+  await click(`(${row('UI Copy action')}).querySelector('input')`);
+  await until(()=>page.eval(`return !!(${area}).querySelector('.ft-intents .ft-page-done');`),'completed list shelf');
+  await click(`(${area}).querySelector('.ft-intents .ft-page-done')`);
+  await until(()=>page.eval(`return !!(${area}).querySelector('.ft-intents .ft-done input');`),'completed idea visible');
+  await click(`(${area}).querySelector('.ft-intents .ft-done input')`);
+  await until(()=>page.eval(`return !!(${row('UI Copy action')});`),'checkbox returns idea to list');
+  // Body search must reveal a hidden list in the plugin.
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],x=p.read().intentTasks.find(x=>x.text==='UI Copy action');await p.processOwned(x.file,raw=>raw+${J('\nBody needle for idea list')});await p.setOpen('intents:Ideas UI',false);p.refresh();return true;`);
+  await until(()=>page.eval(`return !(${area}).querySelector('.ft-intents');`),'ideas hidden');
+  await page.eval(`await app.workspace.activeLeaf.view.renderer.find();return true;`);
   await until(()=>page.eval(`return !!document.querySelector('.prompt-input');`),'common search');
-  const q=await page.eval(`const e=document.querySelector('.prompt-input');const b=e.getBoundingClientRect();return {x:b.left+20,y:b.top+b.height/2};`);
-  if(mobile)await page.tap(q);else await page.click(q);await page.type('Optional legacy thought');
-  await until(()=>page.eval(`return [...document.querySelectorAll('.suggestion-item')].some(e=>e.textContent.includes('Ideas UI source'));`),'body search finds idea');
-  await page.key('Enter');await until(()=>page.eval(`return !!(${card('Ideas UI source')});`),'search reveals card in plugin');
-  if(!await page.eval(`const file=app.vault.getAbstractFileByPath(${J(source)});return await app.vault.read(file)===__ideaSourceBefore;`))throw Error('viewing ideas changed source');
-  const migrated=await page.eval(`const p=app.plugins.plugins['focus-tasks'],file=app.vault.getAbstractFileByPath(${J(source)});const r=await p.migrateTodoFile(file,__ideaSourceBefore);window.__ideaImportedUid=r.moved[0].uid;return r.moved.length;`);
-  if(migrated!==1)throw Error('native TODO migration did not create one card');
-  await until(()=>page.eval(`return !!${root}.querySelector('[data-intent-id="'+__ideaImportedUid+'"]');`),'imported card has stable identity');
-  if(!await page.eval(`const p=app.plugins.plugins['focus-tasks'],file=app.vault.getAbstractFileByPath(${J(source)}),idea=(await p.intentCards()).find(i=>i.uid===__ideaImportedUid);return !(await app.vault.read(file)).includes('### TODO')&&idea.sourceFile===file&&idea.body.includes('~~Past action~~')&&!p.tasks().some(t=>t.uid===idea.uid);`))throw Error('migration lost context, history or idea isolation');
-  await click(`${root}.querySelector('[data-intent-id="'+__ideaImportedUid+'"] a.internal-link')`);
-  await until(()=>page.eval(`return app.workspace.getActiveFile()?.path==='Notes/Ideas UI context.md';`),'idea wiki link opens context');
-  await page.eval(`await app.plugins.plugins['focus-tasks'].openView();return true;`);
-  await until(()=>page.eval(`return !!${root}.querySelector('[data-intent-id="'+__ideaImportedUid+'"]');`),'Focus survives context link');
-  await page.shot('test/shots/intents-'+(mobile?'mobile':'desktop')+'.png');
-  await page.eval(`await app.commands.executeCommandById('focus-tasks:add-intent');return true;`);await modal();
-  await set('.ft-intent-title-input','Ideas UI discard');await set('.ft-intent-body-input','Disposable material');await set('.ft-intent-area-input','Ideas UI');await click(`document.querySelector('.ft-intent-save')`);
-  await until(()=>page.eval(`return !!(${card('Ideas UI discard')});`),'deletion fixture');
-  await click(`(${card('Ideas UI discard')}).querySelector('.ft-intent-title')`);await modal();await click(`document.querySelector('.ft-intent-delete')`);
-  await until(()=>page.eval(`return document.querySelectorAll('.modal-container').length>=2;`),'idea deletion confirmation');
-  await click(`[...document.querySelectorAll('.modal-container')].at(-1).querySelector('button.mod-warning')`);
-  await until(()=>page.eval(`return !(${card('Ideas UI discard')});`),'idea deleted');
-  await click(`[...document.querySelectorAll('.notice .ft-undo')].at(-1)`);await until(()=>page.eval(`return !!(${card('Ideas UI discard')});`),'deleted idea restored by Undo');
-  if(mobile)for(const width of [320,390,430]) {
-    await page.send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:2,mobile:true});
-    await page.eval(`const root=${root}.querySelector('.focus-tasks-view');root.style.fontSize='26px';return true;`);await sleep(150);
-    const bad=await page.eval(`return [...${root}.querySelectorAll('.ft-intent-card,.ft-intent-title,.ft-intent-task')].filter(e=>{const b=e.getBoundingClientRect();return b.width&& (b.left<0||b.right>innerWidth+1)}).map(e=>e.className);`);
-    if(bad.length)throw Error('mobile idea overflow: '+bad.join(','));
+  await click(`document.querySelector('.prompt-input')`);await page.type('Body needle');
+  await until(()=>page.eval(`return [...document.querySelectorAll('.suggestion-item')].some(e=>e.textContent.includes('UI Copy action'));`),'entry body search');
+  await page.key('Enter');await until(()=>page.eval(`return !!(${row('UI Copy action')});`),'search opens correct list');
+  // The shared task menu makes promotion explicit, preserving the original identity.
+  const uid=await page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.find(x=>x.text==='UI Copy action').uid;`);
+  await until(()=>page.eval(`const v=app.workspace.activeLeaf.view.renderer;return v&&!v.editing&&!document.querySelector('.prompt-input')&&!${root}.querySelector('[contenteditable=true]');`),'list ready after search');
+  if(mobile)await press(`(${row('UI Copy action')}).querySelector('.ft-text')`);
+  else {const at=await page.eval(`const e=${row('UI Copy action')};e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};`);await page.rightClick(at);}
+  await until(()=>page.eval(`return !!(${menu('Move to backlog')});`),'explicit promotion menu');await click(menu('Move to backlog'));
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(x=>x.uid===${J(uid)}&&!x.date);`),'promoted item in backlog');
+  await page.eval(`await app.plugins.plugins['focus-tasks'].txTail;return true;`);await page.key('Meta+z');
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.some(x=>x.uid===${J(uid)});`),'promotion Undo returns same item');
+  // Lists reuse the shared fold and drag order. Both rows remain accessible when reopened.
+  await click(`(${list}).querySelector(${J(mobile ? '.ft-steps-more' : '.ft-fold')})`);await until(()=>page.eval(`return !(${list}).classList.contains('is-open');`),'list folded');
+  await click(`(${list}).querySelector('.ft-steps-more')`);await until(()=>page.eval(`return (${list}).classList.contains('is-open');`),'list reopened');
+  for(const width of mobile?[320,390,430]:[620,1000]){
+    await page.send('Emulation.setDeviceMetricsOverride',{width,height:844,deviceScaleFactor:mobile?2:1,mobile});
+    await page.eval(`const e=${root}.querySelector('.focus-tasks-view');e.style.fontSize='26px';return true;`);await sleep(150);
+    const bad=await page.eval(`const rows=[...(${area}).querySelectorAll('.ft-intents li.ft-task')];return rows.filter(e=>{const b=e.getBoundingClientRect();return b.width&&(b.left<0||b.right>innerWidth+1||e.scrollWidth>e.clientWidth+2);}).length;`);
+    if(bad)throw Error('intent list geometry overflows at '+width);
+    if(mobile && !await page.eval(`const a=${row('UI First action')},b=${row('UI Copy action')};return Math.abs(a.querySelector('.ft-box').getBoundingClientRect().left-b.querySelector('.ft-box').getBoundingClientRect().left)<1;`))throw Error('mobile checkbox columns disagree');
   }
-  if(mobile)await page.send('Emulation.setDeviceMetricsOverride',{...viewport,deviceScaleFactor:2,mobile:true});
-  await page.eval(`const root=${root}.querySelector('.focus-tasks-view');root.style.fontSize='';app.plugins.plugins['focus-tasks'].setIntentsShown(false);return true;`);
+  await page.send('Emulation.setDeviceMetricsOverride',{...viewport,deviceScaleFactor:mobile?2:1,mobile});
+  await page.eval(`const e=${root}.querySelector('.focus-tasks-view');e.style.fontSize='';return true;`);
+  // Drag an actual row into a second list with the same desktop/touch machinery.
+  const secondUid=await page.eval(`const p=app.plugins.plugins['focus-tasks'],list=await p.createIntentList('UI List Two','Ideas UI');await p.createTask('UI other list item',{area:list.area,projectFile:list.file,project:list.file.basename,intentList:true,listUid:list.uid},null);p.refresh();return list.uid;`);
+  await until(()=>page.eval(`return !![...${root}.querySelectorAll('.ft-intent-list-row')].find(e=>e.getAttribute('data-intent-id')===${J(secondUid)});`),'second list visible');
+  if(mobile){
+    const point=await page.eval(`const e=${row('UI First action')};e.scrollIntoView({block:'center',behavior:'instant'});const b=e.querySelector('.ft-text').getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};`);
+    await press(`(${row('UI First action')}).querySelector('.ft-text')`);await until(()=>page.eval(`return !!(${menu('Reorder')});`),'touch row menu');await click(menu('Reorder'));
+    await until(()=>page.eval(`return !!${root}.querySelector('.focus-tasks-view.ft-reordering');`),'touch drag mode');
+  } else {
+    const point=await page.eval(`const e=${row('UI First action')};e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};`);
+    await page.front();await page.mouse('mouseMoved',point.x,point.y,0);await sleep(120);
+  }
+  const points=await page.eval(`const v=app.workspace.activeLeaf.view.renderer,a=${row('UI First action')},b=[...${root}.querySelectorAll('.ft-intent-list-row')].find(e=>e.getAttribute('data-intent-id')===${J(secondUid)}),s=v.scroller;
+    const ab=a.getBoundingClientRect(),bb=b.getBoundingClientRect(),sr=s.getBoundingClientRect();s.scrollTop+=(Math.min(ab.top,bb.top)+Math.max(ab.bottom,bb.bottom))/2-(sr.top+sr.height/2);
+    const grip=a.querySelector('.ft-grip').getBoundingClientRect(),target=b.getBoundingClientRect();return {from:{x:grip.left+grip.width/2,y:grip.top+grip.height/2},to:{x:target.left+target.width*0.7,y:target.top+target.height/2}};`);
+  if(mobile){await page.touch('touchStart',[points.from]);for(let i=1;i<=14;i++){await page.touch('touchMove',[{x:points.from.x+(points.to.x-points.from.x)*i/14,y:points.from.y+(points.to.y-points.from.y)*i/14}]);await sleep(25);}await page.touch('touchEnd',[]);}
+  else await page.drag(points.from,points.to);
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.find(x=>x.uid===${J(originalUid)})?.listUid===${J(secondUid)};`),'row dragged into second list');
+  if(!await page.eval(`return app.plugins.plugins['focus-tasks'].tasks().length===__intentUITaskCount;`))throw Error('drag promoted an idea implicitly');
+  if(mobile)await click(`document.querySelector('.ft-reorder-done')`);
+  await page.eval(`await app.plugins.plugins['focus-tasks'].txTail;return true;`);await page.key('Meta+z');
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.find(x=>x.uid===${J(originalUid)})?.listUid!==${J(secondUid)};`),'drag Undo restores list membership');
+  // Deleting a list is confirmed; Undo restores its entries and identities together.
+  const at=await page.eval(`const e=(${list}).querySelector('.ft-project-name');e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};`);
+  if(mobile)await press(`(${list}).querySelector('.ft-project-name')`);else await page.rightClick(at);
+  await until(()=>page.eval(`return !!(${menu('Delete list')});`),'list deletion menu');await click(menu('Delete list'));
+  await until(()=>page.eval(`return !!document.querySelector('.modal button.mod-warning');`),'list deletion confirmation');await click(`document.querySelector('.modal button.mod-warning')`);
+  await until(()=>page.eval(`return !(${list});`),'list removed');
+  await click(`[...document.querySelectorAll('.notice .ft-undo')].at(-1)`);await until(()=>page.eval(`return !!(${list})&&!!(${row('UI First action')});`),'list and rows restored by Undo');
+  // Exercise the actual backup operator in this disposable native vault.
+  const material='Context\n- Operator first\n  - Nested explanation\n- ~~Operator history~~\n- [[UI Link source]]';
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.ensureFolder('Notes');await app.vault.create('Notes/UI Link source.md','Original reference');return true;`);
+  const fixture=await page.eval(`const p=app.plugins.plugins['focus-tasks'],card=await p.createIntent('UI operator source',${J(material)},'Ideas UI');return {vault:app.vault.adapter.getBasePath(),uid:card.uid,raw:card.raw,path:card.file.path};`);
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intents.some(x=>x.uid===${J(fixture.uid)});`),'operator source indexed');
+  const scratch=fs.mkdtempSync(path.join(os.tmpdir(),'focus-intent-lists-test-')),map=path.join(scratch,'map.json'),backup=path.join(scratch,'backup');
+  fs.writeFileSync(map,JSON.stringify([{uid:fixture.uid,area:'Ideas UI',beforeHash:crypto.createHash('sha256').update(fixture.raw).digest('hex')}]));
+  const tool=new URL('../tools/convert-intent-lists.mjs',import.meta.url).pathname;
+  try {
+    const args=[tool,'--vault',fixture.vault,'--map',map];
+    const plan=JSON.parse(execFileSync(process.execPath,args,{encoding:'utf8'}));
+    if(plan.lists!==1||plan.entries!==3)throw Error('operator plan mismatch');
+    const result=JSON.parse(execFileSync(process.execPath,[...args,'--execute','--backup',backup],{encoding:'utf8'}));
+    if(result.lists!==1||result.entries!==3)throw Error('operator apply mismatch');
+    if(fs.readFileSync(path.join(backup,'sources',fixture.path),'utf8')!==fixture.raw)throw Error('operator backup lost original');
+    const after=JSON.parse(execFileSync(process.execPath,args,{encoding:'utf8'}));
+    if(after.lists||after.entries)throw Error('repeat operator plan creates duplicates');
+    if(!await page.eval(`return app.vault.adapter.getBasePath()===${J(fixture.vault)};`))throw Error('operator closed its native window');
+    await until(()=>page.eval(`return !!(${row('UI Link source')});`),'linked note entry rendered');
+    await page.eval(`window.__intentLinkLeaf=app.workspace.activeLeaf;return true;`);
+    await click(`(${row('UI Link source')}).querySelector('.ft-text a.internal-link')`);
+    await until(()=>page.eval(`return app.workspace.activeLeaf.view.file?.path==='Notes/UI Link source.md';`),'linked note opens its original source');
+    await page.eval(`app.workspace.setActiveLeaf(__intentLinkLeaf,{focus:true});return true;`);
+  } finally {fs.rmSync(scratch,{recursive:true,force:true});}
 }

@@ -104,19 +104,22 @@ the link. Missing, ambiguous or closed tasks produce a notice; unfinished edits 
 There is no separate reminder menu.
 An event notification and a native Apple Reminders checkbox are different integrations.
 
-## Ideas
+## Idea lists
 
-The lightbulb button opens free idea cards grouped by area, including an unassigned group.
-Cards have a title and Markdown body, with no dates, checkboxes or completion counters. Search
-finds both title and body and reveals the card inside Focus. The plus creates a card; its action
-button derives a concrete task into the backlog or today's Focus while keeping the idea.
-The action asks for its own text. The editor also deletes cards with confirmation and Undo;
-derived tasks remain independent. A changed source refuses stale deletion.
-Area pages include the same cards. Visibility and folding stay on each device.
+Right-click an area and choose **📔 Ideas** to open its idea block. On a phone, use the area's
+three-dot menu. The block contains named, foldable lists, drawn with the existing project/task
+components. The plus on the block creates a list; the plus on a list adds an ordinary editable row.
+Rows share checkboxes, inline editing, dates, selection, drag order, duplicate-above and Undo.
+A dated idea stays in its list. The explicit **Move to backlog** or **Move to Focus today** command
+turns that same note into an actionable task, preserving identity and description; Undo returns it.
+Search includes list titles and entry bodies and opens the matching row inside Focus.
+List menus rename, move to another area, or delete the list and its items with confirmation and Undo.
+Visibility and folds are local to each device. Area-note views include the same block.
 
-Existing TODO headings can appear as source cards without changing their notes. Completed items
-are historical prose, not executable checkboxes. Explicit migration creates one idea note per
-block, retains a link to its source and removes only that block after verifying the copy.
+Card migration keeps each old idea's UID on its list. Top-level TODO items become independent rows;
+nested explanations stay in descriptions, completed history stays completed within the list, and
+free context stays in the list note. The explicit migration tool verifies private backups outside
+the vault before conversion and refuses sources changed since the approved routing plan.
 
 ## Settings
 
@@ -339,18 +342,19 @@ Shift+клик выделяет все задачи от последней кл
 
 ### Замыслы
 
-Кнопка с лампочкой открывает свободные карточки по областям, включая "Без области".
-У карточки есть заголовок и текст Markdown, без дат, галочек и счётчиков выполнения.
-Общий поиск находит заголовок и содержимое и показывает карточку внутри Фокуса.
-Плюс добавляет замысел. Кнопка создания задачи сохраняет карточку и добавляет самостоятельное
-действие в отложку или сегодняшний Фокус. Замыслы также доступны в view заметки области.
-Для задачи нужно написать конкретное действие. В редакторе карточки есть удаление с
-подтверждением и отменой; созданные задачи сохраняются. Чужая правка запрещает старое удаление.
-Видимость и свёртка сохраняются отдельно на каждом устройстве.
+Правый клик по области → **📔 Замыслы** открывает её блок списков. На телефоне тот же пункт
+есть в меню области «…». «+» у блока создаёт список, «+» у списка добавляет обычную строку.
+Используются те же галочки, правка в строке, даты, выделение, перетаскивание, дублирование сверху
+и отмена, что у задач. Дата сохраняет пункт внутри списка. Команды **«Перенести в отложку»**
+и **«Перенести в фокус сегодня»** переводят ту же заметку в задачи с сохранением UID и описания;
+отмена возвращает пункт в список. Общий поиск находит названия и текст описаний, открывает строку в FT.
+Списки можно переименовать, перенести в другую область или удалить с пунктами через подтверждение.
+Свёртка и показ блока сохраняются отдельно на каждом устройстве. В заметке области доступен тот же вид.
 
-Старые TODO-блоки могут отображаться без записи в исходные заметки. При явном переносе каждый
-блок становится отдельной заметкой-замыслом со ссылкой на источник. Выполненные пункты остаются
-зачёркнутой историей. После проверки копии убирается только перенесённый блок.
+При переходе с карточек UID замысла остаётся у списка. Верхние пункты TODO становятся строками,
+вложенные пояснения переходят в описания, отмеченная история сохраняется внутри списка.
+Перед переносом оператор проверяет оригиналы и резервные копии вне vault. Изменившийся источник
+останавливает операцию, повторный запуск сохраняет уже перенесённые списки.
 
 ### Страницы областей, телефон и напоминания
 

@@ -752,7 +752,7 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
   if(J(notes)!==J(await page.eval(`return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort()`)))throw Error('phone UID link opened a task note');
 });
 
-step("ideas edit and derive tasks by touch, search by body and fit narrow large-text phones", async () => { await checkIntentsUI(page,true); });
+step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));

@@ -123,31 +123,41 @@ Other tools read the same notes, so keep these stable:
 Tasks the plugin does not touch: `cancelled` and `someday`. The Tasks plugin is not part of this
 model: a task is no longer a checkbox line.
 
-### Ideas are source material, not another task queue
+### Intent lists share task rows, not the actionable queue
 
-An idea is an ordinary note with `type: замысел`, immutable `uid`, `title`, optional `intentArea`
-and area `parents`. Its body is free Markdown. It has no status, date, priority, completion control
-or Calendar event. **Do not use `area` for this type**: the Python reader interprets untyped notes
-with that field as area/project records. `classify` explicitly excludes ideas.
-The lightbulb footer toggles their per-area cards; search includes title and body. Visibility and
-folds are per device. Deriving an action keeps the idea and writes an independent task with `source`.
-Derivation starts with an empty action title. Card deletion is confirmed and undoable; it checks
-the full read snapshot and leaves derived tasks intact. Legacy deletion removes just the bound block.
+A container is a note with `type: список замыслов`, immutable `uid`, `title`, `intentArea`,
+area `parents` and `intentListVersion: 1`. Its body is list-level context. An entry uses
+`type: замысел`, its own immutable `uid`, `intentList` (full wikilink), `intentListUid`,
+`intentArea` and the ordinary task properties (`status`, `scheduled`, `title`, description).
+Neither carries canonical `area` or `projects`: bot/Toggl/Calendar readers must not classify
+these as actionable tasks or area/project notes. `read().intentTasks` is separate from `tasks()`.
+`allTasks()` is only for shared row mutation, indexing and order helpers. Calendar badges ignore
+intent entries. Changing an entry's date never promotes it. Explicit promotion preserves UID,
+sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
-Legacy TODO headings can be discovered without writing their source. `migrateTodoFile` transfers
-one heading block to one idea, preserving surrounding source bytes, prose, hierarchy and completed
-history (strikethrough). Fenced examples are untouched. Imported cards add `source`, `sourceHeading`
-and SHA-256 `intentImportKey`; the source block is removed only after verified copies exist.
-Partial failures leave the source and copies intact. Retry reuses unchanged recovery copies;
-conflicting copies or source edits refuse removal. A single-file migration is one Undo action.
+Area context menus toggle `opened["intents:<area>"]`. There is no global footer/card control.
+List headers reuse `projectRow`, with the 📔 icon and normal task rows. List folds reuse `steps:`
+keys but are open by default; lists cannot be completed as projects. `intent:<list-uid>` stores
+entry order; `intent-lists:<area>` stores container order. Device folds remain local.
 
-`node tools/migrate-todo-to-intents.mjs` prints a read-only plan for an open native vault.
-`--execute` creates and verifies private backups outside the vault before any removal and records
-each result in the backup's report. It excludes task notes, internal files and archived sources.
-Never commit private backups or migration reports into the public plugin repository.
+Old free cards (`type: замысел` without `intentList`) remain readable migration sources.
+`convertIntentCard` checks source bytes and UID, creates verified entries before changing the
+container, keeps source metadata, and records one Undo. Its recovery entries are keyed by
+`intentItemImportKey` so failed conversion can retry without duplicates. Nested bullets and fenced
+examples remain description material. Original TODO migration helpers remain available.
 
-Run `node --test test/intents.mjs` for identity, concurrency and migration failure scenarios;
-the shared `test/intents-ui.mjs` drives native desktop and touch scenarios inside disposable vaults.
+`node tools/convert-intent-lists.mjs --map <private-routing.json>` prints a read-only plan.
+`--execute --backup <fresh-directory>` verifies all original backups outside the vault before
+writes; it validates copied bodies, container membership, status, and unchanged original task files.
+It guards both native vault name and exact path, refuses active edits/drags, and only closes its
+websocket, never the user's window. Private routing, backups and reports stay outside the repository.
+
+Run `node --test test/intents.mjs test/intent-lists.mjs` for identity/concurrency/Undo/failure checks.
+Wiki-link titles keep their full text; creating or renaming a task avoids the referenced file name,
+so the new note cannot shadow the link's destination. This also holds after promoting an idea.
+`test/intents-ui.mjs` covers area menus, the shared rows, editing/Enter/duplicate/check/date, body
+search, promotion/Undo, list deletion/Undo, narrow geometry and the actual backup operator in a
+native disposable vault. The same flow runs on desktop and touch with Tasks and Blue Topaz.
 
 ### TaskNotes on the same notes
 

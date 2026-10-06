@@ -58,6 +58,7 @@ const PROJECT_WORDS = ["project", "проект"];
 const TASK_WORDS = ["task", "задача"];
 const TASK_TYPE = "задача";   // what a new task note gets; TASK_WORDS is what we also read
 const INTENT_TYPE = "замысел";
+const INTENT_LIST_TYPE = "список замыслов";
 // TaskNotes: the optional companion on the same notes. Its own field names are our contract
 // already; the one thing it has to be told is how to recognise a task.
 const COMPANION = { id: "tasknotes", repo: "callumalpass/tasknotes", property: "type" };
@@ -287,6 +288,8 @@ const STRINGS = {
 };
 
 let LANG = "en";
+Object.assign(STRINGS.en, { newIntentList: "New list", deleteIntentList: "Delete list", deleteIntentListDesc: "Delete this list and all its items? You can undo this.", intentToFocus: "Move to Focus today", intentToBacklog: "Move to backlog", intentToList: "Move to a list", intentEmpty: "Add an item", intentListPlace: "Move list to an area" });
+Object.assign(STRINGS.ru, { newIntentList: "Новый список", deleteIntentList: "Удалить список", deleteIntentListDesc: "Удалить список со всеми пунктами? Можно отменить.", intentToFocus: "Перенести в фокус сегодня", intentToBacklog: "Перенести в отложку", intentToList: "Перенести в список", intentEmpty: "Добавить пункт", intentListPlace: "Перенести список в область" });
 Object.assign(STRINGS.en, {
   intents: "Ideas", addIntent: "Add an idea", editIntent: "Edit idea", intentTitle: "Title",
   intentBody: "Thoughts, possibilities, links…", intentArea: "Area", intentLoose: "Without an area",
@@ -378,7 +381,7 @@ let uidSequence = 0;
 const newUid = () => "ft-" + (globalThis.crypto?.randomUUID?.()
   || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${++uidSequence}`);
 // The list a task is dragged within: the steps of its project, or the loose tasks of its area.
-const listOf = (task) => (task.project ? "project:" + task.project : "area:" + task.area);
+const listOf = (task) => task.intent ? "intent:" + (task.listUid || task.project) : (task.project ? "project:" + task.project : "area:" + task.area);
 // `tags: [archived]`, `tags: archived` or `#archived`: the note is in the archive.
 const isArchived = (tags) => (Array.isArray(tags) ? tags : tags ? [tags] : []).some((x) => String(x).replace(/^#/, "").toLowerCase() === "archived");
 // A row's place in its area's saved order: a task by its id, a project by its note.
@@ -671,10 +674,11 @@ class DatePicker {
 }
 
 class TargetModal extends SuggestModal {
-  constructor(app, items, onChoose) {
+  constructor(app, items, onChoose, allowCreate = true) {
     super(app);
     this.items = items;
     this.onChoose = onChoose;
+    this.allowCreate = allowCreate;
     this.setPlaceholder(t("where"));
   }
   getSuggestions(query) {
@@ -683,7 +687,7 @@ class TargetModal extends SuggestModal {
     const match = prepareSimpleSearch(q);
     const found = this.items.filter((i) => match(i.label));
     const known = this.items.some((i) => !i.project && bare(i.area).toLowerCase() === bare(q).toLowerCase());
-    if (!known) found.push({ create: q, label: t("newAreaOption", q) });
+    if (!known && this.allowCreate) found.push({ create: q, label: t("newAreaOption", q) });
     return found;
   }
   renderSuggestion(item, el) { el.setText(item.label); }
@@ -715,7 +719,8 @@ class FindModal extends SuggestModal {
   renderSuggestion(item, el) {
     el.addClass("ft-find-item");
     const icon = el.createSpan({ cls: "ft-find-icon" });
-    setIcon(icon, item.kind === "area" ? "layers" : item.kind === "project" ? "folder" : item.kind === "intent" ? "lightbulb" : item.waiting ? "play" : "square");
+    if (["intent", "intent-task"].includes(item.kind)) icon.setText("📔");
+    else setIcon(icon, item.kind === "area" ? "layers" : item.kind === "project" ? "folder" : item.waiting ? "play" : "square");
     const body = el.createDiv({ cls: "ft-find-body" });
     body.createDiv({ cls: "ft-find-title", text: item.title });
     if (item.where) body.createDiv({ cls: "ft-find-where", text: item.where });
@@ -1007,14 +1012,20 @@ class FocusRenderer extends MarkdownRenderChild {
       const where = x.project ? `${x.area} › ${x.project}` : x.area;
       items.push({ kind: "task", title: x.text, where, when: day(x), search: `${x.text} ${x.project || ""} ${bare(x.area)}`, uid: x.uid, waiting: waitingBack(x) });
     }
-    for (const x of await p.intentCards()) items.push({ kind: "intent", title: x.title, where: [t("intents"), x.area || t("intentLoose")].join(" · "), search: `${x.title} ${x.body} ${x.area || ""}`, uid: x.uid, area: x.area });
+    for (const x of await p.intentCards()) if(x.isList) {
+      items.push({ kind: "intent", title: x.title, where: "📔 " + x.area, search: `${x.title} ${x.body} ${x.area || ""}`, uid: x.uid, area: x.area });
+      for(const task of p.intentEntries(x)) if(![STATUS_DONE,STATUS_CANCELLED].includes(task.status)) {
+        const body=splitNote(await p.app.vault.cachedRead(task.file))[1];
+        items.push({kind:"intent-task",title:task.text,where:`📔 ${x.area} › ${x.title}`,search:`${task.text} ${body} ${x.title} ${x.area}`,uid:task.uid,area:x.area});
+      }
+    }
     new FindModal(p.app, items, (item) => this.reveal(item)).open();
   }
 
   // Shows a found item in the list: whatever hides it is opened (the area, «All», the pile, the
   // project's steps, the «Waiting» shelf), then it is scrolled to and selected.
   async reveal(item, openNote = true) {
-    if (item.kind === "intent") return this.revealIntent(item);
+    if (item.kind === "intent" || item.kind === "intent-task") return this.revealIntent(item);
     const p = this.plugin;
     const focus = (await p.collect(false)).map((a) => a.name);
     const wide = p.everything();
@@ -1101,7 +1112,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // and throw the scroll back to the top on every change.
   async build() {
     this.calendar = await this.plugin.calendarState();
-    this.intentNotes = this.plugin.intentsShown() ? await this.plugin.intentCards() : [];
+    this.intentNotes = this.plugin.read().intents.filter(x => x.isList);
     if (this.blockSrc !== null) this.page = this.plugin.blockPage(this.blockSrc, this.sourcePath);
     if (this.page) return this.page.area ? this.buildAreaPage() : this.buildPage();
     const p = this.plugin;
@@ -1179,12 +1190,6 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     const lost = p.orphans();
     if (lost.length) await this.orphanBlock(el, lost);
-    if (p.intentsShown()) {
-      const present = new Set(shownAreas.filter(a => p.isShown("area:" + a.name, rest.includes(a))).map(a => a.name));
-      const names = [...new Set(this.intentNotes.map(i => i.area || ""))];
-      if (!names.length) names.push("");
-      for (const name of names) if (!present.has(name)) await this.intentsBlock(el, name || null, true);
-    }
     // The day's closed work, all of it, in one block under the areas: nothing closed keeps an area
     // or a project on screen, so this is the one place to see it — and to untick a slip.
     const closed = p.closedToday();
@@ -1214,9 +1219,7 @@ class FocusRenderer extends MarkdownRenderChild {
       }
     }
     const foot = el.createDiv({ cls: "ft-foot" });
-    const ideas = foot.createEl("button", { cls: "ft-foot-button ft-intents-toggle", attr: { "aria-pressed": String(p.intentsShown()) } });
-    setIcon(ideas.createSpan(), "lightbulb"); ideas.createSpan({ text: t("intents") });
-    ideas.onclick = () => p.setIntentsShown(!p.intentsShown());
+
     // The bottom buttons keep their spot on screen: what opens or closes above them grows or shrinks
     // out of sight, and after «All» the place of the button is taken by «Other areas».
     const pin = (selector) => { this.pin = { selector, y: foot.getBoundingClientRect().top }; document.activeElement?.blur(); };
@@ -1454,6 +1457,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (!item) return null;
     if (item.type !== "project") return item.task || null;
     const b = item.project;
+    if (b.intentList) return item.task || null;
     return (b.handle ||= { uid: "p:" + b.file.path, isProject: true, project: b, area: item.area, file: b.file, text: b.file.basename, date: b.date || null, at: null, status: STATUS_OPEN });
   }
 
@@ -1701,7 +1705,7 @@ class FocusRenderer extends MarkdownRenderChild {
     let row = findRow();
     // A Waiting copy is open work: its new shelf may be hidden even though its source was visible.
     if (!row) {
-      await this.reveal({ kind: "task", uid: uids[0] }, false);
+      await this.reveal({ kind: copies[0].intent ? "intent-task" : "task", uid: uids[0] }, false);
       if (this.editing || this.held || this.unloaded) return;
       row = findRow();
     }
@@ -1845,54 +1849,64 @@ class FocusRenderer extends MarkdownRenderChild {
     try { modal.open(); } catch (e) { this.editing = false; throw e; }
   }
 
-  async intentsBlock(el, area, separate = false) {
-    if (!this.plugin.intentsShown() && !this.page) return;
-    const p = this.plugin, key = "intents:" + (area || ""), open = p.intentsShown() && !p.data.folded[key];
-    const block = el.createDiv({ cls: "ft-intents", attr: { "data-intent-area": area || "" } });
+  async intentsBlock(el, area) {
+    const p = this.plugin, key = "intents:" + area;
+    if (!p.isShown(key, true)) return;
+    const block = el.createDiv({ cls: "ft-intents ft-future-block", attr: { "data-intent-area": area } });
     const head = block.createDiv({ cls: "ft-intents-head" });
-    const toggle = head.createEl("button", { cls: "ft-intents-open", attr: { "aria-expanded": String(open) } });
-    setIcon(toggle.createSpan(), "lightbulb");
-    toggle.createSpan({ text: separate ? (area || t("intentLoose")) + " · " + t("intents") : t("intents") });
-    toggle.onclick = () => {
-      if (open) p.data.folded[key] = true; else delete p.data.folded[key];
-      p.saveFolds(); p.setIntentsShown(true);
-    };
-    const add = head.createEl("button", { cls: "ft-intents-add", attr: { "aria-label": t("addIntent") } });
-    setIcon(add, "plus"); add.onclick = () => this.openIntent(null, area);
-    if (!open) return;
-    const cards = (this.intentNotes || []).filter(i => (i.area || null) === (area || null));
-    if (!cards.length) block.createDiv({ cls: "ft-intents-hint", text: t("intentHint") });
-    for (const intent of cards) {
-      const card = block.createEl("article", { cls: "ft-intent-card", attr: { "data-intent-id": intent.uid } });
-      const cardHead = card.createDiv({ cls: "ft-intent-card-head" });
-      const title = cardHead.createEl("button", { cls: "ft-intent-title", text: intent.title });
-      title.onclick = () => this.openIntent(intent, area);
-      const task = cardHead.createEl("button", { cls: "ft-intent-task", attr: { "aria-label": t("intentTask") } });
-      setIcon(task, "list-plus"); task.onclick = () => this.openIntent(intent, area, true);
-      const body = card.createDiv({ cls: "ft-intent-body" });
-      // Old checkbox syntax is displayed as prose; it never becomes another executable queue.
-      const prose = intentProse(intent.body);
-      await MarkdownRenderer.render(p.app, prose, body, intent.file.path, this.inner);
-      this.bindMarkdownLinks(body, intent.file.path);
-      for (const input of body.querySelectorAll('input[type="checkbox"]')) input.remove();
-      const context = intent.sourceFile || intent.file;
-      const source = card.createEl("button", { cls: "ft-intent-source", text: t("intentSource", context.basename) });
-      source.onclick = () => p.app.workspace.getLeaf(this.leaf ? "tab" : false).openFile(context);
+    const toggle = head.createEl("button", { cls: "ft-intents-open", attr: { "aria-expanded": "true" } });
+    toggle.createSpan({ cls: "ft-project-icon", text: "📔" }); toggle.createSpan({ text: t("intents") });
+    toggle.onclick = async () => { await p.toggleShown(key, true); p.refresh(); };
+    const add = head.createEl("button", { cls: "ft-intents-add", attr: { "aria-label": t("newIntentList") } });
+    setIcon(add, "plus"); add.onclick = () => p.newIntentList({ name: area });
+    const lists = this.intentNotes.filter(x => x.area === area), order = p.data.order.tasks["intent-lists:" + area] || [];
+    lists.sort((a, b) => { const ai=order.indexOf(a.uid), bi=order.indexOf(b.uid); return (ai<0?1e9:ai)-(bi<0?1e9:bi) || collator()(a.title,b.title); });
+    this.shown.tasks["intent-lists:" + area] = lists.map(x => x.uid);
+    if (!lists.length) {
+      const empty = block.createDiv({ cls: "ft-empty ft-empty-add", text: "+ " + t("newIntentList") });
+      empty.onclick = () => p.newIntentList({ name: area });
+    }
+    const ul = block.createEl("ul", { cls: "contains-task-list ft-list" });
+    for (const list of lists) {
+      const entries = p.intentEntries(list), saved = p.data.order.tasks["intent:" + list.uid] || [];
+      const rank = x => { const i=saved.indexOf(x.uid); return i<0?1e9:i; };
+      entries.sort((a,b)=>rank(a)-rank(b)||collator()(a.text,b.text));
+      const tasks = entries.filter(x=>![STATUS_DONE,STATUS_CANCELLED,STATUS_SOMEDAY].includes(x.status));
+      const project = { ...list, intentList: true, date: null, tasks, later: [] };
+      this.shown.tasks["intent:" + list.uid] = tasks.map(x=>x.uid);
+      await this.projectRow(ul, { kind: "project", project, steps: tasks }, { area: { name: area }, all: true, pile: "intents" });
+      const row = [...ul.children].find(x=>x.getAttribute("data-intent-id")===list.uid), body = row?.nextElementSibling;
+      if (body?.hasClass("ft-steps")) {
+        const raw = await p.app.vault.cachedRead(list.file), description = splitNote(raw)[1];
+        if (description.trim()) {
+          const context=body.createDiv({ cls:"ft-intent-description" }); body.prepend(context);
+          await MarkdownRenderer.render(p.app,description,context,list.file.path,this.inner); this.bindMarkdownLinks(context,list.file.path);
+        }
+        const done=entries.filter(x=>x.status===STATUS_DONE);
+        if (done.length) {
+          const doneKey="intent-done:"+list.uid, opened=p.isShown(doneKey,true);
+          const toggle=body.createDiv({ cls:"ft-page-done",text:t("doneButton")+" · "+done.length });
+          toggle.onclick=async()=>{ await p.toggleShown(doneKey,true);p.refresh(); };
+          if(opened)await this.completed(body.createDiv({ cls:"ft-done-today" }),done);
+        }
+        if(!tasks.length) { const empty=body.createDiv({ cls:"ft-empty ft-empty-add",text:"+ "+t("intentEmpty") }); empty.onclick=()=>this.draft(row,{area,project:list.file.basename,projectFile:list.file,intentList:true,listUid:list.uid,noDate:true}); }
+      }
     }
   }
 
   async revealIntent(item) {
-    const p = this.plugin, intent = (await p.intentCards()).find(i => i.uid === item.uid);
-    if (!intent) { new Notice(t("findGone")); return false; }
-    if (this.page && (!this.page.area || this.page.area.path !== p.notes().find(n => !n.project && n.area === intent.area)?.file.path)) {
-      const leaf = await p.openView(); return leaf.view.renderer.revealIntent(item);
-    }
-    delete p.data.folded["intents:" + (intent.area || "")]; p.saveFolds(); p.setIntentsShown(true);
+    const p=this.plugin, task=item.kind==="intent-task" ? p.read().intentTasks.find(x=>x.uid===item.uid) : null;
+    const list=p.read().intents.find(x=>x.isList && x.uid===(task?.listUid||item.uid));
+    if(!list) {new Notice(t("findGone"));return false;}
+    if(this.page && (!this.page.area || p.classify(this.page.area)?.area!==list.area)) {const leaf=await p.openView();return leaf.view.renderer.revealIntent(item);}
+    const focused=(await p.collect(false)).some(a=>a.name===list.area);
+    if(focused)delete p.data.folded["area:"+list.area];
+    else {p.app.saveLocalStorage("focus-tasks-all","1");p.data.opened["area:"+list.area]=true;}
+    p.data.opened["intents:"+list.area]=true;delete p.data.folded["steps:"+list.file.path];p.saveFolds();
     await this.rerendered();
-    const card = [...this.containerEl.querySelectorAll(".ft-intent-card")].find(e => e.getAttribute("data-intent-id") === intent.uid);
-    if (!card) return false;
-    card.scrollIntoView({ block: "center" }); card.addClass("ft-found");
-    setTimeout(() => card.removeClass("ft-found"), 1400); return true;
+    const row=task ? this.rows().find(([,x])=>x.uid===task.uid)?.[0] : [...this.containerEl.querySelectorAll(".ft-intent-list-row")].find(e=>e.getAttribute("data-intent-id")===list.uid);
+    if(!row)return false;
+    row.scrollIntoView({block:"center"});row.addClass("ft-found");setTimeout(()=>row.removeClass("ft-found"),1400);return true;
   }
 
   // The day's closed work, in the block at the bottom of the screen: the tasks checked off today in
@@ -1980,9 +1994,10 @@ class FocusRenderer extends MarkdownRenderChild {
   // The project a row belongs to, faint beside its text; a click opens the project's note.
   projectTag(li, task) {
     const tag = li.createSpan({ cls: "ft-project-tag" });
-    tag.createSpan({ cls: "ft-icon", text: "📁" });
-    tag.createSpan({ text: task.project });
-    const note = this.plugin.notes().find((n) => n.project && n.file.basename === task.project);
+    tag.createSpan({ cls: "ft-icon", text: task.intent ? "📔" : "📁" });
+    const intent = task.intent && this.plugin.read().intents.find(x=>x.uid===task.listUid);
+    tag.createSpan({ text: intent ? intent.title : task.project });
+    const note = intent || this.plugin.notes().find((n) => n.project && n.file.basename === task.project);
     if (note) tag.onclick = (e) => { if (picking(e)) return; e.stopPropagation(); this.open(note.file, e); };
   }
 
@@ -2603,14 +2618,14 @@ class FocusRenderer extends MarkdownRenderChild {
       // ⌘Enter: the text is saved and the task's note opens
       Enter: async (close) => {
         const saved = await close(true, false);
-        const now = this.plugin.tasks().find((x) => x.uid === task.uid) || saved || task;
+        const now = this.plugin.allTasks().find((x) => x.uid === task.uid) || saved || task;
         this.open(now.file);
       },
       // ⌘D: save the text, insert a copy above the row and move the editor into it.
       d: async (close) => {
         await close(true, false);
         const touch = this.touch || 0;
-        const now = this.plugin.tasks().find((x) => x.uid === task.uid) || task;
+        const now = this.plugin.allTasks().find((x) => x.uid === task.uid) || task;
         const [copy] = await this.plugin.duplicateTasks([now]);
         await this.editCopies(copy ? [copy] : [], touch);
       },
@@ -2628,6 +2643,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // Which list a row is in: today's focus, the area's pile of what is not today, or an area of
   // «Other areas», where everything is one list and nothing leaves it.
   pileOf(li) {
+    if (li?.closest(".ft-intents")) return "all";
     if (!li || li.closest(".ft-area.is-rest")) return "all";
     if (li.closest(".ft-waiting")) return "waiting";
     return li.closest(".ft-future-block, .ft-later-steps") ? "ahead" : "focus";
@@ -2659,7 +2675,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const deadline = Date.now() + ms;
     while (Date.now() < deadline) {
       this.plugin.forgetScan();
-      const fresh = this.plugin.tasks().find((x) => x.uid === task.uid);
+      const fresh = this.plugin.allTasks().find((x) => x.uid === task.uid);
       if (fresh && ok(fresh)) return;
       await new Promise((r) => setTimeout(r, 40));
     }
@@ -2670,7 +2686,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const deadline = Date.now() + ms;
     while (Date.now() < deadline) {
       this.plugin.forgetScan();
-      if (!this.plugin.tasks().some((x) => x.uid === uid)) return;
+      if (!this.plugin.allTasks().some((x) => x.uid === uid)) return;
       await new Promise((r) => setTimeout(r, 40));
     }
   }
@@ -2693,7 +2709,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const deadline = Date.now() + ms;
     while (Date.now() < deadline) {
       this.plugin.forgetScan();
-      const have = new Set(this.plugin.tasks().map((x) => x.uid));
+      const have = new Set(this.plugin.allTasks().map((x) => x.uid));
       if (uids.every((u) => have.has(u))) return;
       await new Promise((r) => setTimeout(r, 40));
     }
@@ -2767,10 +2783,13 @@ class FocusRenderer extends MarkdownRenderChild {
   renameProject(head, area, project) {
     const name = head.querySelector(".ft-link");
     if (!name || this.editing) return;
-    this.editor(name, project.file.basename.length, async (value) => {
-      if (value && value !== project.file.basename) await this.plugin.renameProject(project.file, value);
+    this.editor(name, (project.title || project.file.basename).length, async (value) => {
+      if (value && value !== (project.title || project.file.basename)) {
+        if(project.intentList)await this.plugin.renameIntentList(project,value);
+        else await this.plugin.renameProject(project.file,value);
+      }
       return head;
-    }, {}, (prev) => this.projectDraft(prev, area, project.file.path));
+    }, {}, (prev) => project.intentList ? this.plugin.newIntentList(area) : this.projectDraft(prev, area, project.file.path));
   }
 
   // An empty project row after `prev`; Enter creates the project note in this area, seated right
@@ -2902,6 +2921,11 @@ class FocusRenderer extends MarkdownRenderChild {
   areaMenu(menu, area) {
     const p = this.plugin;
     this.mobileReorderItem(menu);
+    menu.addItem(i => i.setTitle("📔 " + t("intents")).onClick(async () => {
+      await p.toggleShown("intents:" + area.name, true);
+      if(p.isShown("intents:"+area.name,true)) {delete p.data.folded["area:"+area.name];p.data.opened["area:"+area.name]=true;p.saveFolds();}
+      p.refresh();
+    }));
     menu.addItem((i) => i.setTitle(t("addToArea")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: null })));
     menu.addItem((i) => i.setTitle(t("newProject")).setIcon("folder-plus").onClick(() => p.newProject(area)));
     menu.addItem((i) => i.setTitle(t("projectFromNote")).setIcon("file-plus").onClick(() => p.projectFromNote(area)));
@@ -2916,6 +2940,16 @@ class FocusRenderer extends MarkdownRenderChild {
 
   projectMenu(menu, area, project, head) {
     const p = this.plugin;
+    if (project.intentList) {
+      this.mobileReorderItem(menu);
+      menu.addItem(i => i.setTitle(t("addTask")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: project.file.basename, projectFile: project.file, intentList: true, listUid: project.uid })));
+      if (head) menu.addItem(i => i.setTitle(t("rename")).setIcon("pencil").onClick(() => this.renameProject(head, area, project)));
+      menu.addItem(i => i.setTitle(t("intentListPlace")).setIcon("folder-input").onClick(() => new TargetModal(p.app, p.notes().filter(n => !n.project).map(n => ({ label: n.area, area: n.area })), tg => p.moveIntentList(project, tg.area),false).open()));
+      menu.addItem(i => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(project.file)));
+      menu.addSeparator();
+      menu.addItem(i => i.setTitle(t("deleteIntentList")).setIcon("trash-2").onClick(() => p.deleteIntentList(project)));
+      return;
+    }
     this.mobileReorderItem(menu);
     menu.addItem((i) => i.setTitle(t("addStep")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: project.file.basename })));
     if (head) menu.addItem((i) => i.setTitle(t("rename")).setIcon("pencil").onClick(() => this.renameProject(head, area, project)));
@@ -2976,8 +3010,11 @@ class FocusRenderer extends MarkdownRenderChild {
     this.priorityItems(menu, task);
     menu.addSeparator();
     this.progressItem(menu, task);
-    menu.addItem((i) => i.setTitle(t("place")).setIcon("folder-input").onClick(() => p.placeTask(task)));
-    menu.addItem((i) => i.setTitle(t("toProject")).setIcon("folder-plus").onClick(() => p.toProject(task)));
+    menu.addItem((i) => i.setTitle(task.intent ? t("intentToList") : t("place")).setIcon("folder-input").onClick(() => p.placeTask(task)));
+    if (task.intent) {
+      menu.addItem(i => i.setTitle(t("intentToFocus")).setIcon("calendar-check").onClick(() => p.promoteIntentTask(task, today())));
+      menu.addItem(i => i.setTitle(t("intentToBacklog")).setIcon("archive").onClick(() => p.promoteIntentTask(task, null)));
+    } else menu.addItem((i) => i.setTitle(t("toProject")).setIcon("folder-plus").onClick(() => p.toProject(task)));
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("openInNote")).setIcon("file-text").onClick(() => this.open(task.file)));
     menu.addItem((i) => {
@@ -3023,6 +3060,10 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     menu.addSeparator();
     this.priorityItems(menu, chosen);
+    if(chosen.length && chosen.every(x=>x.intent)) {
+      menu.addItem(i=>i.setTitle(t("intentToFocus")).setIcon("calendar-check").onClick(()=>this.plugin.promoteIntentTasks(chosen,today())));
+      menu.addItem(i=>i.setTitle(t("intentToBacklog")).setIcon("archive").onClick(()=>this.plugin.promoteIntentTasks(chosen,null)));
+    }
     if (chosen.length) { menu.addSeparator(); this.progressItem(menu, chosen); }
     menu.addSeparator();
     menu.addItem((i) => i.setTitle(t("clearSelection")).setIcon("x").onClick(() => this.clearSelection()));
@@ -3122,9 +3163,11 @@ class FocusRenderer extends MarkdownRenderChild {
     const { project, steps } = row;
     const area = opts.area;
     const key = "steps:" + project.file.path;
-    const open = steps.length > 0 && p.isShown(key, true);
+    const isList = !!project.intentList;
+    const open = (isList || steps.length > 0) && p.isShown(key, !isList);
     const step = open ? null : steps[0] || null;
     const li = ul.createEl("li", { cls: "task-list-item ft-task ft-project-row" });
+    if (isList) { li.addClass("ft-intent-list-row"); li.setAttr("data-intent-id", project.uid); }
     if (opts.level) li.style.setProperty("--ft-level", String(opts.level));
     li.toggleClass("is-open", open);
     li.toggleClass("is-empty", !steps.length);
@@ -3134,10 +3177,10 @@ class FocusRenderer extends MarkdownRenderChild {
     // Open, the row is a heading over its steps: no box to tick, and in the box's column a chevron
     // that folds them — the name stays where it was, so nothing jumps and «−N» sits by it as «+N» did.
     let box = null;
-    if (open) {
+    if (open || (isList && !step)) {
       const fold = li.createSpan({ cls: "ft-box ft-fold", attr: { "aria-label": t("hideSteps") } });
-      setIcon(fold, "chevron-down");
-      fold.onclick = async (e) => { e.stopPropagation(); await p.toggleShown("steps:" + project.file.path, true); p.refresh(); };
+      setIcon(fold, open ? "chevron-down" : "chevron-right");
+      fold.onclick = async (e) => { e.stopPropagation(); await p.toggleShown("steps:" + project.file.path, !isList); p.refresh(); };
     } else if (!step) {
       // No step to tick: the box closes the project itself — «Project done», one click, with Undo.
       // The row keeps the task rows' column, not one step in as if it were inside the task above.
@@ -3154,8 +3197,8 @@ class FocusRenderer extends MarkdownRenderChild {
     // not into a hanging column under the step (which read as a big indent inside the task).
     const line = li.createSpan({ cls: "ft-line" });
     const name = line.createSpan({ cls: "ft-project-name" });
-    name.createSpan({ cls: "ft-project-icon", text: "📁" });
-    this.link(name.createSpan({ cls: "ft-link", text: project.file.basename }), project.file);
+    name.createSpan({ cls: "ft-project-icon", text: isList ? "📔" : "📁" });
+    this.link(name.createSpan({ cls: "ft-link", text: project.title || project.file.basename }), project.file);
     const projectMenu = (e) => {
       e.preventDefault();
       e.stopPropagation();
@@ -3165,7 +3208,7 @@ class FocusRenderer extends MarkdownRenderChild {
       showMenu(menu, e);
     };
     name.oncontextmenu = projectMenu;
-    const target = () => ({ area: area.name, project: project.file.basename, projectFile: project.file, noDate: opts.pile === "ahead" || !!opts.all });
+    const target = () => ({ area: area.name, project: project.file.basename, projectFile: project.file, noDate: opts.pile === "ahead" || !!opts.all, ...(isList ? { intentList: true, listUid: project.uid } : {}) });
     // where a new step's row opens: under the last step on screen, or right under this row
     const anchor = () => {
       const body = li.nextElementSibling?.hasClass("ft-steps") ? li.nextElementSibling : null;
@@ -3175,14 +3218,14 @@ class FocusRenderer extends MarkdownRenderChild {
     // it does not move when the row opens. The quiet controls — the ⏳ of the project's pile and the
     // «+» for a step, both under the pointer only — sit after the step, before the date, where their
     // hidden width is whitespace anyway.
-    if (steps.length > 1) {
+    if (steps.length > 1 || isList) {
       const hidden = steps.slice(1);
-      const more = line.createSpan({ cls: "ft-steps-more", text: open ? `−${hidden.length}` : `+${hidden.length}` });
+      const more = line.createSpan({ cls: "ft-steps-more", text: (isList && !hidden.length) ? (open ? "−" : "+") : (open ? `−${hidden.length}` : `+${hidden.length}`) });
       more.toggleClass("is-open", open);
       // late steps behind the row must not hide behind it: the number turns red
       if (!open && hidden.some((x) => x.date && x.date < today() && !waitingBack(x))) more.addClass("is-late");
       more.setAttr("aria-label", open ? t("hideSteps") : t("moreSteps", hidden.length));
-      more.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, true); p.refresh(); };
+      more.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, !isList); p.refresh(); };
     }
     let text = null;
     if (step) {
@@ -3212,7 +3255,7 @@ class FocusRenderer extends MarkdownRenderChild {
       this.chip(li, "ft-later-chip", "clock", null, laterShown, laterKey,
         `${t(laterShown ? "hideUpcoming" : "showUpcoming")} · ${project.later.length}`, true);
     // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
-    this.plus(li, t("addStep"), async () => { if (steps.length > 1 && !open) await p.toggleShown(key, true); return target(); }, anchor);
+    this.plus(li, t("addStep"), async () => { if (!open && (isList || steps.length > 1)) await p.toggleShown(key, !isList); return target(); }, anchor);
     if (step) {
       if (project.date && !step.at) own();
       else {
@@ -3320,9 +3363,6 @@ class FocusSettingTab extends PluginSettingTab {
         this.display();
       }));
     text("sAreaName", "sAreaNameDesc", "areaNoteName");
-    new Setting(containerEl).setName(t("intentTodos")).setDesc(t("intentTodosDesc")).addToggle(c => c.setValue(s.todoIdeas !== false).onChange(async value => {
-      s.todoIdeas = value; await p.saveAll(); p.refresh();
-    }));
     new Setting(containerEl).setName(t("sAreaFm")).setDesc(t("sAreaFmDesc")).addTextArea((c) => c
       .setPlaceholder('parents:\n  - "[[Projects]]"').setValue(s.areaFrontmatter).onChange(async (v) => {
         s.areaFrontmatter = v.replace(/\s+$/, "");
@@ -3467,8 +3507,9 @@ module.exports = class FocusTasks extends Plugin {
     this.addCommand({ id: "fold-all", name: t("cmdFoldAll"), callback: () => this.foldAll(folds(), false) });
     this.addCommand({ id: "unfold-all", name: t("cmdUnfoldAll"), callback: () => this.foldAll(folds(), true) });
     this.addCommand({ id: "add-task", name: t("cmdAddTask"), callback: () => this.addTask(today()) });
-    this.addCommand({ id: "add-intent", name: t("addIntent"), callback: async () => {
-      const leaf = await this.openView(); leaf.view.renderer.openIntent();
+    this.addCommand({ id: "add-intent", name: t("newIntentList"), callback: async () => {
+      await this.openView();
+      new TargetModal(this.app,this.notes().filter(n=>!n.project).map(n=>({label:n.area,area:n.area})),tg=>this.newIntentList({name:tg.area}),false).open();
     } });
     this.addCommand({ id: "add-area", name: t("cmdAddArea"), callback: () => this.newArea() });
     this.addCommand({ id: "find", name: t("cmdFind"), callback: async () => {
@@ -3643,7 +3684,7 @@ module.exports = class FocusTasks extends Plugin {
   // is an area — an area is one of your own notes (a hub in Base/, say), not a copy of it.
   classify(file, fields = null) {
     const fm = fields || this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (String(fm?.type || "").toLowerCase() === INTENT_TYPE) return null;
+    if ([INTENT_TYPE, INTENT_LIST_TYPE].includes(String(fm?.type || "").toLowerCase())) return null;
     if (!fm || !fm.area) return null;
     if (!this.inFolder(file) && !this.isAreaType(fm.type)) return null;
     if (this.isTaskType(fm.type)) return null;  // a task note carries `area:` too
@@ -3678,17 +3719,17 @@ module.exports = class FocusTasks extends Plugin {
   // pass is thousands of cache lookups.
   read() {
     if (this.scan) return this.scan;
-    const notes = [], tasks = [], closed = [], intents = [];
+    const notes = [], tasks = [], closed = [], intents = [], intentTasks = [];
     for (const file of this.app.vault.getMarkdownFiles()) {
       const cache = this.app.metadataCache.getFileCache(file), fields = cache?.frontmatter || {};
       const intent = this.intentOf(file, fields);
       if (intent) { intents.push(intent); continue; }
       const task = this.taskOf(file, fields, cache);
-      if (task) { tasks.push(task); continue; }
+      if (task) { (task.intent ? intentTasks : tasks).push(task); continue; }
       const note = this.classify(file, fields);
       if (note) (note.done ? closed : notes).push(note);
     }
-    this.scan = { notes, tasks, closed, intents };
+    this.scan = { notes, tasks, closed, intents, intentTasks };
     return this.scan;
   }
 
@@ -3751,7 +3792,7 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   calendarStatus(task, state) {
-    if (!task?.file || !task.uid || !task.date || !task.at || task.isProject
+    if (!task?.file || !task.uid || !task.date || !task.at || task.isProject || task.intent
       || [STATUS_DONE, STATUS_CANCELLED, STATUS_SOMEDAY].includes(task.status)) return null;
     if (!state?.enabled) return "off";
     if (state.contract !== CALENDAR_CONTRACT) return "pending";
@@ -3774,10 +3815,11 @@ module.exports = class FocusTasks extends Plugin {
   // its identity and never changes; the file name is only a readable label.
   taskOf(file, fields = null, cached = null) {
     const folder = this.tasksFolder;
-    if (folder && folder !== "/" && !file.path.startsWith(folder + "/")) return null;
     const cache = cached || this.app.metadataCache.getFileCache(file);
     const fm = fields || cache?.frontmatter;
-    if (!fm || !this.isTaskType(fm.type)) return null;
+    const intent = this.isIntentEntry(fm);
+    if (!fm || (!intent && !this.isTaskType(fm.type))) return null;
+    if (!intent && folder && folder !== "/" && !file.path.startsWith(folder + "/")) return null;
     // Archived (the `archived` tag, as TaskNotes marks it): history, not a task — the focus never
     // reads it, whatever folder it lies in.
     if (isArchived(fm.tags)) return null;
@@ -3789,21 +3831,25 @@ module.exports = class FocusTasks extends Plugin {
       return typeof one === "string" ? (one.match(/\[\[([^\]|#]+)/)?.[1] || one).trim() : null;
     };
     // «Marathon», «Areas/Marathon» or «Marathon|alias» all name the same project note
-    const project = link(fm.projects);
+    const project = link(intent ? fm.intentList : fm.projects);
     return { file, uid: fm.uid ? String(fm.uid) : file.path, text: String(fm.title ?? "").trim() || file.basename,
       status: String(fm.status ?? STATUS_OPEN).trim().toLowerCase(), date: day(fm.scheduled), at: timeOf(fm.scheduled), due: day(fm.due),
       doneDate: day(fm.completedDate), priority: fm.priority || null,
-      area: fm.area ? String(fm.area) : null, project, source: link(fm.source), described };
+      area: (intent ? fm.intentArea : fm.area) ? String(intent ? fm.intentArea : fm.area) : null, project, source: link(fm.source), described,
+      ...(intent ? { intent: true, listUid: fm.intentListUid || null } : {}) };
   }
 
   tasks() { return this.read().tasks; }
+  allTasks() { return [...this.tasks(), ...this.read().intentTasks]; }
+  isIntentEntry(fm) { return String(fm?.type || "").toLowerCase() === INTENT_TYPE && typeof fm.intentList === "string" && !!fm.intentList.match(/^\[\[[^\]]+\]\]$/); }
 
   intentOf(file, fields = null) {
     const fm = fields || this.app.metadataCache.getFileCache(file)?.frontmatter;
-    if (String(fm?.type || "").trim().toLowerCase() !== INTENT_TYPE) return null;
+    const type = String(fm?.type || "").trim().toLowerCase();
+    if (![INTENT_TYPE, INTENT_LIST_TYPE].includes(type) || this.isIntentEntry(fm)) return null;
     const source = typeof fm.source === "string" && fm.source.match(/^\[\[([^\]|#]+)/)?.[1];
     return { file, uid: String(fm.uid || file.path), title: String(fm.title || file.basename), area: typeof fm.intentArea === "string" ? fm.intentArea : null, boundArea: JSON.stringify(fm.intentArea || null),
-      sourceFile: source ? this.app.metadataCache.getFirstLinkpathDest(source, file.path) : null };
+      sourceFile: source ? this.app.metadataCache.getFirstLinkpathDest(source, file.path) : null, isList: type === INTENT_LIST_TYPE };
   }
 
   todoEligible(file, fm = {}) {
@@ -4115,6 +4161,186 @@ module.exports = class FocusTasks extends Plugin {
 
   // --- tasks --------------------------------------------------------------------------------
 
+  // Intent lists share task rows and mutations. Their entries stay outside the actionable queue.
+  parseIntentListBody(body) {
+    const lines = body.replace(/\r\n/g, "\n").split("\n"), candidates = [];
+    let fence = null;
+    for (let i = 0; i < lines.length; i++) {
+      const f = lines[i].match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+      if (f) {
+        if (!fence) fence = { char: f[1][0], length: f[1].length };
+        else if (f[1][0] === fence.char && f[1].length >= fence.length && !f[2].trim()) fence = null;
+        continue;
+      }
+      const bullet = lines[i].match(/^( {0,3})(?:[-+*]|\d+[.)])\s+\S/);
+      if (!fence && bullet) candidates.push({ index: i, indent: bullet[1].length });
+    }
+    const indent = Math.min(...candidates.map(x=>x.indent)), starts = candidates.filter(x=>x.indent===indent).map(x=>x.index);
+    if (!starts.length) {
+      const first = lines.findIndex(s => s.trim());
+      if (first < 0) return { description: "", items: [] };
+      return { description: "", items: [{ text: lines[first].trim(), body: lines.slice(first + 1).join("\n").trim(), done: false }] };
+    }
+    const items = starts.map((start, i) => {
+      let text = lines[start].replace(/^ {0,3}(?:[-+*]|\d+[.)])\s+/, ""), done = false;
+      const box = text.match(/^\[([ xX])\]\s+/);
+      if (box) { done = box[1].toLowerCase() === "x"; text = text.slice(box[0].length); }
+      else if (/^~~[^\n]+~~\s*$/.test(text)) { done = true; text = text.trim().slice(2, -2); }
+      return { text, body: lines.slice(start + 1, starts[i + 1] ?? lines.length).join("\n").trim(), done };
+    });
+    return { description: lines.slice(0, starts[0]).join("\n").trim(), items };
+  }
+
+  intentEntries(list) {
+    return this.read().intentTasks.filter(x => x.listUid === list.uid || (!x.listUid && this.projectFile(x)?.path === list.file.path));
+  }
+
+  async createIntentList(title, area, tx = null) {
+    if (!this.notes().some(n => !n.project && n.area === area)) throw Error("intent-invalid");
+    return this.track(t("aNew"), [], async active => {
+      const card = await this.createIntent(title, "", area, active);
+      await this.frontOwned(card.file, fm => { fm.type = INTENT_LIST_TYPE; fm.intentListVersion = 1; }, active);
+      this.forgetScan();
+      return { ...card, isList: true };
+    }, tx);
+  }
+
+  newIntentList(area) {
+    new NameModal(this.app, t("newIntentList"), t("intentTitle"), async title => {
+      await this.createIntentList(title, area.name);
+      await this.setOpen("intents:" + area.name, true); this.refresh();
+    }).open();
+  }
+
+  async convertIntentCard(card, area) {
+    if (!this.notes().some(n => !n.project && n.area === area)) throw Error("intent-invalid");
+    return this.track(t("aMove"), [card.file], async tx => {
+      const raw = await this.app.vault.read(card.file), [front, body] = splitNote(raw);
+      const fm = parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, ""));
+      if (fm.type === INTENT_LIST_TYPE && fm.uid === card.uid && fm.intentListVersion === 1) return { list: this.intentOf(card.file, fm), entries: this.intentEntries(card), reused: true };
+      if (raw !== card.raw || fm.type !== INTENT_TYPE || fm.uid !== card.uid || fm.intentList) throw Error("intent-conflict");
+      const parsed = this.parseIntentListBody(body), entries = [];
+      for (let i = 0; i < parsed.items.length; i++) {
+        const item = parsed.items[i], key = card.uid + ":" + i;
+        const matches = this.read().intentTasks.filter(x => this.app.metadataCache.getFileCache(x.file)?.frontmatter?.intentItemImportKey === key);
+        if (matches.length > 1) throw Error("intent-conflict");
+        let entry = matches[0];
+        if (entry) {
+          if (entry.text !== item.text || splitNote(await this.app.vault.read(entry.file))[1].trim() !== item.body || entry.listUid !== card.uid) throw Error("intent-conflict");
+        } else {
+          entry = await this.createTask(item.text, { area, project: card.file.basename, projectFile: card.file, intentList: true, listUid: card.uid, importing: true }, null, tx);
+          await this.frontOwned(entry.file, fields => {
+            fields.intentItemImportKey = key;
+            if (item.done) fields.status = STATUS_DONE;
+            else fields.priority = "low";
+          }, tx);
+          await this.processOwned(entry.file, text => splitNote(text)[0] + "\n" + item.body, tx);
+          const check = await this.app.vault.read(entry.file);
+          const fields = parseYaml(splitNote(check)[0].replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, ""));
+          if (fields.uid !== entry.uid || fields.intentListUid !== card.uid || fields.title !== item.text || splitNote(check)[1] !== item.body) throw Error("intent-conflict");
+        }
+        entries.push(entry); this.forgetScan();
+      }
+      await this.processOwned(card.file, current => {
+        if (current !== raw) throw Error("intent-conflict");
+        const next = { ...fm, type: INTENT_LIST_TYPE, intentArea: area, intentListVersion: 1 };
+        const old = this.notes().find(n => !n.project && n.area === card.area)?.file;
+        const target = this.notes().find(n => !n.project && n.area === area).file;
+        next.parents = [...new Set([...(Array.isArray(fm.parents) ? fm.parents : []).filter(link => !old || this.app.metadataCache.getFirstLinkpathDest(String(link).replace(/^\[\[|\]\]$/g, ""), card.file.path)?.path !== old.path), "[[" + target.path.replace(/\.md$/, "") + "]]"])];
+        return "---\n" + stringifyYaml(next) + "---\n" + parsed.description;
+      }, tx);
+      this.data.order.tasks["intent:" + card.uid] = entries.map(x => x.uid);
+      await this.saveAll(); this.forgetScan();
+      return { list: { ...card, area, isList: true }, entries };
+    });
+  }
+
+  async renameIntentList(list, title) {
+    return this.track(t("aRename"), [list.file], async tx => {
+      await this.frontOwned(list.file, fm => {
+        if (fm.type !== INTENT_LIST_TYPE || fm.uid !== list.uid) throw Error("intent-conflict");
+        fm.title = title;
+      }, tx);
+      this.forgetScan(); this.refresh(); return true;
+    });
+  }
+
+  async moveIntentList(list, area, drop = null, shown = {}, tx = null) {
+    const entries = this.intentEntries(list), target = this.notes().find(n => !n.project && n.area === area)?.file;
+    if (!target) return false;
+    return this.track(t("aMove"), [list.file, ...entries.map(x => x.file)], async tx => {
+      for (const entry of entries) {
+        const live = await this.liveTask(entry);
+        if (!live || live.task.listUid !== list.uid) throw Error("intent-conflict");
+      }
+      await this.frontOwned(list.file, fm => {
+        if (fm.type !== INTENT_LIST_TYPE || fm.uid !== list.uid) throw Error("intent-conflict");
+        const old = this.notes().find(n => !n.project && n.area === fm.intentArea)?.file;
+        fm.parents = [...new Set([...(Array.isArray(fm.parents) ? fm.parents : []).filter(link => !old || this.app.metadataCache.getFirstLinkpathDest(String(link).replace(/^\[\[|\]\]$/g, ""), list.file.path)?.path !== old.path), "[[" + target.path.replace(/\.md$/, "") + "]]"])];
+        fm.intentArea = area;
+      }, tx);
+      for (const entry of entries) await this.frontOwned(entry.file, fm => {
+        if (!this.isIntentEntry(fm) || fm.uid !== entry.uid || fm.intentListUid !== list.uid) throw Error("intent-conflict");
+        fm.intentArea = area;
+      }, tx);
+      const key = "intent-lists:" + area, alive = this.read().intents.filter(x => x.isList && x.area === area).map(x => x.uid);
+      const order = [...new Set([...(this.data.order.tasks[key] || []), ...(shown[key] || []), ...alive, list.uid])].filter(uid => uid !== list.uid && (alive.includes(uid)));
+      const targetUid = drop?.target?.project?.intentList ? drop.target.project.uid : null;
+      const at = targetUid ? order.indexOf(targetUid) : -1;
+      order.splice(at < 0 ? order.length : at + (drop.after ? 1 : 0), 0, list.uid);
+      this.data.order.tasks[key] = order;
+      await this.setOpen("intents:" + area, true); await this.saveAll(); this.forgetScan(); this.refresh(); return true;
+    }, tx);
+  }
+
+  async promoteIntentTasks(tasks, day = null) {
+    return this.track(t("aMove"), tasks.map(x=>x.file), async tx => {
+      for(const task of tasks)if(!await this.promoteIntentTask(task,day,tx))return false;
+      return true;
+    });
+  }
+
+  async promoteIntentTask(task, day = null, tx = null) {
+    if (!task.intent) return false;
+    return this.track(t("aMove"), [task.file], async active => {
+      const live=await this.liveTask(task);if(!live)return false;
+      if(!task.file.path.startsWith(this.tasksFolder+"/")) {
+        await this.ensureFolder(this.tasksFolder);
+        const name=await this.freeName(fileName(task.text).slice(0,60)||t("newTask"));
+        await this.renameOwned(task.file,normalizePath(this.tasksFolder+"/"+name+".md"),active);
+      }
+      const fields = { type: TASK_TYPE, area: task.area, projects: null, intentList: null, intentListUid: null, intentArea: null, intentItemImportKey: null,
+        status: STATUS_OPEN, completedDate: null, scheduled: day ? day + (live.task.at ? "T" + live.task.at : "") : null, source: "[[" + task.project + "]]" };
+      const ok = await this.setFields(task, fields);
+      if (ok) { delete task.intent; delete task.listUid; Object.assign(task, { project: null, date: day, at: day ? live.task.at : null, status: STATUS_OPEN }); }
+      this.refresh(); return ok;
+    }, tx);
+  }
+
+  async deleteIntentList(list) {
+    const entries = this.intentEntries(list), snapshots = new Map();
+    for (const file of [list.file, ...entries.map(x => x.file)]) snapshots.set(file, await this.app.vault.read(file));
+    const fields=raw=>parseYaml(splitNote(raw)[0].replace(/^\uFEFF?---\r?\n/,"").replace(/\r?\n---$/,""));
+    const own=fields(snapshots.get(list.file));
+    if(this.app.vault.getAbstractFileByPath(list.file.path)!==list.file || own.type!==INTENT_LIST_TYPE || own.uid!==list.uid)throw Error("intent-conflict");
+    for(const entry of entries) {
+      const fm=fields(snapshots.get(entry.file));
+      if(!this.isIntentEntry(fm)||fm.uid!==entry.uid||fm.intentListUid!==list.uid)throw Error("intent-conflict");
+    }
+    new ConfirmModal(this.app, t("deleteIntentList"), t("deleteIntentListDesc"), t("deleteIntentList"), async () => {
+      try {
+        await this.undoable(t("deleted", list.title), [...snapshots.keys()], async tx => {
+          const current = this.intentEntries(list);
+          if (current.map(x => x.uid).sort().join() !== entries.map(x => x.uid).sort().join()) throw Error("intent-conflict");
+          for (const [file, raw] of snapshots) if (this.app.vault.getAbstractFileByPath(file.path) !== file || await this.app.vault.read(file) !== raw) throw Error("intent-conflict");
+          for (const entry of entries) await this.trashOwned(entry.file, tx, snapshots.get(entry.file));
+          await this.trashOwned(list.file, tx, snapshots.get(list.file));
+          this.forgetScan(); this.refresh();
+        });
+      } catch (e) { new Notice(t("intentChanged")); }
+    }).open();
+  }
+
   // --- tasks: each one is a note ------------------------------------------------------------
 
   // Writes fields into the task's note; a null value removes the key. The note is found by its path:
@@ -4162,7 +4388,7 @@ module.exports = class FocusTasks extends Plugin {
       await this.frontOwned(file, (fm) => {
         // The row was read a moment ago; another note may have taken this path since (Sync, a script,
         // the user). Writing into it would change the wrong task — or turn an ordinary note into one.
-        if (!this.isTaskType(fm.type)) { wrong = true; return false; }
+        if ((task.intent ? !this.isIntentEntry(fm) : !this.isTaskType(fm.type))) { wrong = true; return false; }
         if (fm.uid && task.uid && String(fm.uid) !== task.uid) { wrong = true; return false; }
         if (!fm.uid && task.uid && task.uid !== task.file.path) { wrong = true; return false; }
         if (!fm.uid) fm.uid = uid = newUid();  // a note written by another plugin gets its identity here
@@ -4273,13 +4499,14 @@ module.exports = class FocusTasks extends Plugin {
 
   async renameNow(task, text, tx = null) {
     const name = fileName(text).slice(0, 60).trim();
-    let file = name && name !== task.file.basename ? await this.freeName(name) : task.file.basename;
+    const base = this.taskName(text, name);
+    let file = base && base !== task.file.basename ? await this.freeName(base, task.file.parent?.path || this.tasksFolder) : task.file.basename;
     // the file name may be cut or taken: then the whole text lives in `title`
     // Keep the full text on disk before renaming: a failed rename must not discard what was typed.
     const ok = await this.setFields(task, { title: text });
     if (!ok) return false;  // the note is not the one this row was read from: leave its name alone too
     if (file !== task.file.basename) {
-      const path = normalizePath(`${this.tasksFolder}/${file}.md`);
+      const path = normalizePath(`${task.file.parent?.path || this.tasksFolder}/${file}.md`);
       await this.renameOwned(task.file, path, tx);
       this.forgetScan();
       // A step named like its project had a link Obsidian resolved to the step itself, and has just
@@ -4287,7 +4514,8 @@ module.exports = class FocusTasks extends Plugin {
       const project = task.project ? this.projectFile(task) : null;
       if (project) {
         const link = this.projectLink(project, task.file.path);
-        if (link !== `[[${task.project}]]`) await this.setFields(task, { projects: [link] });
+        if (task.intent) await this.setFields(task, { intentList: "[[" + project.path.replace(/\.md$/, "") + "]]" });
+        else if (link !== `[[${task.project}]]`) await this.setFields(task, { projects: [link] });
       }
     }
     if (file === text) await this.setFields(task, { title: null });
@@ -4315,6 +4543,11 @@ module.exports = class FocusTasks extends Plugin {
       const all = [...new Set(this.notes().map((n) => n.area))].sort((a, b) => rank(a) - rank(b) || cmp(bare(a), bare(b)));
       this.data.order.areas = place(all, item.area.name, drop.target.area.name, drop.after);
     } else if (item.type === "project") {
+      if(item.project.intentList) {
+        const tg=drop.target, area=tg.task?.area||tg.area?.name;
+        return this.moveIntentList(item.project,area,drop,shown.tasks||{},tx);
+      }
+      if(drop.target.project?.intentList||drop.target.task?.intent)return false;
       // A project is a row of its area's list: it takes a seat before or after the row it was dropped
       // on, or the last one when dropped on an area's title. Another area's list means moving house.
       const tg = drop.target, me = "p:" + item.project.file.path;
@@ -4375,7 +4608,7 @@ module.exports = class FocusTasks extends Plugin {
     const targetList = !tg ? null : tg.type === "task" ? listOf(tg.task) : "area:" + tg.area.name;
     // Tasks that no longer exist are dropped from the saved order here: the file is merged key by key
     // between devices, so a list that only ever grows would carry dead ids forever.
-    const alive = new Set([...this.tasks().map((x) => x.uid), ...this.notes().filter((n) => n.project).map((n) => "p:" + n.file.path)]);
+    const alive = new Set([...this.allTasks().map((x) => x.uid), ...this.notes().filter((n) => n.project).map((n) => "p:" + n.file.path)]);
     const saved = key.startsWith("area:") ? this.areaSeats(key.slice(5)) : this.data.order.tasks[key] || [];
     const list = [...new Set([...saved, ...(shown[key] || []), ...moved])]
       .filter((k) => !moved.includes(k) && alive.has(k));
@@ -4395,30 +4628,34 @@ module.exports = class FocusTasks extends Plugin {
     const area = tg.type === "task" ? tg.task.area : tg.area.name;
     // into a project's row: its step; by a project's row: a task of the area, like the row itself
     const file = drop.into ? (tg.type === "project" ? tg.project.file : null) : (tg.type === "task" && tg.task.project ? this.projectFile(tg.task) : null);
-    const project = file ? file.basename : null;
+    const container = file && this.intentOf(file), intentList = container?.isList ? container : null;
+    const project = intentList ? file.path.replace(/\.md$/, "") : file ? file.basename : null;
     for (const task of tasks) {
       // the link is written the way Obsidian writes links, so two notes of the same name stay apart
       const link = file ? this.app.metadataCache.fileToLinktext(file, task.file.path) : null;
-      const fields = { area, projects: link ? [`[[${link}]]`] : null };
+      const fields = intentList ? {type:INTENT_TYPE,intentArea:area,intentList:"[["+project+"]]",intentListUid:intentList.uid,area:null,projects:null}
+        : {area,projects:link?[`[[${link}]]`]:null,...(task.intent?{type:TASK_TYPE,intentArea:null,intentList:null,intentListUid:null,intentItemImportKey:null}: {})};
       // Dropped into the pile, a task of today's list loses its day (it was today's by a date you
       // cannot see); dropped among today's rows, a task from the pile gets today. A day still ahead
       // moved within the pile is kept, and what waits in other hands keeps its day to come back.
-      if (task.status !== STATUS_WAITING) {
+      if (!intentList && task.status !== STATUS_WAITING) {
         if (drop.pile === "ahead" && inFocus(task)) fields.scheduled = null;
         if (drop.pile === "focus" && !inFocus(task)) fields.scheduled = today();
       }
       const ok = await this.setFields(task, fields);
       if (ok) {
         Object.assign(task, { area, project });
+        if(intentList)Object.assign(task,{intent:true,listUid:intentList.uid});else {delete task.intent;delete task.listUid;}
         if ("scheduled" in fields) Object.assign(task, { date: fields.scheduled, at: null });
       }
     }
     // Dropped into a project, but dated later than today? Its row hides behind the area's ⏳ — open
     // it, or the work you just moved vanishes from the screen.
-    if (file && tasks.some((x) => !inFocus(x))) {
+    if (file && !intentList && tasks.some((x) => !inFocus(x))) {
       const key = "future:" + area;
       if (!this.isShown(key, true)) await this.toggleShown(key, true);
     }
+    if(intentList)await this.setOpen("intents:"+area,true);
     await this.reorder(tasks, drop, shown);
     this.refresh();
   }
@@ -4809,7 +5046,7 @@ module.exports = class FocusTasks extends Plugin {
       const [front] = splitNote(text);
       const fm = front ? parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, "")) : null;
       const fresh = fm && this.taskOf(file, fm);
-      if (!fresh || fresh.uid !== task.uid) { new Notice(t("changed")); return null; }
+      if (!fresh || fresh.uid !== task.uid || !!fresh.intent !== !!task.intent) { new Notice(t("changed")); return null; }
       return { file, task: fresh, text };
     } catch (e) {
       new Notice(t("changed"));
@@ -4867,7 +5104,7 @@ module.exports = class FocusTasks extends Plugin {
         const live = await this.liveTask(stale);
         if (!live) continue;
         const task = live.task;
-        const name = await this.freeName(live.file.basename);
+        const name = await this.freeName(live.file.basename, live.file.parent?.path || this.tasksFolder);
         const path = normalizePath(`${live.file.parent?.path || this.tasksFolder}/${name}.md`);
         const file = await this.createOwned(path, live.text, tx);
         const uid = newUid();
@@ -4892,10 +5129,16 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // A free file name in the tasks folder.
-  async freeName(base) {
+  async freeName(base, folder = this.tasksFolder) {
     let name = base, i = 2;
-    while (this.app.vault.getAbstractFileByPath(normalizePath(`${this.tasksFolder}/${name}.md`))) name = `${base} (${i++})`;
+    while (this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/${name}.md`))) name = `${base} (${i++})`;
     return name;
+  }
+
+  // A row named only by a wiki link must not create the link's own destination file.
+  taskName(text, base) {
+    const links = [...text.matchAll(/\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g)].map(m => m[1].split("#")[0].replace(/\.md$/, "").split("/").pop());
+    return links.includes(base) ? base + " (2)" : base;
   }
 
   // A new task note. `target`: {area, project (basename or null)}; `day` — the focus date.
@@ -4905,10 +5148,18 @@ module.exports = class FocusTasks extends Plugin {
 
   async createNow(text, target, day, tx = null) {
     await this.ensureFolder(this.tasksFolder);
-    const name = await this.freeName(fileName(text).slice(0, 60) || t("newTask"));
-    const front = ["---", `uid: ${newUid()}`, `type: ${TASK_TYPE}`, `status: ${STATUS_OPEN}`];
-    if (target.area) front.push(`area: ${JSON.stringify(target.area)}`);
-    if (target.project) {
+    const base = fileName(text).slice(0, 60) || t("newTask");
+    const name = await this.freeName(this.taskName(text, base));
+    if(target.intentList) {
+      if(!target.projectFile || this.app.vault.getAbstractFileByPath(target.projectFile.path)!==target.projectFile)throw Error("intent-conflict");
+      const raw=await this.app.vault.read(target.projectFile),fm=parseYaml(splitNote(raw)[0].replace(/^\uFEFF?---\r?\n/,"").replace(/\r?\n---$/,""));
+      if(!fm || ![INTENT_LIST_TYPE,...(target.importing?[INTENT_TYPE]:[])].includes(fm.type) || fm.uid!==target.listUid || (!target.importing && fm.intentArea!==target.area))throw Error("intent-conflict");
+    }
+    const front = ["---", `uid: ${newUid()}`, `type: ${target.intentList ? INTENT_TYPE : TASK_TYPE}`, `status: ${STATUS_OPEN}`];
+    if (target.area) front.push(`${target.intentList ? "intentArea" : "area"}: ${JSON.stringify(target.area)}`);
+    if(target.intentList) {
+      front.push(`intentList: ${JSON.stringify("[[" + target.projectFile.path.replace(/\.md$/, "") + "]]")}`,`intentListUid: ${JSON.stringify(target.listUid)}`);
+    } else if (target.project) {
       // the page and the rows know which note their project is; a name alone is looked up
       const path = normalizePath(`${this.tasksFolder}/${name}.md`);
       const note = (target.projectFile && { file: target.projectFile })
@@ -4917,16 +5168,20 @@ module.exports = class FocusTasks extends Plugin {
       front.push("projects:", `  - ${JSON.stringify(note ? this.projectLink(note.file, path) : `[[${target.project}]]`)}`);
     }
     if (day) front.push(`scheduled: ${day}`);
-    if (name !== text) front.push(`title: ${JSON.stringify(text)}`);
+    if (target.intentList || name !== text) front.push(`title: ${JSON.stringify(text)}`);
     front.push("---", "");
     const path = normalizePath(`${this.tasksFolder}/${name}.md`);
     const file = await this.createOwned(path, front.join("\n"), tx);
     this.lastTarget = target;
-    return this.taskOf(file) || { file, uid: front[1].slice(5), text, status: STATUS_OPEN, date: day || null, area: target.area, project: target.project };
+    return this.taskOf(file) || { file, uid: front[1].slice(5), text, status: STATUS_OPEN, date: day || null, area: target.area, project: target.intentList ? target.projectFile.path.replace(/\.md$/, "") : target.project, ...(target.intentList ? {intent:true,listUid:target.listUid}: {}) };
   }
 
   // Puts a task where the user picks: an area, or a project inside it.
   placeTask(task) {
+    if(task.intent) {
+      const lists=this.read().intents.filter(x=>x.isList);
+      return new TargetModal(this.app,lists.map(x=>({label:`📔 ${x.area} › ${x.title}`,list:x})),tg=>this.moveTasks([task],{into:true,pile:"intents",target:{type:"project",area:{name:tg.list.area},project:{...tg.list,intentList:true}}}),false).open();
+    }
     new TargetModal(this.app, this.targets(), async (tg) => {
       if (tg.create) { if (!await this.createArea(tg.create)) return; tg = { area: tg.create, project: null }; }
       const ok = await this.setFields(task, { area: tg.area, projects: tg.project ? [`[[${tg.project}]]`] : null });
@@ -5007,7 +5262,7 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   async insertAfter(anchor, text, day) {
-    const task = await this.createTask(text, { area: anchor.area, project: anchor.project }, day);
+    const task = await this.createTask(text, { area: anchor.area, project: anchor.project, ...(anchor.intent ? { intentList: true, listUid: anchor.listUid, projectFile: this.projectFile(anchor) } : {}) }, day);
     // Enter under a row means «here», not «somewhere below»: without a seat of its own the new task
     // is sorted by date and name and usually lands at the bottom of the list.
     if (task) await this.seatTask(task, anchor);
@@ -5021,7 +5276,7 @@ module.exports = class FocusTasks extends Plugin {
     // Everything in the list, ticked ones included: a task that loses its seat when it is checked
     // off would jump somewhere else the moment the box is unchecked. An area's list also seats its
     // projects («p:…»): those keep their places.
-    const mine = this.tasks()
+    const mine = this.allTasks()
       .filter((x) => listOf(x) === key)
       .sort(this.rowOrder())
       .map((x) => x.uid)
@@ -5036,7 +5291,7 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   async addLine(target, text, day) {
-    await this.createTask(text, { area: target.area ?? target.file?.parent?.name, project: target.project }, day);
+    await this.createTask(text, { ...target, area: target.area ?? target.file?.parent?.name }, day);
   }
 
   targets() {
@@ -5392,6 +5647,13 @@ module.exports = class FocusTasks extends Plugin {
   // share a name, so Obsidian resolves it from the task's own note first, and an area of its own
   // decides the rest.
   projectFile(task, candidates = null) {
+    if(task.intent) {
+      const lists=this.read().intents;
+      const byUid=lists.find(x=>x.uid===task.listUid);
+      if(byUid)return byUid.file;
+      const file=this.app.metadataCache.getFirstLinkpathDest(task.project||"",task.file.path);
+      return file && this.intentOf(file)?.isList ? file : null;
+    }
     if (!task.project) return null;
     const found = this.app.metadataCache.getFirstLinkpathDest(task.project, task.file.path);
     const list = candidates || this.notes().filter((n) => n.project);

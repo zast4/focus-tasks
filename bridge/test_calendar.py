@@ -232,14 +232,16 @@ class ScanTests(unittest.TestCase):
 
     def test_ideas_never_create_or_block_task_reminders(self):
         self.write()
-        idea = self.vault / "Задачи/Idea.md"
-        idea.write_text('---\ntype: замысел\nuid: one\nintentArea: Work\nscheduled: 2030-01-04T16:30\n---\nPossibilities\n')
-        before = idea.read_bytes()
-        result = scan(self.vault)
-        self.assertEqual(set(result.desired), {"one"})
-        self.assertEqual(result.duplicates, set())
-        self.assertEqual(result.errors, [])
-        self.assertEqual(idea.read_bytes(), before)
+        for kind, extra in [("замысел", ""), ("список замыслов", ""), ("замысел", "intentList: '[[List]]'\nintentListUid: list-one\n")]:
+            with self.subTest(kind=kind, entry=bool(extra)):
+                idea = self.vault / "Задачи/Idea.md"
+                idea.write_text('---\ntype: '+kind+'\nuid: one\nintentArea: Work\n'+extra+'scheduled: 2030-01-04T16:30\n---\nPossibilities\n')
+                before = idea.read_bytes()
+                result = scan(self.vault)
+                self.assertEqual(set(result.desired), {"one"})
+                self.assertEqual(result.duplicates, set())
+                self.assertEqual(result.errors, [])
+                self.assertEqual(idea.read_bytes(), before)
 
     def test_timezone_offset_is_preserved(self):
         self.write()

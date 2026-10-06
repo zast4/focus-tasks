@@ -8,7 +8,7 @@
     "test:tasks": "node test/e2e.mjs --with-tasks",
     "test:tasknotes": "node test/e2e.mjs --with-tasknotes",
     "test:model": "node test/model.mjs",
-    "test:ideas": "node --test test/intents.mjs",
+    "test:ideas": "node --test test/intents.mjs test/intent-lists.mjs",
     "test:audit": "node --test test/audit.mjs test/archive-repair.mjs test/delivery.mjs test/vault-audit.mjs",
     "test:stress": "node --test test/stress.mjs",
     "test:mobile": "node test/mobile.mjs",

@@ -204,7 +204,7 @@ step("opens with an onboarding and the area buttons", async () => {
   await toPane(); // an optional companion can open its own startup tab
   await until(() => page.eval(`return !!document.querySelector('.focus-tasks-pane .ft-onboarding')`), "onboarding");
   const foot = await page.eval(`return __ft.all('.ft-foot-button', __ft.view()).map((b) => b.textContent.trim())`);
-  if (J(foot) !== J(["Ideas", "+ Area"])) throw new Error("footer: " + J(foot));
+  if (J(foot) !== J(["+ Area"])) throw new Error("footer: " + J(foot));
   if (!(await page.eval(`return !!document.querySelector('.side-dock-ribbon-action[aria-label="Open Focus"]')`))) throw new Error("no ribbon icon");
 });
 
@@ -2483,7 +2483,7 @@ step("commands are registered", async () => {
 
 // --- run ------------------------------------------------------------------------------------
 
-step("ideas are free notes, derive tasks, search by body and retain failed drafts", async () => { await checkIntentsUI(page); });
+step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
 step("row controls share first-line centres in pane, area and project views", async () => {
   fs.mkdirSync(SHOTS,{recursive:true});
   await checkRowAlignment(page,TODAY,TOMORROW,SHOTS);
