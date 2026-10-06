@@ -116,6 +116,7 @@ const STRINGS = {
     projectPlaceholder: "Project name", create: "Create", cancel: "Cancel", next: "Next", ok: "OK",
     deleteProjectQ: "Delete project “{0}”?", deleteProjectText: "Its note and its {0} tasks go to the trash (Undo in the notice). A linked note stays.",
     deleteAreaQ: "Delete area {0}?", deleteAreaText: "The area, its {0} projects and its {1} tasks go to the trash. Linked notes stay.",
+    deleteAreaIdeasText: "The area, its {0} projects, {1} tasks, {2} idea lists and their {3} entries go to the trash. Linked source notes stay.",
     taskIn: "Task added to “{0}”", where: "Where to: a project or an area (type a new name to create an area)",
     newAreaOption: "+ New area “{0}”", looseTasks: "(loose tasks)", whatToDo: "What to do",
     pickNote: "Pick a note", cmdToggleAll: "Show all / focus only", cmdFoldAll: "Collapse all",
@@ -215,6 +216,7 @@ const STRINGS = {
     projectPlaceholder: "Название проекта", create: "Создать", cancel: "Отмена", next: "Дальше", ok: "Готово",
     deleteProjectQ: "Удалить проект «{0}»?", deleteProjectText: "Заметка проекта и его задачи ({0}) уйдут в корзину (вернуть - в уведомлении). Привязанная заметка останется.",
     deleteAreaQ: "Удалить область {0}?", deleteAreaText: "В корзину уйдут область, её проекты ({0}) и её задачи ({1}). Привязанные заметки останутся.",
+    deleteAreaIdeasText: "В корзину уйдут область, её проекты ({0}), задачи ({1}), списки замыслов ({2}) и их записи ({3}). Привязанные заметки-источники останутся.",
     taskIn: "Задача в «{0}»", where: "Куда: проект или область (новое имя — новая область)",
     newAreaOption: "＋ Новая область «{0}»", looseTasks: "(разовые задачи)", whatToDo: "Что сделать",
     pickNote: "Выбери заметку", cmdToggleAll: "Показать всё / только фокус", cmdFoldAll: "Свернуть всё",
@@ -1078,6 +1080,7 @@ class FocusRenderer extends MarkdownRenderChild {
   async focusOnly(areas, rest) {
     this.plugin.setIntentsShown(false);
     const p = this.plugin;
+    for (const key of Object.keys(p.data.opened)) if (key.startsWith("intents:")) delete p.data.opened[key];
     for (const a of areas) {
       delete p.data.folded["area:" + a.name];
       delete p.data.opened["future:" + a.name];
@@ -4511,11 +4514,12 @@ module.exports = class FocusTasks extends Plugin {
       this.forgetScan();
       // A step named like its project had a link Obsidian resolved to the step itself, and has just
       // rewritten to the step's new path: it is written back to the project, by path if need be.
-      const project = task.project ? this.projectFile(task) : null;
+      // Private entries store a full list path; renaming cannot turn it into a self-link.
+      // Leave current membership untouched if another device moved the entry meanwhile.
+      const project = !task.intent && task.project ? this.projectFile(task) : null;
       if (project) {
         const link = this.projectLink(project, task.file.path);
-        if (task.intent) await this.setFields(task, { intentList: "[[" + project.path.replace(/\.md$/, "") + "]]" });
-        else if (link !== `[[${task.project}]]`) await this.setFields(task, { projects: [link] });
+        if (link !== `[[${task.project}]]`) await this.setFields(task, { projects: [link] });
       }
     }
     if (file === text) await this.setFields(task, { title: null });
@@ -5621,11 +5625,26 @@ module.exports = class FocusTasks extends Plugin {
   // The area, its projects and its tasks all go to the trash; undo brings all of them back.
   async removeArea(area) {
     const files = this.notes().filter((n) => n.area === area.name).map((n) => n.file);
-    const mine = this.tasks().filter((x) => x.area === area.name);
-    await this.undoable(t("areaDeleted", area.name), [...mine.map((x) => x.file), ...files], async tx => {
+    const intents = this.read().intents.filter(x => x.isList && x.area === area.name);
+    const mine = this.allTasks().filter((x) => x.area === area.name);
+    await this.undoable(t("areaDeleted", area.name), [...mine.map((x) => x.file), ...intents.map(x=>x.file), ...files], async tx => {
+      const sources = new Map();
+      for (const list of intents) {
+        const raw = await this.app.vault.read(list.file), front = splitNote(raw)[0];
+        const fm = parseYaml(front.replace(/^\uFEFF?---\r?\n/, "").replace(/\r?\n---$/, ""));
+        if (this.app.vault.getAbstractFileByPath(list.file.path)!==list.file || fm?.uid!==list.uid || fm.type!==(list.isList ? INTENT_LIST_TYPE : INTENT_TYPE) || fm.intentArea!==area.name) throw Error("intent-conflict");
+        sources.set(list.file,raw);
+      }
       for (const task of mine) {
         const live = await this.liveTask(task);
         if (live?.task.area === area.name) await this.trashOwned(live.file, tx);
+      }
+      // Do this before removing the area itself: a conflicting source leaves the area accessible.
+      for (const list of intents) {
+        await this.trashOwned(list.file,tx,sources.get(list.file));
+        await this.forget("steps:"+list.file.path);
+        await this.forget("intent-done:"+list.uid);
+        delete this.data.order.tasks["intent:"+list.uid];
       }
       for (const f of files) {
         if (this.classify(f)?.area !== area.name) continue;
@@ -5634,12 +5653,17 @@ module.exports = class FocusTasks extends Plugin {
         await this.forget("steps:" + f.path);
       }
       await this.forget("area:" + area.name);
+      await this.forget("intents:" + area.name);
+      delete this.data.order.tasks["intent-lists:"+area.name];
+      await this.saveAll();
     });
   }
 
   deleteArea(area) {
     const mine = this.tasks().filter((x) => x.area === area.name);
-    new ConfirmModal(this.app, t("deleteAreaQ", area.name), t("deleteAreaText", area.projects.length, mine.length), t("delete"),
+    const lists=this.read().intents.filter(x=>x.isList&&x.area===area.name), entries=this.read().intentTasks.filter(x=>x.area===area.name);
+    const text=lists.length||entries.length ? t("deleteAreaIdeasText",area.projects.length,mine.length,lists.length,entries.length) : t("deleteAreaText",area.projects.length,mine.length);
+    new ConfirmModal(this.app, t("deleteAreaQ", area.name), text, t("delete"),
       () => this.removeArea(area)).open();
   }
 

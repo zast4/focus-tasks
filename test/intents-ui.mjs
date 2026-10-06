@@ -29,7 +29,7 @@ export async function checkIntentsUI(page, mobile=false) {
   const area=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='Ideas UI')`;
   const list=`[...${root}.querySelectorAll('.ft-intent-list-row')].find(e=>e.querySelector('.ft-link')?.textContent==='UI List')`;
   const row=title=>`[...${root}.querySelectorAll('li.ft-task')].find(e=>e.querySelector(':scope > .ft-text')?.textContent===${J(title)})`;
-  const words={'📔 Ideas':['📔 Ideas','📔 Замыслы'],'Move to backlog':['Move to backlog','Перенести в отложку'],'Delete list':['Delete list','Удалить список'],'Reorder':['Reorder','Переставить']};
+  const words={'📔 Ideas':['📔 Ideas','📔 Замыслы'],'Move to backlog':['Move to backlog','Перенести в отложку'],'Delete list':['Delete list','Удалить список'],'Delete area':['Delete area','Удалить область'],'Reorder':['Reorder','Переставить']};
   const menu=title=>`[...document.querySelectorAll('.menu-item')].find(e=>${J(words[title]||[title])}.some(t=>e.textContent.includes(t)))`;
   await page.eval(`if(!['focus-tasks-e2e','focus-tasks-mobile'].includes(app.vault.getName()))throw Error('test vault guard');const p=app.plugins.plugins['focus-tasks'];window.__intentUITaskCount=p.tasks().length;delete p.data.opened['intents:Ideas UI'];p.saveFolds();await p.createArea('Ideas UI');await app.commands.executeCommandById('focus-tasks:open');p.app.saveLocalStorage('focus-tasks-all','1');p.data.opened['area:Ideas UI']=true;p.saveFolds();p.refresh();return true;`);
   await until(()=>page.eval(`return !!(${area});`),'idea area visible');
@@ -150,5 +150,21 @@ export async function checkIntentsUI(page, mobile=false) {
     await click(`(${row('UI Link source')}).querySelector('.ft-text a.internal-link')`);
     await until(()=>page.eval(`return app.workspace.activeLeaf.view.file?.path==='Notes/UI Link source.md';`),'linked note opens its original source');
     await page.eval(`app.workspace.setActiveLeaf(__intentLinkLeaf,{focus:true});return true;`);
+    const inventory=await page.eval(`const p=app.plugins.plugins['focus-tasks'];return {lists:p.read().intents.filter(x=>x.area==='Ideas UI').map(x=>x.uid).sort(),entries:p.read().intentTasks.filter(x=>x.area==='Ideas UI').map(x=>x.uid).sort()};`);
+    if(mobile)await click(`(${area}).querySelector(':scope > .ft-area-title .ft-more')`);
+    else {const point=await page.eval(`const e=(${area}).querySelector(':scope > .ft-area-title');e.scrollIntoView({block:'center',behavior:'instant'});const b=e.getBoundingClientRect();return {x:b.left+b.width/2,y:b.top+b.height/2};`);await page.rightClick(point);}
+    await click(menu('Delete area'));await until(()=>page.eval(`return !!document.querySelector('.modal button.mod-warning');`),'area delete confirmation');
+    if(!await page.eval(`const text=document.querySelector('.modal').textContent;return /3/.test(text)&&/6/.test(text);`))throw Error('area confirmation omits idea lists or entries');
+    await click(`document.querySelector('.modal button.mod-warning')`);
+    await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return !p.notes().some(x=>x.area==='Ideas UI')&&!p.read().intents.some(x=>x.area==='Ideas UI')&&!p.read().intentTasks.some(x=>x.area==='Ideas UI');`),'area and its idea contents removed');
+    if(!await page.eval(`return !!app.vault.getAbstractFileByPath('Notes/UI Link source.md');`))throw Error('area deletion removed a linked source note');
+    await click(`[...document.querySelectorAll('.notice .ft-undo')].at(-1)`);
+    await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return JSON.stringify(p.read().intents.filter(x=>x.area==='Ideas UI').map(x=>x.uid).sort())===${J(JSON.stringify(inventory.lists))}&&JSON.stringify(p.read().intentTasks.filter(x=>x.area==='Ideas UI').map(x=>x.uid).sort())===${J(JSON.stringify(inventory.entries))};`),'area lists and entries restored in one Undo');
+    const focusUid=await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=await p.createTask('UI Focus control',{area:'Ideas UI',project:null},'2000-01-01');p.refresh();return task.uid;`);
+    await until(()=>page.eval(`return !!${root}.querySelector('.ft-focus-title');`),'Focus control visible');
+    await click(`${root}.querySelector('.ft-focus-title')`);
+    await until(()=>page.eval(`return !${root}.querySelector('.ft-intents');`),'Focus hides private ideas');
+    if(!await page.eval(`const p=app.plugins.plugins['focus-tasks'];return p.read().intents.filter(x=>x.area==='Ideas UI').length===3&&p.read().intentTasks.filter(x=>x.area==='Ideas UI').length===6;`))throw Error('Focus discarded idea data');
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.remove(p.tasks().find(x=>x.uid===${J(focusUid)}));return true;`);
   } finally {fs.rmSync(scratch,{recursive:true,force:true});}
 }

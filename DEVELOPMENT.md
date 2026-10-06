@@ -155,6 +155,8 @@ websocket, never the user's window. Private routing, backups and reports stay ou
 Run `node --test test/intents.mjs test/intent-lists.mjs` for identity/concurrency/Undo/failure checks.
 Wiki-link titles keep their full text; creating or renaming a task avoids the referenced file name,
 so the new note cannot shadow the link's destination. This also holds after promoting an idea.
+Focus closes per-area idea blocks. Confirmed area deletion names the counts of lists and entries,
+deletes them with the area and restores the whole group with one Undo; linked source notes stay.
 `test/intents-ui.mjs` covers area menus, the shared rows, editing/Enter/duplicate/check/date, body
 search, promotion/Undo, list deletion/Undo, narrow geometry and the actual backup operator in a
 native disposable vault. The same flow runs on desktop and touch with Tasks and Blue Topaz.

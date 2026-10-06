@@ -200,3 +200,31 @@ test('a linked-note idea title cannot shadow its destination, including after in
   await p.promoteIntentTask(entry,null);await p.rename(entry,'[[Reference]]');
   assert.equal(entry.file.basename,'Reference (2)');
 });
+
+test('deleting an area includes its idea lists and entries, preserves linked sources and restores everything with one Undo',async()=>{
+  const {app,p}=await setup(),list=await p.createIntentList('List','Work'),entry=await p.createTask('Idea',target(list),null);
+  const action=await p.createTask('Action',{area:'Work',project:null},null),source=writeNote(app,'Notes/Source.md',{type:'заметка'},'Keep');
+  const before=await app.vault.read(list.file),order=structuredClone(p.data.order.tasks);
+  await p.removeArea({name:'Work'});assert.equal(app.vault.getAbstractFileByPath(list.file.path),null);assert.equal(p.allTasks().length,0);
+  assert.equal(p.notes().some(x=>x.area==='Work'),false);assert.match(await app.vault.read(source),/Keep/);
+  await p.undo();assert.equal(await app.vault.read(app.vault.getAbstractFileByPath(list.file.path)),before);
+  assert.equal(p.intentEntries(p.read().intents[0])[0].uid,entry.uid);assert.equal(p.tasks()[0].uid,action.uid);
+  assert.deepEqual(p.data.order.tasks,order);assert.equal(p.notes().some(x=>x.area==='Work'),true);
+});
+
+test('area deletion refuses an externally replaced idea list before deleting any entries or the area',async()=>{
+  const {app,p}=await setup(),list=await p.createIntentList('List','Work'),entry=await p.createTask('Idea',target(list),null);
+  const original=p.undoable.bind(p);p.undoable=async(...args)=>{await app.fileManager.processFrontMatter(list.file,fm=>{fm.uid='foreign';});return original(...args);};
+  await assert.rejects(p.removeArea({name:'Work'}),/intent-conflict/);
+  assert.ok(app.vault.getAbstractFileByPath(entry.file.path));assert.equal(p.notes().some(x=>x.area==='Work'),true);
+  assert.equal(frontmatter(app,list.file.path).uid,'foreign');
+});
+
+test('renaming a stale row cannot revert list membership changed by another writer',async()=>{
+  const {app,p}=await setup(),first=await p.createIntentList('First','Work'),second=await p.createIntentList('Second','Life');
+  const entry=await p.createTask('Old',target(first),null),stale={...entry};
+  await p.moveTasks([entry],into(second),{});const link=frontmatter(app,entry.file.path).intentList;
+  await p.rename(stale,'Renamed');const fm=frontmatter(app,stale.file.path);
+  assert.equal(fm.intentList,link);assert.equal(fm.intentListUid,second.uid);assert.equal(fm.intentArea,'Life');
+  assert.equal(fm.projects,undefined);assert.equal(p.intentEntries(second)[0].text,'Renamed');
+});
