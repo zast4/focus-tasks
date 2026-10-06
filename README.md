@@ -109,7 +109,7 @@ An event notification and a native Apple Reminders checkbox are different integr
 Local categories use plain icon counters: **Focus, Backlog, Ideas**. On a computer, focused areas
 keep only Focus visible; other areas keep Backlog and never offer an impossible Focus category.
 Hovering reveals secondary controls. Projects reveal their counters only on hover. Keyboard focus
-also reveals controls. Touch devices keep all available controls visible; zero-count Backlog/Ideas
+also reveals controls. Hidden controls occupy no space, including + and menus. Touch devices keep all available controls visible; zero-count Backlog/Ideas
 remain accessible for adding the first task or idea.
 Each independently shows/hides its tasks. Several categories can be open together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
@@ -365,6 +365,7 @@ Shift+клик выделяет все задачи от последней кл
 Остальные переключатели появляются при наведении, у проектов все переключатели появляются
 при наведении. Переход клавиатурой тоже раскрывает переключатели. На сенсорных устройствах
 доступные переключатели видны постоянно, включая пустые отложку и замыслы для первого добавления.
+Скрытые элементы, включая + и меню, не занимают места в раскладке.
 Каждый независимо показывает и скрывает свои задачи. Можно открыть несколько категорий одновременно.
 Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.
 У свёрнутой области все доступные иконки приглушены. Нажатие раскрывает область и выбранную категорию,

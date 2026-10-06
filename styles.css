@@ -177,6 +177,7 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 .focus-tasks-view .ft-date.is-project { font-weight: 600; }
 .focus-tasks-view .ft-date.is-empty { color: var(--text-faint); opacity: 0; }
 .focus-tasks-view li.ft-task:hover > .ft-date.is-empty { opacity: 0.8; }
+.focus-tasks-view .ft-date.is-empty.is-active { opacity: 0.8; }
 /* Today with no hour: nothing to read, a calendar to click under the pointer. */
 .focus-tasks-view .ft-date.is-bare { color: var(--text-faint); opacity: 0; }
 .focus-tasks-view li.ft-task:hover > .ft-date.is-bare, .focus-tasks-view .ft-date.is-bare.is-active { opacity: 0.8; }
@@ -708,8 +709,8 @@ body.is-mobile .focus-tasks-view .ft-link.is-editing { -webkit-user-select: text
 .focus-tasks-view .ft-intent-description { color: var(--text-muted); padding: 0.35rem 0; overflow-wrap: anywhere; }
 .focus-tasks-view .ft-intents-head .ft-project-icon { flex: none; }
 
-/* Local categories share one grid. Reveal secondary controls without moving
-   the title or the pointer target. Touch devices always keep them accessible. */
+/* Hidden controls leave the layout entirely. Touch devices keep the available
+   controls visible; project headers provide a keyboard entry point. */
 .focus-tasks-view .ft-supplement-switch { display: inline-flex; flex: none; align-items: center; align-self: flex-start;
   gap: 0.15rem; margin: 0.1rem 0.35rem; padding: 0; border: 0; background: transparent; font-size: 0.75rem; font-weight: 400; }
 .focus-tasks-view .ft-supplement-switch > button.ft-chip { display: inline-flex; align-items: center; justify-content: center;
@@ -723,8 +724,8 @@ body.is-mobile .focus-tasks-view .ft-link.is-editing { -webkit-user-select: text
 @media (hover: hover) and (pointer: fine) {
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-title,li.ft-project-row):not(:hover):not(:focus-within) > .ft-supplement-focus-area > button:not(.ft-focus-chip),
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-title,li.ft-project-row):not(:hover):not(:focus-within) > .ft-supplement-backlog-area > button:not(.ft-later-chip),
-  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-title,li.ft-project-row):not(:hover):not(:focus-within) > .ft-supplement-project > button {
-    opacity: 0; pointer-events: none;
+  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-title,li.ft-project-row):not(:hover):not(:focus-within) > .ft-supplement-project {
+    display: none;
   }
 }
 .focus-tasks-view .ft-project-ideas-slot { list-style: none; padding: 0; margin: 0 0 0 var(--ft-col); min-width: 0; }
@@ -732,7 +733,7 @@ body.is-mobile .focus-tasks-view .ft-link.is-editing { -webkit-user-select: text
 body.is-mobile .focus-tasks-view .ft-supplement-switch { margin: 0.1rem 0; }
 body.is-mobile .focus-tasks-view .ft-supplement-switch > button.ft-chip { min-width: 44px; height: 44px; padding: 4px 6px; }
 body.is-mobile .focus-tasks-view .ft-area-title { display: grid; align-items: center;
-  grid-template-columns: var(--ft-col) var(--ft-col) minmax(0,1fr) 44px 44px; }
+  grid-template-columns: var(--ft-col) var(--ft-col) minmax(0,1fr) auto auto; }
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-caret { grid-column: 1; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-emoji { grid-column: 2; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-emoji + span { grid-column: 3; grid-row: 1; }
@@ -740,13 +741,13 @@ body.is-mobile .focus-tasks-view .ft-area-title > .ft-plus { grid-column: 4; gri
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-more { grid-column: 5; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-supplement-switch { grid-column: 3 / -1; grid-row: 2; justify-self: end; }
 body.is-mobile .focus-tasks-view .ft-area-page-head,
-body.is-mobile .focus-tasks-view .ft-page-head { grid-template-columns: var(--ft-col) minmax(0,1fr) 44px 44px; }
+body.is-mobile .focus-tasks-view .ft-page-head { grid-template-columns: var(--ft-col) minmax(0,1fr) auto auto; }
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > :is(.ft-emoji,.ft-project-icon) { grid-column: 1; grid-row: 1; }
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-page-name { grid-column: 2; grid-row: 1; }
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-plus { grid-column: 3; grid-row: 1; }
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-more { grid-column: 4; grid-row: 1; }
-body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-supplement-switch { grid-column: 2 / -1; grid-row: 2; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption { display: grid; grid-template-columns: minmax(0,1fr) 24px 24px; }
+body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-supplement-switch { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption { display: grid; grid-template-columns: minmax(0,1fr) auto auto; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name { grid-column: 1; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more { grid-column: 2; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-plus { grid-column: 3; grid-row: 1; }
@@ -758,18 +759,15 @@ body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-supplement-switch {
   font-size: inherit; height: calc(var(--ft-line) * 1em); padding: 0; margin-top: 0; }
 body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-supplement-switch > button.ft-chip { height: 100%; }
 .focus-tasks-view .ft-supplement-count { font-size: 0.75rem; }
-/* Revealing +/menus must not move an already visible supplement under the pointer. */
-body:not(.is-mobile) .focus-tasks-view li.ft-task:has(> .ft-supplement-switch) > .ft-plus,
-body:not(.is-mobile) .focus-tasks-view .ft-area-title:has(> .ft-supplement-switch) > :is(.ft-plus,.ft-more) {
-  display: inline-flex; visibility: hidden; opacity: 0; }
-body:not(.is-mobile) .focus-tasks-view li.ft-task:has(> .ft-supplement-switch):hover > .ft-plus,
-body:not(.is-mobile) .focus-tasks-view .ft-area-title:has(> .ft-supplement-switch):hover > :is(.ft-plus,.ft-more) {
-  visibility: visible; opacity: 1; }
+/* Keyboard access reveals the same actions as hover, without empty placeholders. */
+body:not(.is-mobile) .focus-tasks-view .ft-category-host:focus-within > :is(.ft-plus,.ft-more),
+body:not(.is-mobile) .focus-tasks-view .ft-category-host:focus-within > .ft-date.is-empty {
+  display: inline-flex; opacity: 1; }
 /* Narrow desktop panes receive their own row for supplements, just like phone headers. */
 .focus-tasks-view { container-type: inline-size; }
 @container (max-width: 520px) {
   body:not(.is-mobile) .focus-tasks-view .ft-area-title {
-    display: grid; grid-template-columns: var(--ft-col) var(--ft-col) minmax(0,1fr) 28px 28px; }
+    display: grid; grid-template-columns: var(--ft-col) var(--ft-col) minmax(0,1fr) auto auto; }
   body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-caret { grid-column: 1; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-emoji { grid-column: 2; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-emoji + span { grid-column: 3; grid-row: 1; min-width: 0; overflow-wrap: anywhere; }
@@ -777,13 +775,13 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title:has(> .ft-supplement-switc
   body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { grid-column: 5; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-count { grid-column: 3; grid-row: 1; justify-self: end; }
   body:not(.is-mobile) .focus-tasks-view .ft-area-title:has(> .ft-count) > .ft-emoji + span { margin-right: 2em; }
-  body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-supplement-switch { grid-column: 3 / -1; grid-row: 2; justify-self: end; }
-  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) { grid-template-columns: var(--ft-col) minmax(0,1fr) 28px 28px; }
+  body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-supplement-switch { grid-column: 3 / -1; grid-row: 2; justify-self: start; }
+  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) { grid-template-columns: var(--ft-col) minmax(0,1fr) auto auto; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > :is(.ft-emoji,.ft-project-icon) { grid-column: 1; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-page-name { grid-column: 2; grid-row: 1; min-width: 0; overflow-wrap: anywhere; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-plus { grid-column: 3; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-more { grid-column: 4; grid-row: 1; }
-  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-supplement-switch { grid-column: 2 / -1; grid-row: 2; }
+  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-supplement-switch { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
   body:not(.is-mobile) .focus-tasks-view li.ft-project-row:not(.ft-intent-list-row) {
     display: grid; grid-template-columns: var(--ft-col) minmax(0,1fr) auto auto; }
   body:not(.is-mobile) .focus-tasks-view li.ft-project-row > .ft-box { grid-column: 1; grid-row: 1; }

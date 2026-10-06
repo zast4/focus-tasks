@@ -66,14 +66,11 @@ window.__ft = {
   at(el, dy = 0.5) {
     if (!el) return null;
     window.__ftTarget = el;
-    // a hover-only control is out of the layout until the pointer is over its row; the mouse is about
-    // to be there, so it is shown where the hover would show it
-    // — and with it every other hover-only control of that row, so the layout is the hovered one
+    // Hover a real header first; never force invisible controls into the layout.
     if (!el.getClientRects().length && el.closest('.focus-tasks-view')) {
-      const row = el.closest('li.ft-task, .ft-area-title, .ft-page-head') || el.parentElement;
-      for (const c of row.querySelectorAll(':scope > .ft-plus, :scope > .ft-chip.is-quiet, :scope > .ft-date.is-empty, :scope > .ft-more'))
-        if (!c.getClientRects().length) c.style.display = 'inline-flex';
-      el.style.display = 'inline-flex';
+      const row = el.closest('.ft-category-host,li.ft-task,.ft-area-title,.ft-page-head') || el.parentElement;
+      row.scrollIntoView({block:'center',behavior:'instant'});
+      const r=row.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};
     }
     el.scrollIntoView({ block: 'center', behavior: 'instant' });
     const r = el.getBoundingClientRect();
@@ -106,6 +103,9 @@ const pos = async (expr, what, requireHit = false) => {
   await settle();
   let p = await page.eval(`window.__ftTarget=null; return ${expr};`);
   if (!p) throw new Error(`not on screen: ${what || expr}`);
+  // A hover-only action has no rectangle until its header is hovered.
+  const host=await page.eval(`const e=window.__ftTarget;if(!e||e.getBoundingClientRect().width)return null;const h=e.closest('.ft-category-host')||e.closest('.ft-area-title,li.ft-task');h?.scrollIntoView({block:'center',behavior:'instant'});const r=h?.getBoundingClientRect();return r&&{x:r.left+r.width/2,y:r.top+r.height/2};`);
+  if(host){await page.mouse('mouseMoved',host.x,host.y,0);await sleep(100);p=await page.eval(`window.__ftTarget=null;return ${expr};`);}
   // scrollIntoView queues a scroll event; it must finish before a newly opened
   // card starts listening for scroll. Hover can also change a row's geometry.
   await page.mouse('mouseMoved', p.x, p.y, 0);
@@ -120,6 +120,10 @@ const pos = async (expr, what, requireHit = false) => {
 const click = async (expr, what, modifiers = 0) => page.click(await pos(expr, what, true), modifiers, false);
 // a row's menu is a right click (a plain click on the grip selects the row)
 const menuOn = async (expr, what) => page.rightClick(await pos(expr, what, true), false);
+const clickLocal = async expr => {
+  const at=await page.eval(`return ${expr};`);await page.mouse('mouseMoved',at.x,at.y,0);
+  await sleep(100);await page.click(await page.eval(`return ${expr};`));
+};
 const SHIFT = 8, CMD = process.platform === "darwin" ? 4 : 2;
 const selected = async () => {
   if (!(await page.eval(`return !!__ft.view()`))) await toPane();  // a key may bring a note tab to the front
@@ -156,6 +160,16 @@ const plugin = (body) => page.eval(`const p = app.plugins.plugins['focus-tasks']
 
 const FOLDER = "Задачи";  // where the plugin keeps a note per task
 const taskPath = (name) => `${FOLDER}/${name}.md`;
+
+// File deletion and the transaction's notice settle separately. An older Undo
+// may still be visible: click the notice owning these files, never the first one.
+const undoDelete = async (paths) => {
+  await until(() => page.eval(`const p=app.plugins.plugins['focus-tasks'],snap=p.undoStack;
+    const entry=p.history?.findLast(x=>x.snap===snap&&${J(paths)}.every(path=>x.snap.some(s=>s.path===path)));
+    const notice=entry&&[...document.querySelectorAll('.notice')].findLast(n=>n.textContent.startsWith(entry.label+' '));
+    window.__ftUndo=notice?.querySelector('.ft-undo');return !!window.__ftUndo?.getBoundingClientRect().width;`), 'the deletion notice for '+J(paths));
+  await click(`__ft.at(window.__ftUndo)`, 'Undo this deletion');
+};
 
 // The frontmatter of a task note plus its body, or null when there is no such note.
 function fm(name) {
@@ -573,7 +587,7 @@ step("delete a task from its menu, then undo", async () => {
   await menuOn(`__ft.at(__ft.task('Stretch'))`);
   await menu("Delete");
   await noTask("Stretch");
-  await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
+  await undoDelete([taskPath('Stretch')]);
   await taskIs("Stretch", { area: "💪Sport" });
 });
 
@@ -587,7 +601,7 @@ step("a task whose text is wiped in place and left is deleted, and Undo brings i
   await click(`__ft.at(__ft.task('Run 5k').querySelector('.ft-text'))`);
   await noTask("Stretch");
   await until(() => !exists(taskPath("Stretch")), "the note is gone");
-  await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
+  await undoDelete([taskPath('Stretch')]);
   await taskIs("Stretch", { area: "💪Sport" });
   await idle();
   // Esc on an emptied row is not a delete: the text comes back as it was
@@ -1322,7 +1336,7 @@ step("⌫ on a selected project's row deletes the project and all its tasks; Und
   await until(() => page.eval(`return !!__ft.project('Doomed')?.classList.contains('is-selected')`), "the project's row selected");
   await page.key("Backspace");
   await until(() => !exists("Tasks/Doomed.md") && !exists(taskPath("Doomed one")) && !exists(taskPath("Doomed two")), "the project and both tasks are gone");
-  await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
+  await undoDelete(['Tasks/Doomed.md', taskPath('Doomed one'), taskPath('Doomed two')]);
   await until(() => exists("Tasks/Doomed.md") && exists(taskPath("Doomed one")) && exists(taskPath("Doomed two")), "all three are back");
   await plugin(`for (const n of ['Doomed one', 'Doomed two']) { const t = p.tasks().find((x) => x.text === n); if (t) await p.trash(t.file); } const f = app.vault.getAbstractFileByPath('Tasks/Doomed.md'); if (f) await p.trash(f); return true;`);
   await settle();
@@ -1340,7 +1354,7 @@ step("⌫ on a selection deletes the rows; Undo brings them back", async () => {
   await page.key("Backspace");
   for (const name of names) await noTask(name);
   await selectedAre([]);
-  await click(`__ft.at(document.querySelector('.notice .ft-undo'))`, "Undo");
+  await undoDelete(names.map(taskPath));
   for (const name of names) await until(() => exists(taskPath(name)), `${name} is back`);
   await idle();
 });
@@ -2028,9 +2042,9 @@ step("a project's note is its page: the block at the bottom shows its steps, tak
   // the block has a heading of its own — the project's row: 📁 name, and a ⏳ that folds its pile
   const head = await page.eval(`const h = (${block}).querySelector('.ft-page-head'); return h && { name: h.querySelector('.ft-page-name')?.textContent, chip: !!h.querySelector('.ft-later-chip'), plus: !!h.querySelector('.ft-plus') };`);
   if (!head || head.name !== "Page project" || !head.chip || !head.plus) throw new Error("no heading with the name, the ⏳ and the + over the steps: " + J(head));
-  await page.click(await page.eval(`return __ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`));
+  await clickLocal(`__ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`);
   await until(() => page.eval(`return !(${row("Page later")}) && !!(${row("Page today")})`), "the ⏳ folded the pile, today's step stays");
-  await page.click(await page.eval(`return __ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`));
+  await clickLocal(`__ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`);
   await until(() => page.eval(`return !!(${row("Page later")})?.closest('.ft-future-block')`), "and opened it again");
   // the closed steps fold under «Done · 1»
   await until(() => page.eval(`return (${block}).querySelector('.ft-page-done')?.textContent.includes('1')`), "«Done · 1» on the page");

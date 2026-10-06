@@ -2169,6 +2169,10 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     const backlog = p.categoryShown(later);
     const group = head.createSpan({ cls: "ft-supplement-switch", attr: { role: "group", "aria-label": t("extraViews") } });
+    head.addClass("ft-category-host");
+    // Project controls leave the layout until hover/focus. The header itself
+    // remains reachable by keyboard even when it has no checkbox or link.
+    if (presentation === "project") head.setAttr("tabindex", "0");
     group.addClass("ft-supplement-" + presentation);
     for (const [kind, enabled, n] of [["focus", p.categoryShown(focus), focus?.count || 0], ["backlog", backlog, later?.count || 0], ["intents", ideas, count]]) {
       // A queue-only scope has no Focus to reveal. Keep zero-count Backlog/Ideas

@@ -137,7 +137,9 @@ sets canonical task fields and clears owned intent fields. Group promotion is on
 
 Shared target/clock/lightbulb counters follow effective scope membership in global and scoped views.
 Desktop Focus areas show only the target at rest, Other areas only the clock and no target. Project
-controls and secondary area controls reveal on hover/focus-within without shifting the grid. Touch
+controls and secondary area controls leave the layout entirely while hidden (display:none),
+including +/menus and optional grid tracks. Project headers are keyboard reachable and reveal
+controls on focus-within. Touch
 controls remain visible. `scopeTasks.hasFocus` includes actionable empty projects and ignores
 completed-only projects, so impossible Focus controls are omitted without changing saved states.
 Each category independently controls only its visibility; All is never changed.
