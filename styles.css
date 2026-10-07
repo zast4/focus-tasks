@@ -723,18 +723,19 @@ body.is-mobile .focus-tasks-view .ft-link.is-editing { -webkit-user-select: text
 .focus-tasks-view .ft-supplement-count { font-variant-numeric: tabular-nums; }
 /* One count owns an anchored popup. Opening it cannot change the title width. */
 .focus-tasks-view .ft-category-picker { display: inline-flex; flex: none; position: relative; align-items: center; margin: 0 0.35em; vertical-align: baseline; }
-.focus-tasks-view .ft-area-caption { display: inline-flex; align-items: baseline; min-width: 0; }
+.focus-tasks-view .ft-area-caption { display: inline-flex; align-items: center; min-width: 0; }
 .focus-tasks-view .ft-area-caption > :first-child { min-width: 0; overflow-wrap: anywhere; }
 .focus-tasks-view .ft-category-total { padding: 0 0.2em; margin: 0; height: auto; min-width: 1em; border: 0; box-shadow: none; background: transparent; color: var(--text-muted); font: inherit; font-size: 0.8em; font-variant-numeric: tabular-nums; cursor: pointer; }
 .focus-tasks-view .ft-category-picker > .ft-steps-more { margin: 0; padding: 0 0.15em; min-width: 0; font-size: 0.8em; color: var(--text-muted); cursor: pointer; }
 .focus-tasks-view .ft-category-picker > .ft-steps-more.is-late { color: var(--text-error); }
 .focus-tasks-view .ft-category-picker > .ft-steps-more.is-open { color: var(--text-normal); }
-.focus-tasks-view .ft-category-picker > .ft-supplement-switch { display: none; position: fixed; z-index: 1000; padding: 5px 6px; margin: 0; width: max-content; max-width: calc(100vw - 16px); flex-wrap: wrap; border-radius: 6px; background: var(--background-primary); box-shadow: 0 3px 12px rgba(0,0,0,.18); }
+.focus-tasks-view .ft-category-picker > .ft-supplement-switch { display: none; position: static; padding: 0; margin: 0; width: max-content; flex-wrap: nowrap; border: 0; background: transparent; box-shadow: none; vertical-align: baseline; }
+.focus-tasks-view .ft-category-picker.is-open > :is(.ft-category-total,.ft-steps-more) { position: absolute; width: 1px; min-width: 0; height: 1px; min-height: 0; padding: 0; opacity: 0; pointer-events: none; overflow: hidden; }
 .focus-tasks-view .ft-category-picker.is-open > .ft-supplement-switch { display: inline-flex; }
 .focus-tasks-view .ft-category-total:focus-visible,.focus-tasks-view .ft-category-picker > .ft-steps-more:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
 .focus-tasks-view .ft-category-expand { border: 0; box-shadow: none; background: transparent; color: var(--text-muted); font-size: inherit; }
-body.is-mobile .focus-tasks-view .ft-category-total { min-height: 36px; min-width: 28px; }
-body.is-mobile .focus-tasks-view .ft-category-picker > .ft-steps-more { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; min-width: 28px; }
+body.is-mobile .focus-tasks-view .ft-category-total { min-height: 44px; min-width: 28px; }
+body.is-mobile .focus-tasks-view .ft-category-picker > .ft-steps-more { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 28px; }
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-category-picker { grid-column: 3; grid-row: 2; justify-self: start; }
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-category-picker { grid-column: 2; grid-row: 2; justify-self: start; }
 .focus-tasks-view .ft-project-ideas-slot { list-style: none; padding: 0; margin: 0 0 0 var(--ft-col); min-width: 0; }
@@ -829,3 +830,26 @@ body.is-mobile .focus-tasks-view .ft-area-title.ft-area-page-head > .ft-area-cap
 body.is-mobile .focus-tasks-view .ft-page-head > .ft-area-caption { grid-column: 2; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-area-caption > :first-child { min-width:0; }
 body.is-mobile .focus-tasks-view .ft-area-caption > .ft-category-picker { margin:0; align-self:flex-start; }
+
+/* Inline category controls must fit before the compact step preview. */
+.focus-tasks-view .ft-line:has(.ft-category-picker.is-open) > .ft-project-name > .ft-link { display: inline-block; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+
+.focus-tasks-view .ft-category-expand { min-width: 25px; min-height: 24px; padding: 0 0.2em; }
+body.is-mobile .focus-tasks-view .ft-category-expand { min-width: 44px; height: 44px; }
+
+.focus-tasks-view .ft-area-caption:has(.ft-category-picker.is-open) > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-category-picker.is-open) > .ft-project-name { min-width: 0; overflow: hidden; white-space: nowrap; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-category-picker.is-open) > .ft-project-name > .ft-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.focus-tasks-view :is(.ft-area-title.ft-categories-tight,.ft-area-title.ft-category-measure) > :is(.ft-plus,.ft-more) { display: none !important; }
+
+body:not(.is-mobile) .focus-tasks-view .ft-category-picker .ft-supplement-switch > button.ft-chip { min-width: 25px; padding: 0 1px; gap: 2px; }
+body:not(.is-mobile) .focus-tasks-view .ft-category-picker .ft-chip-icon { width: 14px; }
+body:not(.is-mobile) .focus-tasks-view .ft-category-picker .ft-chip-icon svg { width: 14px; height: 14px; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-category-picker.is-open) > .ft-plus { display: none; }
+
+body:not(.is-mobile) .focus-tasks-view li.ft-project-row:has(.ft-category-picker.is-open) { grid-template-columns: var(--ft-col) minmax(var(--ft-category-width,0px),1fr) 0 minmax(0,max-content); }
+body:not(.is-mobile) .focus-tasks-view li.ft-project-row:has(.ft-category-picker.is-open) > .ft-line { min-width: var(--ft-category-width,0px); }
+body:not(.is-mobile) .focus-tasks-view li.ft-project-row:has(.ft-category-picker.is-open) > .ft-date { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+
+body.is-mobile .focus-tasks-view .ft-category-picker.is-open > :is(.ft-category-total,.ft-steps-more) { min-width: 0; min-height: 0; }

@@ -7,15 +7,18 @@ export async function checkSupplementsUI(page, mobile=false) {
   const hover=async expr=>{
     await page.front();
     if(mobile&&await page.eval(`const picker=(${expr})?.closest('.ft-category-picker');return !!picker&&!picker.classList.contains('is-open')&&!!document.querySelector('.ft-category-picker.is-open');`)){await page.tap({x:8,y:400});await sleep(100);}
-    const at=await page.eval(`if(!window.__supScoped)await app.plugins.plugins['focus-tasks'].openView();const e=${expr},h=e?.closest('.ft-category-host')||e;h?.scrollIntoView({block:'center',behavior:'instant'});const picker=e?.closest('.ft-category-picker'),summary=picker?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more');const r=(summary||h)?.getBoundingClientRect();return r&&{x:r.left+r.width/2,y:r.top+r.height/2,needsTap:!!summary&&!picker.classList.contains('is-open')};`);
+    const at=await page.eval(`if(!window.__supScoped)await app.plugins.plugins['focus-tasks'].openView();const e=${expr},h=e?.closest('.ft-category-host')||e;h?.scrollIntoView({block:'center',behavior:'instant'});const picker=e?.closest('.ft-category-picker'),summary=picker?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more');const target=picker?.classList.contains("is-open")?picker.querySelector(":scope > .ft-supplement-switch"):(summary||(e?.getBoundingClientRect().width?e:h));const r=target?.getBoundingClientRect();return r&&{x:r.left+r.width/2,y:r.top+r.height/2,needsTap:!!summary&&!picker.classList.contains('is-open')};`);
     if(mobile&&at?.needsTap)await page.tap(at);else if(!mobile&&at)await page.mouse('mouseMoved',at.x,at.y,0);
     await sleep(180);
     if(await page.eval(`return !!(${expr})?.closest('.ft-category-picker');`))await until(async()=>{
-      const live=await page.eval(`const p=(${expr})?.closest('.ft-category-picker');if(p?.classList.contains('is-open')&&(${mobile}||p.matches(':hover')))return {open:true};const summary=p?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more');summary?.scrollIntoView({block:'center',behavior:'instant'});const r=summary?.getBoundingClientRect();return r?.width&&r.top>=0&&r.bottom<=innerHeight?{x:r.left+r.width/2,y:r.top+r.height/2,reenter:summary.matches(':hover')}:false;`);
+      const live=await page.eval(`const p=(${expr})?.closest('.ft-category-picker');if(p?.classList.contains('is-open')&&(${mobile}||p.matches(':hover')))return {open:true};const summary=p?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more'),target=p?.classList.contains('is-open')?p.querySelector(':scope > .ft-supplement-switch'):summary;target?.scrollIntoView({block:'center',behavior:'instant'});const r=target?.getBoundingClientRect();return r?.width&&r.top>=0&&r.bottom<=innerHeight?{x:r.left+r.width/2,y:r.top+r.height/2,reenter:target.matches(':hover')}:false;`);
       if(live?.open)return true;if(live){if(mobile)await page.tap(live);else {if(live.reenter)await page.mouse('mouseMoved',1,1,0);await page.mouse('mouseMoved',live.x,live.y,0);}await sleep(80);}return false;
     },'real pointer opens count popup '+expr);
   };
   const click=async(expr,withRedraw=false)=>{
+    if(await page.eval(`return !(${expr})?.closest('.ft-category-picker')&&!!document.querySelector('.ft-category-picker.is-open');`)){
+      const point=await page.eval(`const r=${root}.getBoundingClientRect();return {x:r.left+2,y:r.top+2};`);if(mobile)await page.tap(point);else await page.click(point);await sleep(100);
+    }
     await hover(expr);
     const locate=()=>page.eval(`const e=${expr};if(!e)return false;const r=e.getBoundingClientRect(),at={x:r.left+r.width/2,y:r.top+r.height/2},hit=document.elementFromPoint(at.x,at.y);return r.width&&r.height&&hit&&e.contains(hit)?at:false;`);
     let at=await until(locate,'supplement control: '+expr);
@@ -43,7 +46,7 @@ export async function checkSupplementsUI(page, mobile=false) {
   };
   const visibility=async(expr,role,label,hasFocus=true)=>{
     await page.front();
-    await page.eval(`const g=${expr};g.scrollIntoView({block:'center',behavior:'instant'});document.activeElement?.blur();return true;`);
+    await page.eval(`const g=${expr};(g.closest('.ft-category-host')||g).scrollIntoView({block:'center',behavior:'instant'});document.activeElement?.blur();return true;`);
     const inspect=async(revealed)=>{
       const issues=await page.eval(`const g=${expr},picker=g.closest('.ft-category-picker'),issues=[];
         if(!g.classList.contains('ft-supplement-${role}'))issues.push('wrong scope role');
@@ -51,11 +54,17 @@ export async function checkSupplementsUI(page, mobile=false) {
         if(${role==='backlog-area'}&&g.querySelector('.ft-focus-chip'))issues.push('impossible Focus control');
         if(${role==='project'}&&buttons.some(b=>b.querySelector('.ft-supplement-count').textContent==='0'))issues.push('empty project category');
         for(const b of buttons){const r=b.getBoundingClientRect(),expected=b.getAttribute('aria-pressed')==='true'?1:0.45;
-          if(${revealed}?(r.width<=0||r.height<=0||Number(getComputedStyle(b).opacity)!==expected):(r.width||r.height))issues.push('popup visibility '+b.className+' revealed='+${revealed}+' rect='+r.width+'x'+r.height+' opacity='+getComputedStyle(b).opacity+' open='+picker.className);}
+          if(${revealed}?(r.width<=0||r.height<=0||Number(getComputedStyle(b).opacity)!==expected):(r.width||r.height))issues.push('inline visibility '+b.className+' revealed='+${revealed}+' rect='+r.width+'x'+r.height+' opacity='+getComputedStyle(b).opacity+' open='+picker.className);}
         if(${revealed})for(const b of buttons){const r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);if(!hit||!b.contains(hit))issues.push('category clipped or covered '+b.className);}
         const summary=picker.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more'),r=summary.getBoundingClientRect();if(!r.width)issues.push('missing single counter');
-        if(${revealed}){const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);if(!hit||!summary.contains(hit))issues.push('counter clipped or covered by another row');}
-        if(${revealed}){const box=g.getBoundingClientRect();if(box.left<0||box.right>innerWidth+1||box.top<0||box.bottom>innerHeight+1)issues.push('popup overflow');if(Math.min(box.bottom,r.bottom)-Math.max(box.top,r.top)>1)issues.push('popup covers its trigger');}
+        if(!${revealed}){const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);if(!hit||!summary.contains(hit))issues.push('counter clipped or covered by another row');}
+        if(${revealed}){const box=g.getBoundingClientRect();if(box.left<0||box.right>innerWidth+1||box.top<0||box.bottom>innerHeight+1)issues.push('popup overflow');}
+        const host=picker.closest('li.ft-task,.ft-mobile-project-caption,.ft-area-title'),box=g.getBoundingClientRect();
+        if(!${revealed})picker.__inlineBefore={height:host?.getBoundingClientRect().height,left:summary?.getBoundingClientRect().left};
+        else {const style=getComputedStyle(g);if(style.position!=='static'||style.boxShadow!=='none'||style.backgroundColor!=='rgba(0, 0, 0, 0)')issues.push('categories must replace the count inline, without a popup');
+          if(Number(getComputedStyle(summary).opacity)!==0||getComputedStyle(summary).position!=='absolute')issues.push('old counter retains a visible flow slot');
+          if(picker.__inlineBefore&&Math.abs(host.getBoundingClientRect().height-picker.__inlineBefore.height)>0.5)issues.push('inline categories change row height');
+          if(${role!=='project'}&&picker.__inlineBefore&&(box.left>picker.__inlineBefore.left+2||box.right<picker.__inlineBefore.left-2))issues.push('categories do not replace the area count at its position');}
         return issues;`);
       if(issues.length)throw Error(label+': '+issues.join('; '));
     };
@@ -94,7 +103,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     p.forgetScan();window.__supTaskCount=p.tasks().length;p.setEverything(false);delete p.data.folded['area:'+area.name];delete p.data.opened['intents:'+area.name];delete p.data.opened['project-intents:'+pf.path];p.saveFolds();const leaf=await p.openView();await leaf.view.renderer.rerendered();return true;`);
   await until(()=>page.eval(`return !!(${area});`),'supplement fixture visible');
   if(!await page.eval(`return (${area}).querySelector(':scope > .ft-area-title .ft-supplement-switch')?.children.length===3;`))throw Error('area needs one three-category component');
-  if(!await page.eval(`return (${project}).querySelector('.ft-supplement-switch')?.children.length===3;`))throw Error('project needs the same three-category component');
+  await until(()=>page.eval(`return (${project}).querySelector('.ft-supplement-switch')?.querySelectorAll(':scope > button[data-ft-category]').length===3;`),'project metadata exposes all three categories');
   if(!await page.eval(`return [(${area}).querySelector(':scope > .ft-area-title .ft-intents-chip svg'),(${project}).querySelector('.ft-intents-chip svg')].every(svg=>svg?.classList.contains('lucide-lightbulb'));`))throw Error('Ideas must use the chosen lightbulb icon in area and project controls');
   if(await page.eval(`return !!${root}.querySelector('.ft-foot .ft-intents-chip,.ft-foot .ft-intents-toggle');`))throw Error('global Ideas entry must not be added');
   await until(()=>page.eval(`return JSON.stringify([...(${area}).querySelectorAll(':scope > .ft-area-title .ft-supplement-count')].map(e=>Number(e.textContent)))==='[2,2,2]';`),'indexed counters after fixture writes');

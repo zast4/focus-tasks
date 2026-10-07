@@ -136,11 +136,11 @@ intent entries. Changing an entry's date never promotes it. Explicit promotion p
 sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
 Area headers show one aggregate count; project headers reuse their count/`+N` beside the name.
-Hover/focus opens an anchored category popup; touch opens it by tapping. Project popups omit
-empty categories, and empty projects have no dead count button. Area popups keep supported empty
+Hover/focus opens inline category controls in place of the count; touch opens it by tapping. Project controls omit
+empty categories, and empty projects have no dead count button. Area controls keep supported empty
 Backlog/Ideas available. `scopeTasks.hasFocus` includes actionable empty projects and ignores
 completed-only projects; Other areas never offer an impossible Focus control. Hidden controls
-and menus occupy no layout space. Popups fit the owning Obsidian leaf and remain clickable in
+occupy no layout space. Inline categories replace the counter and remain clickable in
 narrow splits with the sidebar open. Keyboard focus and a pressed control survive redraw.
 Each category independently controls only its visibility; All is never changed.
 Adding another project step unfolds its existing step list before the editor is mounted.
@@ -151,7 +151,7 @@ While an area is folded, controls are dimmed without changing saved category sta
 control requests reveal instead of toggle, then unfolds the area. This includes empty Other areas.
 Focus uses device `focusoff:<area>` / `project-focusoff:<path>` (plus explicit project-focuson override). Existing area
 future keys keep the All inversion. Project backlog shares explicit later/pagefold state across
-row/note views; numbers do not depend on popup visibility. `scopeTasks` counts effective `collect(false,true)`
+row/note views; numbers do not depend on control visibility. `scopeTasks` counts effective `collect(false,true)`
 row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
 change numbers. A project renders once when its focused and future steps are both visible.
 When a project's Focus is hidden, its row disappears unless its Backlog tasks or Ideas are shown.
@@ -327,4 +327,4 @@ git push && git push origin 0.2.0
 The GitHub Action publishes a release with `main.js`, `manifest.json`, `styles.css` and a zip;
 BRAT users get it on their next update check. Commits use the GitHub noreply email.
 
-Category popups are anchored to one aggregate count (project `+N`), never inserted into the text flow on hover. Native matrices must check hidden popups, tap/keyboard entry, zero category filtering and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.
+Categories replace one aggregate count (project `+N`) in the header flow on hover/focus or phone tap. Native matrices check replacement position, row height, hidden controls, tap/keyboard entry, zero category filtering and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.

@@ -15,7 +15,7 @@ This is a bounded test plan, not a claim that every possible interaction has bee
 
 Checks: `model.mjs`, `supplements.mjs`, `intent-lists.mjs`, `intents-ui.mjs`, `supplements-ui.mjs`, `e2e.mjs`.
 
-Local Markdown views are located inside the active leaf and must have a real visible rectangle. Obsidian may keep a hidden editor copy of the same block; finding the first matching node does not prove that a control is reachable. Mobile header geometry includes the aggregate count button, so a count cannot cover the Plus button. A one-entry list never shows a zero extra-step counter. The warm Ideas marker does not change the checkbox column. Native touch checks also require the actual hit target. Category popups must fit the active scroller and visual viewport and stay above the floating mobile navigation and editing toolbar.
+Local Markdown views are located inside the active leaf and must have a real visible rectangle. Obsidian may keep a hidden editor copy of the same block; finding the first matching node does not prove that a control is reachable. Mobile header geometry includes the aggregate count button, so a count cannot cover the Plus button. A one-entry list never shows a zero extra-step counter. The warm Ideas marker does not change the checkbox column. Native touch checks also require the actual hit target. Category controls stay in the header flow and replace the counter, with no floating panel, frame or background.
 
 ## Visibility configurations
 
@@ -36,8 +36,8 @@ Run each of these on a Focus area, a Backlog-only area, a project, an empty proj
 
 Numbers count unique entries, not compact project headers. Pending Waiting is separate.
 Desktop hidden controls have zero layout size; there are no invisible placeholders or action tracks.
-Each area shows one aggregate count. Desktop hover/focus of that count and phone tap open the same anchored popup. Project popups omit zero categories; the first idea remains creatable from the context menu. Opening the popup changes neither text geometry nor row height.
-The clicked category retains popup state and keyboard focus through metadata redraw. Check outside click, Escape, scroll, and viewport changes.
+Each area shows one aggregate count. Desktop hover/focus of that count and phone tap open the same inline controls in place of the count. Project controls omit zero categories; the first idea remains creatable from the context menu. Replacing the count keeps the row height stable and does not leave a hidden counter gap.
+The clicked category retains its open state and keyboard focus through metadata redraw. Check outside click, Escape, scroll, and viewport changes.
 Desktop task/project actions float above the active row. Revealing them never changes title width, text coordinates or row height, and never covers that row's text. The strip remains reachable through redraw and keyboard focus.
 Project ideas have a warm side marker and a lightbulb beside each entry; ordinary steps retain their usual appearance.
 

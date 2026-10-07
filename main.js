@@ -2301,38 +2301,33 @@ class FocusRenderer extends MarkdownRenderChild {
     if(totalText !== null || !trigger)summary.setText(totalText ?? (presentation === "project" ? "+" + total : String(total)));
     summary.setAttr("tabindex","0");summary.setAttr("role","button");
     summary.setAttr("aria-label",t("extraViews") + " · " + total);
-    summary.setAttr("aria-expanded","false");summary.setAttr("aria-haspopup","true");
+    summary.setAttr("aria-expanded","false");
     const group=picker.createSpan({cls:"ft-supplement-switch ft-supplement-"+presentation,
       attr:{role:"group","aria-label":t("extraViews"),"data-ft-category-key":key}});
+    let line = null, lines = null, host = null, caption = null, size = null, nameLink = null, row = null, tightHost = null;
     const place=()=>{
-      if(!picker.isConnected)return;
-      group.style.visibility="hidden";group.style.left="0px";group.style.top="0px";
-      // Obsidian leaves contain and clip fixed descendants. A popup must fit
-      // the owning pane, not the full window behind the sidebar or other tabs.
-      const clip=this.containerEl.closest(".workspace-leaf")?.getBoundingClientRect();
-      const surface=this.scroller?.getBoundingClientRect(),viewport=window.visualViewport;
-      const bounds={left:Math.max(8,(clip?.left||0)+8),right:Math.min(window.innerWidth-8,(clip?.right??window.innerWidth)-8),
-        top:Math.max(8,(clip?.top||0)+8,(surface?.top||0)+8,(viewport?.offsetTop||0)+8),
-        bottom:Math.min(window.innerHeight-8,(clip?.bottom??window.innerHeight)-8,(surface?.bottom??window.innerHeight)-8,
-          viewport?viewport.offsetTop+viewport.height-8:window.innerHeight-8)};
-      // The phone navigation floats over the scroller instead of reducing its rectangle.
-      // Position controls above it even when a counter is near the end of the visible list.
-      if(Platform.isMobile)for(const bar of document.querySelectorAll(".mobile-navbar,.mobile-toolbar")){
-        const r=bar.getBoundingClientRect();
-        if(r.width&&r.height&&r.right>bounds.left&&r.left<bounds.right&&r.top>bounds.top&&getComputedStyle(bar).visibility!=="hidden")bounds.bottom=Math.min(bounds.bottom,r.top-8);
+      // Categories replace the counter in the header's own flow.
+      // A compact project's preview keeps its existing number of lines.
+      if(line && lines){line.style.webkitLineClamp=String(lines);
+        row=line.closest("li.ft-project-row");const margins=getComputedStyle(picker);row?.style.setProperty("--ft-category-width",(group.getBoundingClientRect().width+(parseFloat(margins.marginLeft)||0)+(parseFloat(margins.marginRight)||0)+2)+"px");
+        nameLink=line.querySelector(":scope > .ft-project-name > .ft-link");const icon=line.querySelector(":scope > .ft-project-name > .ft-project-icon"),c=getComputedStyle(picker),i=icon&&getComputedStyle(icon);
+        const reserved=(icon?.getBoundingClientRect().width||0)+(parseFloat(i?.marginRight)||0)+(parseFloat(c.marginLeft)||0)+(parseFloat(c.marginRight)||0)+parseFloat(getComputedStyle(line).fontSize);
+        if(nameLink)nameLink.style.maxWidth=Math.max(0,line.clientWidth-group.getBoundingClientRect().width-reserved)+"px";
       }
-      group.style.maxWidth=Math.max(44,bounds.right-bounds.left)+"px";
-      const a=summary.getBoundingClientRect(),b=group.getBoundingClientRect();
-      const left=Math.max(bounds.left,Math.min(a.left,bounds.right-b.width));
-      const below=a.bottom+4,top=below+b.height<=bounds.bottom?below:Math.max(bounds.top,a.top-b.height-4);
-      group.style.left=left+"px";group.style.top=top+"px";
-      const actual=group.getBoundingClientRect();group.style.left=(left+left-actual.left)+"px";group.style.top=(top+top-actual.top)+"px";group.style.visibility="";
+      caption=picker.closest(".ft-area-caption");if(caption){const c=getComputedStyle(picker);const minimum=group.getBoundingClientRect().width+parseFloat(c.marginLeft)+parseFloat(c.marginRight);caption.style.minWidth=minimum+"px";
+        tightHost=caption.closest(".ft-area-title");if(tightHost){tightHost.removeClass("ft-categories-tight");const h=getComputedStyle(tightHost),others=[...tightHost.children].filter(e=>e!==caption&&!['absolute','fixed'].includes(getComputedStyle(e).position));const used=others.reduce((n,e)=>{const s=getComputedStyle(e);return n+e.getBoundingClientRect().width+(parseFloat(s.marginLeft)||0)+(parseFloat(s.marginRight)||0);},0);tightHost.toggleClass("ft-categories-tight",tightHost.clientWidth-parseFloat(h.paddingLeft)-parseFloat(h.paddingRight)-used<minimum);}
+      }
     };
     const show=()=>{
       if(!picker.isConnected || this.editing || this.held || !options.length)return;
       this.closeCategoryPicker?.();clearTimeout(this.categoryCloseTimer);
+      if(!picker.hasClass("is-open")){
+        host=picker.closest("li.ft-task,.ft-mobile-project-caption,.ft-area-title")||head;head.addClass("ft-category-measure");const style=getComputedStyle(host),signature=[host.getBoundingClientRect().width,style.fontSize].join(":");if(!size||size.signature!==signature)size={signature,height:host.getBoundingClientRect().height};const padding=style.boxSizing==="border-box"?0:[style.paddingTop,style.paddingBottom,style.borderTopWidth,style.borderBottomWidth].reduce((n,x)=>n+(parseFloat(x)||0),0);host.style.height=Math.max(0,size.height-padding)+"px";
+        head.removeClass("ft-category-measure");line=picker.closest(".ft-line");
+        if(line){const r=line.getBoundingClientRect(),h=parseFloat(getComputedStyle(line).lineHeight);lines=Math.max(1,Math.round(r.height/h));line.style.height=r.height+"px";line.style.overflow="hidden";}
+      }
       picker.addClass("is-open");summary.setAttr("aria-expanded","true");this.categoryOpen=key;
-      this.closeCategoryPicker=()=>{picker.removeClass("is-open");summary.setAttr("aria-expanded","false");if(this.categoryOpen===key)this.categoryOpen=null;};
+      this.closeCategoryPicker=()=>{picker.removeClass("is-open");host?.style.removeProperty("height");tightHost?.removeClass("ft-categories-tight");caption?.style.removeProperty("min-width");nameLink?.style.removeProperty("max-width");row?.style.removeProperty("--ft-category-width");line?.style.removeProperty("-webkit-line-clamp");line?.style.removeProperty("height");line?.style.removeProperty("overflow");summary.setAttr("aria-expanded","false");if(this.categoryOpen===key)this.categoryOpen=null;};
       place();
     };
     const leave=()=>{clearTimeout(this.categoryCloseTimer);this.categoryCloseTimer=setTimeout(()=>{
@@ -2369,7 +2364,7 @@ class FocusRenderer extends MarkdownRenderChild {
       button.onclick=async e=>{e.stopPropagation();if(this.editing||this.held)return;this.clearSelection();
         const on=await p.toggleSupplement(key,kind,later,focus,!expanded);if(onChoose)onChoose(kind,on);if(on&&unfold)await unfold();p.refresh();};
     }
-    if(Platform.isMobile && expandSteps){const more=group.createEl("button",{cls:"ft-category-expand",text:expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count)});
+    if(expandSteps){const target=Platform.isMobile?group:(picker.closest("li.ft-project-row")||group);const more=target.createEl("button",{cls:"ft-category-expand",text:(expandSteps.open?"−":"+")+expandSteps.count,attr:{"aria-label":expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count),title:expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count)}});
       more.onclick=e=>{e.stopPropagation();this.closeCategoryPicker?.();expandSteps.run();};}
     picker.ftShow=show;picker.ftPlace=place;
     if(!options.length){summary.setAttr("aria-disabled","true");summary.removeAttribute("aria-haspopup");}
@@ -3502,7 +3497,7 @@ class FocusRenderer extends MarkdownRenderChild {
 
   hoverTools(li) {
     if (Platform.isMobile) return;
-    const controls=[...li.children].filter(e=>e.matches(".ft-plus,.ft-chip.is-quiet.is-off,.ft-date.is-empty"));
+    const controls=[...li.children].filter(e=>e.matches(".ft-plus,.ft-chip.is-quiet.is-off,.ft-date.is-empty,.ft-category-expand"));
     if (!controls.length) return;
     li.setAttr("tabindex","0");li.addClass("ft-hover-host");
     const item=this.items?.get(li)||this.fresh?.get(li);

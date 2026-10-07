@@ -49,7 +49,7 @@ What you can do in the view:
 | | |
 |---|---|
 | Complete a task | click its checkbox; the closed task stays in its area's Done block for the day; its checkbox reopens it. An area without open focus work leaves Focus and remains available through All and Done |
-| See what is ahead in a project | hover the project's count/`+N`; the clock in its popup opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
+| See what is ahead in a project | hover the project's count/`+N`; the inline clock opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
 | A robot's mark | the list shows no priorities; the one dot it draws is `priority: low`, what a script or a bot leaves on a task it added and you have not looked at — a click on the dot (or «Take the robot's mark off» in the menu) removes it |
 | A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note, not to its step. Set, it alone decides whether the project is in the focus (due) or in the area's ⏳ pile with all of its steps; the steps keep their days |
@@ -107,9 +107,9 @@ An event notification and a native Apple Reminders checkbox are different integr
 ## Idea lists
 
 An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
-an anchored category popup; on a phone, tap it. Project counts sit next to the project name, reusing
-`+N` to expand additional steps. Their popup omits empty categories. The first project idea can be
-added from its context menu. The popup never changes text width or row height.
+inline category controls in place of the count; on a phone, tap it. Project counts sit next to the project name, reusing
+`+N` to expand additional steps. Their controls omit empty categories. The first project idea can be
+added from its context menu. The inline controls keep the row height stable.
 Each independently shows/hides its tasks. Several categories can be open together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
 When an area is folded, all available controls are dimmed. Clicking one unfolds the area and shows
@@ -364,9 +364,9 @@ Shift+клик выделяет все задачи от последней кл
 ### Замыслы
 
 У области видно одно общее число задач фокуса, отложки и замыслов. Наведение или фокус клавиатуры
-на число открывает компактное меню категорий; на телефоне оно открывается касанием. У проекта меню
-привязано к счётчику возле имени (`+N` также раскрывает шаги). Пустые категории проекта скрыты.
-Первый замысел проекта можно добавить через его контекстное меню. Меню не меняет ширину текста и высоту строки.
+заменяют число иконками категорий прямо в строке; на телефоне это происходит касанием. У проекта
+иконки заменяют счётчик возле имени (`+N` также раскрывает шаги). Пустые категории проекта скрыты.
+Первый замысел проекта можно добавить через его контекстное меню. Замена счётчика сохраняет высоту строки.
 Каждый независимо показывает и скрывает свои задачи. Можно открыть несколько категорий одновременно.
 Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.
 У свёрнутой области все доступные иконки приглушены. Нажатие раскрывает область и выбранную категорию,
