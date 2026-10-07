@@ -1094,7 +1094,7 @@ class FocusRenderer extends MarkdownRenderChild {
     this.plugin.setIntentsShown(false);
     const p = this.plugin;
     for (const key of Object.keys(p.data.opened)) if (key.startsWith("intents:") || key.startsWith("project-intents:")) delete p.data.opened[key];
-    for (const key of Object.keys(p.data.opened)) if (/^(focusoff:|project-focusoff:|project-focuson:|later:)/.test(key)) delete p.data.opened[key];
+    for (const key of Object.keys(p.data.opened)) if (/^(focusoff:|project-focusoff:|project-focuson:|project-header:|later:)/.test(key)) delete p.data.opened[key];
     for (const a of areas) {
       delete p.data.folded["area:" + a.name];
       delete p.data.opened["future:" + a.name];
@@ -2263,7 +2263,8 @@ class FocusRenderer extends MarkdownRenderChild {
       const focusShown = this.plugin.categoryShown({ key: "project-focusoff:" + path, onKey: "project-focuson:" + path, defaultOpen: focus });
       const backlogShown = this.plugin.categoryShown({ key: "later:" + path, projectPath: path, defaultOpen: backlog });
       return (!ahead && (focus || focusShown)) || ((backlog || backlogShown) && (counts.backlog.length > 0 || (ahead && !counts.focus.length)))
-        || this.plugin.isShown("project-intents:" + path, true);
+        || this.plugin.isShown("project-intents:" + path, true)
+        || this.plugin.isShown("project-header:" + path, true);
     };
     const rows = scope.rows.filter(r => r.kind === "project" ? projectVisible(r) : focus);
     const paths = new Set(rows.filter(r => r.kind === "project").map(r => r.project.file.path));
@@ -4135,6 +4136,8 @@ module.exports = class FocusTasks extends Plugin {
   async toggleSupplement(intentKey, kind, later = null, focus = null, reveal = false) {
     const view = kind === "focus" ? focus : kind === "backlog" ? later : { key: intentKey };
     if (!view) return false;
+    // A local choice hides tasks, not the header needed to reverse that choice.
+    if (intentKey.startsWith("project-intents:")) this.data.opened["project-header:" + intentKey.slice("project-intents:".length)] = true;
     // A collapsed ancestor hides the category without clearing its saved preference.
     // Its dim control must reveal that category, never toggle an already enabled one off.
     const on = reveal || !this.categoryShown(view);
@@ -4154,11 +4157,13 @@ module.exports = class FocusTasks extends Plugin {
         else { delete this.data.opened["later:" + path]; this.data.opened["pagefold:" + path] = true; }
       }
     }
-    // An area switch applies to its whole category, including project overrides left by a note.
-    if (intentKey.startsWith("intents:") && (kind === "focus" || kind === "backlog")) {
+    // Area choices reset local header retention and matching task-category overrides.
+    if (intentKey.startsWith("intents:")) {
       const area = intentKey.slice("intents:".length);
       for (const project of this.notes().filter(x => x.project && x.area === area)) {
         const path = project.file.path;
+        delete this.data.opened["project-header:" + path];
+        if (kind !== "focus" && kind !== "backlog") continue;
         const yes = (kind === "focus" ? "project-focuson:" : "later:") + path;
         const no = (kind === "focus" ? "project-focusoff:" : "pagefold:") + path;
         if (on) { this.data.opened[yes] = true; delete this.data.opened[no]; }
@@ -6282,7 +6287,7 @@ module.exports = class FocusTasks extends Plugin {
       if (i >= 0) { list[i] = "p:" + path; touched = true; }
     }
     for (const map of [this.data.opened, this.data.folded]) {
-      for (const prefix of ["project:", "later:", "done:", "waiting:", "pagefold:", "steps:", "fresh:", "project-intents:", "project-focusoff:", "project-focuson:", "area-page-backlogoff:"]) {
+      for (const prefix of ["project:", "later:", "done:", "waiting:", "pagefold:", "steps:", "fresh:", "project-intents:", "project-header:", "project-focusoff:", "project-focuson:", "area-page-backlogoff:"]) {
         if (map[prefix + old]) { map[prefix + path] = map[prefix + old]; delete map[prefix + old]; touched = true; }
       }
     }
@@ -6409,6 +6414,7 @@ module.exports = class FocusTasks extends Plugin {
       await this.trashOwned(project.file, tx, liveProject.text);
       await this.forget("steps:" + project.file.path);
       await this.forget("project-intents:" + project.file.path);
+      await this.forget("project-header:" + project.file.path);
       this.data.order.tasks["area:" + area.name] = this.areaSeats(area.name).filter((k) => k !== "p:" + project.file.path);
       await this.saveAll();
     });
@@ -6453,6 +6459,7 @@ module.exports = class FocusTasks extends Plugin {
         await this.trashOwned(f, tx, containerSources.get(f));
         await this.forget("project:" + f.path);
         await this.forget("steps:" + f.path);
+        await this.forget("project-header:" + f.path);
       }
       await this.forget("area:" + area.name);
       await this.forget("intents:" + area.name);

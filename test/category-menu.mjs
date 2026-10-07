@@ -1,6 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {FakeApp,loadPlugin,areaNote,projectNote,writeNote} from './harness.mjs';
+
+for(const kind of ['focus','backlog','intents'])test(`closing the last project ${kind} retains its header without affecting siblings`,async()=>{
+ const app=new FakeApp();areaNote(app,'Work');const file=projectNote(app,'Work','Project'),other=projectNote(app,'Work','Other'),p=await loadPlugin(app),path=file.path;
+ const key='project-intents:'+path,focus={key:'project-focusoff:'+path,onKey:'project-focuson:'+path,defaultOpen:false},later={key:'later:'+path,projectPath:path,defaultOpen:false};
+ const before=new Map(app.vault.files);
+ await p.toggleSupplement(key,kind,later,focus);
+ assert.equal(await p.toggleSupplement(key,kind,later,focus),false);
+ assert.equal(p.categoryShown(focus),false);assert.equal(p.categoryShown(later),false);assert.equal(p.isShown(key,true),false);
+ assert.equal(p.isShown('project-header:'+path,true),true);assert.equal(p.isShown('project-header:'+other.path,true),false);
+ assert.deepEqual(new Map(app.vault.files),before);
+ const loaded=await loadPlugin(app);assert.equal(loaded.isShown('project-header:'+path,true),true);
+ assert.equal(await loaded.toggleSupplement(key,kind,later,focus),true);
+});
+
+test('an area category choice resets retained headers only in its own area',async()=>{
+ const app=new FakeApp();areaNote(app,'Work');areaNote(app,'Life');const work=projectNote(app,'Work','Build'),life=projectNote(app,'Life','Rest'),p=await loadPlugin(app);
+ for(const kind of ['focus','backlog','intents']){
+  p.data.opened['project-header:'+work.path]=true;p.data.opened['project-header:'+life.path]=true;
+  await p.toggleSupplement('intents:Work',kind,{key:'future:Work'},{key:'focusoff:Work',inverted:true});
+  assert.equal(p.isShown('project-header:'+work.path,true),false);assert.equal(p.isShown('project-header:'+life.path,true),true);
+ }
+});
+
+test('a retained project header follows a rename and is cleared when the project is removed',async()=>{
+ const app=new FakeApp();areaNote(app,'Work');const file=projectNote(app,'Work','Project'),p=await loadPlugin(app),old=file.path;
+ p.data.opened['project-header:'+old]=true;
+ await app.vault.rename(file,'Areas/Renamed.md');await p.renamed(file.path,old);
+ assert.equal(p.isShown('project-header:'+old,true),false);assert.equal(p.isShown('project-header:'+file.path,true),true);
+ const area=(await p.collect(false,true)).find(a=>a.name==='Work'),project=p.notes().find(x=>x.file.path===file.path);
+ await p.removeProject(area,project);
+ assert.equal(p.isShown('project-header:'+file.path,true),false);
+});
 for(const presentation of ['focus-area','backlog-area','project']) for(let mask=0;mask<8;mask++) test(`${presentation} menu has only supported categories for population ${mask}`,async()=>{
  const p=await loadPlugin(new FakeApp());const focus={count:mask&1?3:0},later={count:mask&2?4:0},count=mask&4?5:0;
  const actual=p.categoryChoices({presentation,focus,later,count});const expected=[['focus',focus.count],['backlog',later.count],['intents',count]].filter(([kind,n])=>(kind!=='focus'||presentation!=='backlog-area')&&(presentation!=='project'||n>0)).map(([kind,n])=>({kind,n}));

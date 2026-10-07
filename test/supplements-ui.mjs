@@ -208,12 +208,21 @@ export async function checkSupplementsUI(page, mobile=false) {
     await until(()=>page.eval(`return !!(${project})&&(${project}).querySelector('.ft-focus-chip')?.getAttribute('aria-pressed')==='true';`),'local Focus overrides parent '+parentMask);
     const verify=async(focus,backlog,ideas)=>until(()=>page.eval(`const a=${area},r=${project},text=[...a.querySelectorAll('.ft-text')].map(e=>e.textContent);return !!r&&text.includes('SUP Focus')===${focus}&&text.includes('SUP Project later')===${backlog}&&!!r.parentElement.querySelector('.ft-project-intents')===${ideas}&&a.querySelector(':scope > .ft-area-title .ft-focus-chip').getAttribute('aria-pressed')===${J(String(!!(parentMask&1)))}&&a.querySelector(':scope > .ft-area-title .ft-later-chip').getAttribute('aria-pressed')===${J(String(!!(parentMask&2)))};`),'project reveals its category independently of parent '+parentMask);
     await verify(true,false,false);
+    // Closing the last local category must leave its project header available
+    // for reopening, including when every parent task category is closed.
+    await click(`(${project}).querySelector('.ft-focus-chip')`);await verify(false,false,false);
+    if(!await page.eval(`const r=${project};return !r.querySelector('.ft-box input,.ft-fold,.ft-no-step')&&r.querySelector('.ft-focus-chip')?.getAttribute('aria-pressed')==='false';`))throw Error('empty local Focus leaves stray project controls for parent '+parentMask);
+    await click(`(${project}).querySelector('.ft-focus-chip')`);await verify(true,false,false);
     await click(`(${project}).querySelector('.ft-later-chip')`);await verify(true,true,false);
     await click(`(${project}).querySelector('.ft-later-chip')`);await verify(true,false,false);
     await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(true,false,true);
     await click(`(${project}).querySelector('.ft-focus-chip')`);await verify(false,false,true);
+    await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(false,false,false);
+    await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(false,false,true);
     await click(`(${project}).querySelector('.ft-later-chip')`);await verify(false,true,true);
     await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(false,true,false);
+    await click(`(${project}).querySelector('.ft-later-chip')`);await verify(false,false,false);
+    await click(`(${project}).querySelector('.ft-later-chip')`);await verify(false,true,false);
     await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(false,true,true);
     await click(`(${project}).querySelector('.ft-focus-chip')`);await verify(true,true,true);
   }
