@@ -493,10 +493,10 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
 /* «Focus» sits at the top of the list: no air above it, as «Other areas» has between the two. */
 .focus-tasks-view .ft-focus-title { margin-top: 0.2em; }
 
-/* A project's row reads as one line of text: 📁 name +N › step, wrapping as prose does — back to the
-   name's column, three lines at most (the editor shows it all). */
+/* A project's row wraps as prose back to the name's column. Its count must
+   remain reachable even in a narrow split or with enlarged text. */
 .focus-tasks-view li.ft-project-row > .ft-line { flex: 1 1 auto; min-width: 0; margin-left: 0.2rem; line-height: var(--ft-line);
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  display: block; overflow: visible; overflow-wrap: anywhere; }
 .focus-tasks-view li.ft-project-row > .ft-line:has(.is-editing) { display: block; -webkit-line-clamp: none; overflow: visible; }
 .focus-tasks-view .ft-line > .ft-project-name { display: inline; color: var(--text-muted); font-weight: 500; }
 .focus-tasks-view .ft-line > .ft-project-name > .ft-project-icon { margin-right: 0.25em; }
@@ -721,13 +721,22 @@ body.is-mobile .focus-tasks-view .ft-link.is-editing { -webkit-user-select: text
 .focus-tasks-view .ft-supplement-switch .ft-chip-icon { display: inline-flex; align-items: center; justify-content: center; width: 1.1rem; line-height: 1; }
 .focus-tasks-view .ft-supplement-switch svg { width: 1rem; height: 1rem; }
 .focus-tasks-view .ft-supplement-count { font-variant-numeric: tabular-nums; }
-@media (hover: hover) and (pointer: fine) {
-  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-title,li.ft-project-row):not(:hover):not(:focus-within) > .ft-supplement-focus-area > button:not(.ft-focus-chip),
-  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-title,li.ft-project-row):not(:hover):not(:focus-within) > .ft-supplement-backlog-area > button:not(.ft-later-chip),
-  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-title,li.ft-project-row):not(:hover):not(:focus-within) > .ft-supplement-project {
-    display: none;
-  }
-}
+/* One count owns an anchored popup. Opening it cannot change the title width. */
+.focus-tasks-view .ft-category-picker { display: inline-flex; flex: none; position: relative; align-items: center; margin: 0 0.35em; vertical-align: baseline; }
+.focus-tasks-view .ft-area-caption { display: inline-flex; align-items: baseline; min-width: 0; }
+.focus-tasks-view .ft-area-caption > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.focus-tasks-view .ft-category-total { padding: 0 0.2em; margin: 0; height: auto; min-width: 1em; border: 0; box-shadow: none; background: transparent; color: var(--text-muted); font: inherit; font-size: 0.8em; font-variant-numeric: tabular-nums; cursor: pointer; }
+.focus-tasks-view .ft-category-picker > .ft-steps-more { margin: 0; padding: 0 0.15em; min-width: 0; font-size: 0.8em; color: var(--text-muted); cursor: pointer; }
+.focus-tasks-view .ft-category-picker > .ft-steps-more.is-late { color: var(--text-error); }
+.focus-tasks-view .ft-category-picker > .ft-steps-more.is-open { color: var(--text-normal); }
+.focus-tasks-view .ft-category-picker > .ft-supplement-switch { display: none; position: fixed; z-index: 1000; padding: 5px 6px; margin: 0; width: max-content; max-width: calc(100vw - 16px); flex-wrap: wrap; border-radius: 6px; background: var(--background-primary); box-shadow: 0 3px 12px rgba(0,0,0,.18); }
+.focus-tasks-view .ft-category-picker.is-open > .ft-supplement-switch { display: inline-flex; }
+.focus-tasks-view .ft-category-total:focus-visible,.focus-tasks-view .ft-category-picker > .ft-steps-more:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.focus-tasks-view .ft-category-expand { border: 0; box-shadow: none; background: transparent; color: var(--text-muted); font-size: inherit; }
+body.is-mobile .focus-tasks-view .ft-category-total { min-height: 36px; min-width: 28px; }
+body.is-mobile .focus-tasks-view .ft-category-picker > .ft-steps-more { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; min-width: 28px; }
+body.is-mobile .focus-tasks-view .ft-area-title > .ft-category-picker { grid-column: 3; grid-row: 2; justify-self: start; }
+body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-category-picker { grid-column: 2; grid-row: 2; justify-self: start; }
 .focus-tasks-view .ft-project-ideas-slot { list-style: none; padding: 0; margin: 0 0 0 var(--ft-col); min-width: 0; }
 .focus-tasks-view .ft-project-intents { margin: 0.3rem 0 0.7rem; }
 body.is-mobile .focus-tasks-view .ft-supplement-switch { margin: 0.1rem 0; }
@@ -761,6 +770,8 @@ body:not(.is-mobile) .focus-tasks-view li.ft-task > .ft-supplement-switch > butt
 .focus-tasks-view .ft-supplement-count { font-size: 0.75rem; }
 /* Keyboard access reveals the same actions as hover, without empty placeholders. */
 body:not(.is-mobile) .focus-tasks-view .ft-category-host:focus-within > :is(.ft-plus,.ft-more),
+body:not(.is-mobile) .focus-tasks-view .ft-category-host.ft-press-focus > :is(.ft-plus,.ft-more),
+body:not(.is-mobile) .focus-tasks-view .ft-category-host.ft-press-focus > .ft-date.is-empty,
 body:not(.is-mobile) .focus-tasks-view .ft-category-host:focus-within > .ft-date.is-empty {
   display: inline-flex; opacity: 1; }
 /* Narrow desktop panes receive their own row for supplements, just like phone headers. */
@@ -779,6 +790,7 @@ body:not(.is-mobile) .focus-tasks-view .ft-category-host:focus-within > .ft-date
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) { grid-template-columns: var(--ft-col) minmax(0,1fr) auto auto; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > :is(.ft-emoji,.ft-project-icon) { grid-column: 1; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-page-name { grid-column: 2; grid-row: 1; min-width: 0; overflow-wrap: anywhere; }
+  body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-area-caption { grid-column: 2; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-plus { grid-column: 3; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-more { grid-column: 4; grid-row: 1; }
   body:not(.is-mobile) .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-supplement-switch { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
@@ -794,3 +806,26 @@ body:not(.is-mobile) .focus-tasks-view .ft-category-host:focus-within > .ft-date
 /* A fold arrow carries no second numeric badge beside the category counters. */
 .focus-tasks-view .ft-line > .ft-steps-more { display: inline-flex; align-items: center; justify-content: center; min-width: 1.4rem; }
 .focus-tasks-view .ft-steps-more svg { width: 1rem; height: 1rem; }
+
+/* Hover tools belong to a floating strip above the active row. They consume
+   no title width and do not change its wrapping, baseline or height. */
+body:not(.is-mobile) .focus-tasks-view li.ft-hover-host { position: relative; overflow: visible; }
+body:not(.is-mobile) .focus-tasks-view .ft-hover-tools { display: none; position: absolute; right: 0;
+  bottom: calc(100% - 1px); z-index: 8; width: max-content; max-width: 100%; min-height: 26px;
+  align-items: center; gap: 0.3rem; padding: 2px 4px; background: var(--background-primary);
+  border: 0; box-shadow: none; font-size: 0.85rem; line-height: 1; }
+body:not(.is-mobile) .focus-tasks-view li.ft-hover-host:is(:hover,:focus-within,.ft-press-focus) > .ft-hover-tools { display: inline-flex; }
+body:not(.is-mobile) .focus-tasks-view .ft-hover-tools > :is(.ft-plus,.ft-chip,.ft-date) {
+  display: inline-flex; opacity: 1; margin: 0; height: 25px; align-items: center; }
+body:not(.is-mobile) .focus-tasks-view .ft-hover-tools > .ft-supplement-switch { margin: 0; align-self: center; }
+.focus-tasks-view .ft-intents { --ft-idea-ink: var(--color-orange, #c79657); }
+.focus-tasks-view .ft-project-intents { position: relative; }
+.focus-tasks-view .ft-project-intents::before { content: ""; position: absolute; left: -0.3rem; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--ft-idea-ink) 45%, transparent); pointer-events: none; }
+.focus-tasks-view .ft-idea-mark { display: inline-flex; vertical-align: -0.15em; color: var(--ft-idea-ink); margin-right: 0.35em; }
+.focus-tasks-view .ft-idea-mark svg { width: 0.9em; height: 0.9em; }
+
+body.is-mobile .focus-tasks-view .ft-area-title > .ft-area-caption { grid-column: 3; grid-row: 1; display:flex; align-items:flex-start; gap:0.15em; min-width:0; }
+body.is-mobile .focus-tasks-view .ft-area-title.ft-area-page-head > .ft-area-caption,
+body.is-mobile .focus-tasks-view .ft-page-head > .ft-area-caption { grid-column: 2; grid-row: 1; }
+body.is-mobile .focus-tasks-view .ft-area-caption > :first-child { min-width:0; }
+body.is-mobile .focus-tasks-view .ft-area-caption > .ft-category-picker { margin:0; align-self:flex-start; }

@@ -13,7 +13,9 @@
     "test:stress": "node --test test/stress.mjs",
     "test:mobile": "node test/mobile.mjs",
     "zip": "rm -rf dist && mkdir -p dist/focus-tasks && cp main.js manifest.json styles.css README.md dist/focus-tasks/ && cd dist && zip -qr focus-tasks-$npm_package_version.zip focus-tasks",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
+    "version": "node version-bump.mjs && git add manifest.json versions.json",
+    "test:regressions": "node --test test/audit.mjs test/archive-repair.mjs test/delivery.mjs test/vault-audit.mjs test/intents.mjs test/intent-lists.mjs test/supplements.mjs test/list-completion.mjs test/idea-entities.mjs test/state-transitions.mjs test/selection-matrix.mjs test/mixed-histories.mjs test/category-menu.mjs",
+    "test:migration": "node test/migrate-intents.mjs"
   },
   "license": "MIT",
   "devDependencies": {

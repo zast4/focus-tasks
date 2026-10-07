@@ -1,0 +1,55 @@
+import {J,sleep,until} from './cdp.mjs';
+export async function checkIdeaEntitiesUI(page,mobile=false){
+ const root="app.workspace.getLeavesOfType('focus-tasks-view')[0].view.containerEl";
+ const area=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='Idea entities UI')`;
+ const project=key=>`[...${root}.querySelectorAll('.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent===${J('IE '+key)})`;
+ const menu=label=>`[...document.querySelectorAll('.menu-item')].find(e=>e.textContent.trim()===${J(label)})`;
+ const point=async expr=>{await page.front();await page.eval(`const e=${expr};e?.scrollIntoView({block:'center',behavior:'instant'});if(!${mobile})e?.closest('.ft-category-host,.ft-hover-host')?.focus();return true;`);await sleep(250);return until(()=>page.eval(`const e=${expr},r=e?.getBoundingClientRect();if(!r?.width)return false;const p={x:r.left+r.width/2,y:r.top+r.height/2};return e.contains(document.elementFromPoint(p.x,p.y))?p:false;`),'entity control '+expr);};
+ const click=async expr=>{const at=await point(expr);if(mobile)await page.tap(at);else await page.click(at);await sleep(250);};
+ await page.eval(`if(app.vault.getName()!==${J(mobile?'focus-tasks-mobile':'focus-tasks-e2e')})throw Error('fixture guard');const p=app.plugins.plugins['focus-tasks'];const file=await p.createArea('Idea entities UI');window.__ie={area:file.path};return true;`);
+ await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].notes().some(n=>n.area==='Idea entities UI');`),'entity area metadata');
+ await page.eval(`const p=app.plugins.plugins['focus-tasks'],a={name:'Idea entities UI',note:app.vault.getAbstractFileByPath(__ie.area)};for(const key of ['Menu','Drag']){const f=await p.createProject(a,'IE '+key);__ie[key]=f.path;await p.createTask('IE '+key+' step',{area:a.name,project:f.basename,projectFile:f},moment().format('YYYY-MM-DD'));}await p.createTask('IE Anchor',{area:a.name},moment().format('YYYY-MM-DD'));p.setEverything(false);delete p.data.folded['area:'+a.name];p.data.opened['intents:'+a.name]=true;await p.saveFolds();await p.openView();p.refresh();return true;`);
+ await until(()=>page.eval(`return !!(${area})?.querySelector('.ft-loose-idea-add');`),'loose idea add');
+ if(!await page.eval(`const row=(${area}).querySelector('.ft-loose-ideas-row');return row&&!row.querySelector('input')&&row.querySelector('.ft-project-name .ft-link')?.textContent===${J(mobile?'Замыслы':'Ideas')};`))throw Error('empty default Ideas group must exist without a container completion checkbox');
+ await click(`(${area}).querySelector('.ft-loose-idea-add')`);await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'loose editor');await page.type('IE Loose possibility');await page.key('Enter');await page.key('Escape');
+ await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],t=p.read().intentTasks.find(x=>x.text==='IE Loose possibility');return t?.loose&&!t.project&&!p.tasks().some(x=>x.uid===t.uid);`),'private loose idea saved');
+ if(!await page.eval(`return [...(${area}).querySelectorAll('.ft-loose-ideas-row .ft-project-name .ft-link')].some(x=>x.textContent===${J(mobile?'Замыслы':'Ideas')});`))throw Error('loose idea lacks its default Ideas group');
+ await page.eval(`__ie.views=app.plugins.plugins['focus-tasks'].views.size;return true;`);
+ const at=await point(`(${project('Menu')}).querySelector('.ft-project-name')`);
+ if(mobile){await page.touch('touchStart',[at]);await sleep(750);await page.touch('touchEnd',[]);}else await page.rightClick(at);
+ await until(()=>page.eval(`return !!(${menu(mobile?'Сделать замыслом':'Make an idea list')});`),'project conversion menu');await click(menu(mobile?'Сделать замыслом':'Make an idea list'));
+ await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],f=app.vault.getAbstractFileByPath(__ie.Menu),l=p.intentOf(f);return l?.isList&&p.intentEntries(l).some(x=>x.text==='IE Menu step');`),'menu converts project and step');
+ await page.eval(`await app.plugins.plugins['focus-tasks'].txTail;return true;`);await sleep(500);
+ if(!await page.eval(`const p=app.plugins.plugins['focus-tasks'];return p.views.size<=__ie.views&&![...p.views].some(v=>v.containerEl.closest('.ft-intent-description'))&&![...${root}.querySelectorAll('.ft-intent-description .focus-tasks-view')].length;`))throw Error('converted project description recursively creates Focus views');
+ await page.key('Meta+z');
+ await until(()=>page.eval(`return !!app.plugins.plugins['focus-tasks'].classify(app.vault.getAbstractFileByPath(__ie.Menu))?.project;`),'one undo restores project');
+ await page.eval(`const p=app.plugins.plugins['focus-tasks'];p.data.opened['intents:Idea entities UI']=true;await p.saveFolds();p.refresh();return true;`);
+ if(mobile)await page.eval(`app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.setMobileReordering(true);return true;`);
+ await until(()=>page.eval(`return !!(${project('Drag')})&&!!(${area})?.querySelector('.ft-intents');`),'drag endpoints');
+ await page.eval(`(${area}).scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(700);
+ const points=await page.eval(`const row=${project('Drag')},grip=row.querySelector('.ft-grip').getBoundingClientRect(),target=(${area}).querySelector('.ft-intents').getBoundingClientRect();return {from:{x:grip.left+grip.width/2,y:grip.top+grip.height/2},to:{x:target.right-8,y:target.bottom-8}};`);
+ if(mobile){await page.touch('touchStart',[points.from]);for(let i=1;i<=14;i++){await page.touch('touchMove',[{x:points.from.x+(points.to.x-points.from.x)*i/14,y:points.from.y+(points.to.y-points.from.y)*i/14}]);await sleep(25);}await page.touch('touchEnd',[]);}else await page.drag(points.from,points.to);
+ await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],l=p.intentOf(app.vault.getAbstractFileByPath(__ie.Drag));return l?.isList&&p.intentEntries(l).some(x=>x.text==='IE Drag step');`),'real drag converts project and step');
+ if(mobile)await page.eval(`app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.setMobileReordering(false);return true;`);
+ await page.eval(`const leaf=app.workspace.getLeaf('tab');await leaf.openFile(app.vault.getAbstractFileByPath(__ie.Drag),{state:{mode:'preview'}});return true;`);
+ await until(()=>page.eval(`const b=[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-intent-page')].find(x=>x.getBoundingClientRect().width);return b&&b.querySelector('.ft-text')?.textContent==='IE Drag step'&&!b.textContent.includes('IE Anchor');`),'converted project note shows only its own ideas');
+ const ownPage="[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-intent-page')].find(x=>x.getBoundingClientRect().width)";
+ if(!mobile){const at=await page.eval(`const h=(${ownPage}).querySelector('.ft-page-head');h.scrollIntoView({block:'center',behavior:'instant'});const r=h.getBoundingClientRect();return {x:r.left+20,y:r.top+4};`);await page.mouse('mouseMoved',at.x,at.y,0);}
+ await click(`(${ownPage}).querySelector('.ft-page-head .ft-plus')`);
+ await until(()=>page.eval(`return !!(${ownPage}).querySelector('.ft-draft-row .is-editing');`),'own idea note Plus creates editor');
+ await page.type('IE Own note idea');await page.key('Enter');await page.key('Escape');
+ await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],l=p.intentOf(app.vault.getAbstractFileByPath(__ie.Drag));return p.intentEntries(l).some(t=>t.text==='IE Own note idea')&&!p.tasks().some(t=>t.text==='IE Own note idea');`),'own idea note addition stays private');
+ await page.eval(`await app.plugins.plugins['focus-tasks'].openView();return true;`);
+
+ await page.eval(`const p=app.plugins.plugins['focus-tasks'],list=await p.createIntentList('IE Sync gap','Idea entities UI'),entry=await p.createTask('IE Partial sync',{area:list.area,projectFile:list.file,project:list.file.basename,intentList:true,listUid:list.uid},null);window.__ieGap={path:list.file.path,raw:await app.vault.cachedRead(list.file),uid:entry.uid,entry:entry.file.path,before:await app.vault.cachedRead(entry.file)};await app.vault.delete(list.file);return true;`);
+ await page.eval(`return app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.revealIntent({kind:'intent-task',uid:__ieGap.uid});`);
+ await until(()=>page.eval(`return !!${root}.querySelector('.ft-found.ft-idea-task');`),'missing-list entry remains reachable in default Ideas');
+ await page.eval(`await app.vault.create(__ieGap.path,__ieGap.raw);return true;`);
+ await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.read().intentTasks.find(x=>x.uid===__ieGap.uid);return task&&!p.unboundIntent(task);`),'restored list recovers its entry binding');
+ if(!await page.eval(`return await app.vault.cachedRead(app.vault.getAbstractFileByPath(__ieGap.entry))===__ieGap.before;`))throw Error('partial sync rewrote entry membership');
+ await page.eval(`delete window.__ieGap;return true;`);
+ const uid=await page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.find(x=>x.text==='IE Loose possibility').uid;`);
+ await page.eval(`return app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.revealIntent({kind:'intent-task',uid:${J(uid)}});`);
+ await until(()=>page.eval(`return !!${root}.querySelector('.ft-found.ft-idea-task');`),'loose search reveal');
+ await page.eval(`const p=app.plugins.plugins['focus-tasks'],a=(await p.collect(true)).find(x=>x.name==='Idea entities UI');await p.removeArea(a);delete window.__ie;await p.openView();return true;`);
+}

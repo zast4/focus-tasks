@@ -85,7 +85,7 @@ and do not reopen one that turned done while you were working.
   Credentials and Python environments stay outside the vault and repository.
   `calendar-status.json` is the private ownership ledger; the derived Markdown receipt syncs
   to phones and drives badges only for the current confirmed clock. `obsidian://focus-tasks`
-  activates the list. A timed task automatically owns one 30-minute at-start reminder event.
+  activates the list. A timed task automatically owns one 60-minute at-start reminder event.
 
 ### TaskNotes in one click
 
@@ -135,19 +135,23 @@ these as actionable tasks or area/project notes. `read().intentTasks` is separat
 intent entries. Changing an entry's date never promotes it. Explicit promotion preserves UID,
 sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
-Shared target/clock/lightbulb counters follow effective scope membership in global and scoped views.
-Desktop Focus areas show only the target at rest, Other areas only the clock and no target. Project
-controls and secondary area controls leave the layout entirely while hidden (display:none),
-including +/menus and optional grid tracks. Project headers are keyboard reachable and reveal
-controls on focus-within. Touch
-controls remain visible. `scopeTasks.hasFocus` includes actionable empty projects and ignores
-completed-only projects, so impossible Focus controls are omitted without changing saved states.
+Area headers show one aggregate count; project headers reuse their count/`+N` beside the name.
+Hover/focus opens an anchored category popup; touch opens it by tapping. Project popups omit
+empty categories, and empty projects have no dead count button. Area popups keep supported empty
+Backlog/Ideas available. `scopeTasks.hasFocus` includes actionable empty projects and ignores
+completed-only projects; Other areas never offer an impossible Focus control. Hidden controls
+and menus occupy no layout space. Popups fit the owning Obsidian leaf and remain clickable in
+narrow splits with the sidebar open. Keyboard focus and a pressed control survive redraw.
 Each category independently controls only its visibility; All is never changed.
+Adding another project step unfolds its existing step list before the editor is mounted.
+Plus and Enter use the same draft placement in the global, area and project views, including touch.
+An unsaved draft creates no note. A destination changed or closed by another writer refuses save
+and keeps the draft text. Copying a completed task reopens its real container in the same Undo.
 While an area is folded, controls are dimmed without changing saved category states; clicking a
 control requests reveal instead of toggle, then unfolds the area. This includes empty Other areas.
 Focus uses device `focusoff:<area>` / `project-focusoff:<path>` (plus explicit project-focuson override). Existing area
 future keys keep the All inversion. Project backlog shares explicit later/pagefold state across
-row/note views; empty counters remain visible. `scopeTasks` counts effective `collect(false,true)`
+row/note views; numbers do not depend on popup visibility. `scopeTasks` counts effective `collect(false,true)`
 row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
 change numbers. A project renders once when its focused and future steps are both visible.
 When a project's Focus is hidden, its row disappears unless its Backlog tasks or Ideas are shown.
@@ -165,8 +169,14 @@ open exclusively, including search/programmatic opening. A project has one heade
 read-only. Existing lists can be bound/unbound. Rename, move, promotion, deletion and Undo include
 project collections. A project replaced under the same filename cannot inherit an old UID's ideas.
 `node --test test/supplements.mjs` and `test/supplements-ui.mjs` cover these contracts.
+Desktop task/project hover actions use `.ft-hover-tools`, an out-of-flow strip above the active row. No invisible title-width reservation is permitted. `hover-layout-ui.mjs` checks unchanged row/text rectangles on hover and keyboard focus. Header focus and a pressed control survive metadata redraw.
+
+Loose private entries use `type: замысел`, `intentLoose: true`, `intentArea`, and no `intentList`/`intentListUid`. This explicit marker distinguishes them from legacy prose cards. Every area presents them in a virtual default Ideas row, including when empty; the grouping creates no note and has no container-completion checkbox. They reuse normal task CRUD/selection/Undo, stay outside canonical queues and Calendar, and may enter a list or be explicitly activated.
+
+An exhausted list can be completed/reopened by its checkbox (`status: done`, `completedDate`) and lives in its private Done shelf. Creation/drop into it reopens it in the same transaction. `projectToIntentList` is shared by menu and drag conversion: preserves UID/body/custom properties and step states; existing linked collections are retained as independent area lists. `idea-entities.mjs` and `list-completion.mjs` cover these transitions.
+
 List headers reuse `projectRow`, with the 📔 icon and normal task rows. List folds reuse `steps:`
-keys but are open by default; lists cannot be completed as projects. `intent:<list-uid>` stores
+keys but are open by default. Exhausted real lists support completion; virtual groups do not. `intent:<list-uid>` stores
 entry order; `intent-lists:<area>` stores container order. Device folds remain local.
 
 Old free cards (`type: замысел` without `intentList`) remain readable migration sources.
@@ -211,6 +221,8 @@ by hand on a copy of the real vault (147 tasks), TaskNotes 4.13.4:
 
 ## Tests
 
+The user-visible scenario contract and configuration matrix live in [test/SCENARIOS.md](test/SCENARIOS.md).
+
 `test/e2e.mjs` drives a real Obsidian over the Chrome DevTools Protocol: it builds a fresh vault
 (`test/focus-tasks-e2e/`), opens it in a new window, installs the plugin from this folder and goes
 through every feature with real mouse and keyboard input, checking the files on disk.
@@ -225,6 +237,9 @@ node test/e2e.mjs --audit-only --baseline <ref>         # run current regression
 node test/mobile.mjs                                   # mobile emulation, with touch
 node --test test/audit.mjs test/archive-repair.mjs test/delivery.mjs # failures/concurrency/delivery
 node --test test/stress.mjs                              # histories + 10,000 tasks
+npm run test:regressions                              # deterministic unit regressions (no GUI)
+npm run test:migration                               # native operator, run separately from all GUI suites
+node --test test/state-transitions.mjs test/selection-matrix.mjs test/mixed-histories.mjs # sync races + entity selection + task/idea lifecycles
 node test/e2e.mjs --with-tasks                           # actual installed Tasks
 node test/e2e.mjs --match 'row controls' --baseline shipped # new geometry checks must reject the old layout
 node test/e2e.mjs --match 'row controls' --theme <theme-dir> --with-tasks # same geometry in the user's composition
@@ -311,3 +326,5 @@ git push && git push origin 0.2.0
 
 The GitHub Action publishes a release with `main.js`, `manifest.json`, `styles.css` and a zip;
 BRAT users get it on their next update check. Commits use the GitHub noreply email.
+
+Category popups are anchored to one aggregate count (project `+N`), never inserted into the text flow on hover. Native matrices must check hidden popups, tap/keyboard entry, zero category filtering and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.

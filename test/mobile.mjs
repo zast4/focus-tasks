@@ -6,6 +6,7 @@
 // Needs Obsidian running with a DevTools port (any vault open):
 //   open -a Obsidian --args --remote-debugging-port=9222
 //   node test/mobile.mjs            (--keep leaves the vault and its window open)
+import { checkProjectDraftUI } from './project-draft-ui.mjs';
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +15,8 @@ import { Page, J, sleep, ymd, until } from "./cdp.mjs";
 import { layoutFixture, checkLayoutMatrix, checkCurrentLayout, openLayoutContext } from "./mobile-layout.mjs";
 import { checkIntentsUI } from "./intents-ui.mjs";
 import { checkSupplementsUI } from "./supplements-ui.mjs";
+import { checkListCompletionUI } from "./list-completion-ui.mjs";
+import { checkIdeaEntitiesUI } from "./idea-entities-ui.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -64,9 +67,10 @@ const at = (selector) => page.eval(`
   return r.width && r.height && hit && (hit===el||el.contains(hit)) ? {x,y} : null;`);
 const tapOn = async (selector, what) => {
   await page.front();
-  await page.eval(`(${selector})?.scrollIntoView({block:'center',behavior:'instant'});return true;`);
+  const trigger=await page.eval(`const e=${selector},picker=e?.closest('.ft-category-picker');(picker||e)?.scrollIntoView({block:'center',behavior:'instant'});if(picker&&!picker.classList.contains('is-open')&&e.matches('button[data-ft-category]')){const r=picker.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}return null;`);
+  if(trigger)await page.tap(trigger);
   await sleep(180);
-  const point = await until(() => at(selector), what || selector);
+  const point = await until(() => at(selector), what || selector).catch(async err=>{const info=await page.eval(`const e=${selector},r=e?.getBoundingClientRect(),hit=r&&document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {rect:r?.toJSON(),hit:hit?.outerHTML.slice(0,180),active:app.workspace.activeLeaf.view.file?.path,root:window.__layoutRoot?.()?.className};`);throw Error(err.message+' '+J(info));});
   await page.tap(point);
 };
 
@@ -100,8 +104,9 @@ const step = (name, fn) => steps.push({ name, fn });
 // Between steps: close whatever the on-screen keyboard left behind (Obsidian's own suggestion
 // popup swallows the next tap) and let the list settle.
 async function calm() {
+  if(await page.eval(`return !!document.querySelector('.ft-category-picker.is-open');`).catch(()=>false))await page.tap({x:8,y:400}).catch(()=>{});
   await page.eval(`document.querySelectorAll('.ft-reorder-done').forEach(e=>e.click());return true;`).catch(()=>{});
-  await page.key("Escape").catch(() => {});
+  if(await page.eval(`return !!document.querySelector('.ft-picker,.menu,.modal,[contenteditable=true].ft-text');`).catch(()=>false))await page.key("Escape").catch(() => {});
   await page.eval(`
     document.activeElement?.blur?.();
     document.querySelectorAll('.suggestion-container, .suggestion-bg, .menu, .ft-picker').forEach((e) => e.remove());
@@ -395,7 +400,7 @@ step("ticking a box does not throw the phone screen around", async () => {
     await new Promise((r) => setTimeout(r, 400));
     const top = s.getBoundingClientRect().top;
     const name = (r) => r.querySelector('.ft-text').textContent.trim();
-    const rows = [...view.containerEl.querySelectorAll('li.ft-task')].filter((r) => { const y = r.getBoundingClientRect().top; return y > top + 10 && y < top + s.clientHeight - 80; });
+    const rows = [...view.containerEl.querySelectorAll('li.ft-task')].filter((r) => { const y = r.getBoundingClientRect().top; return r.querySelector('.ft-text')?.getBoundingClientRect().width && r.querySelector('input')?.getBoundingClientRect().width && y > top + 10 && y < top + s.clientHeight - 80; });
     if (rows.length < 3) return { error: 'only ' + rows.length + ' rows on screen' };
     const b = rows[1].querySelector('input').getBoundingClientRect();
     return { tick: name(rows[1]), mark: name(rows[rows.length - 1]), markY: Math.round(rows[rows.length - 1].getBoundingClientRect().top),
@@ -464,9 +469,9 @@ step("phone area and project pages accept undated tasks offline", async () => {
       { path:'Areas/Рутина.md', root:'.ft-area-page', text:'Офлайн внутри области', area:'🧤Рутина' },
       { path:'Areas/Ремонт.md', root:'.ft-page', text:'Офлайн внутри проекта', area:'🏡Дом', project:'[[Ремонт]]' },
     ]) {
-      await page.eval(`const p=app.plugins.plugins['focus-tasks']; const file=app.vault.getAbstractFileByPath(${J(local.path)}); await p.${local.project?'ensureStepsBlock':'ensureAreaBlock'}(file);const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
-      await until(()=>page.eval(`return [...document.querySelectorAll(${J(local.root)})].some(e=>e.getClientRects().length && e.querySelector('.ft-plus'));`),'visible local page');
-      await tapOn(`([...document.querySelectorAll(${J(local.root)})].find(e=>e.getClientRects().length))?.querySelector('.ft-plus')`,'local add offline');
+      await page.eval(`const p=app.plugins.plugins['focus-tasks']; const file=app.vault.getAbstractFileByPath(${J(local.path)}); await p.${local.project?'ensureStepsBlock':'ensureAreaBlock'}(file);const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.revealLeaf(leaf).catch(e=>console.warn('fixture reveal',e));app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+      await until(()=>page.eval(`const e=[...app.workspace.activeLeaf.view.containerEl.querySelectorAll(${J(local.root)})].find(e=>e.getBoundingClientRect().width>0);return e?.getBoundingClientRect().width>0 && !!e.querySelector('.ft-plus');`),'visible local page').catch(async err=>{const info=await page.eval(`return {file:app.workspace.activeLeaf.view.file?.path,type:app.workspace.activeLeaf.view.getViewType(),roots:[...document.querySelectorAll('.focus-tasks-view')].map(x=>({cls:x.className,width:x.getBoundingClientRect().width})),leaves:app.workspace.getLeavesOfType('markdown').map(l=>({file:l.view.file?.path,width:l.view.containerEl.getBoundingClientRect().width}))};`);throw Error(err.message+' '+J(info));});
+      await tapOn(`[...app.workspace.activeLeaf.view.containerEl.querySelectorAll(${J(local.root)})].find(e=>e.getBoundingClientRect().width>0)?.querySelector('.ft-plus')`,'local add offline');
       await until(()=>page.eval(`return [...document.querySelectorAll('.ft-text.is-editing')].some(e=>e.getClientRects().length);`),'local offline editor');
       await page.type(local.text); await page.key('Enter'); await page.key('Escape');
       await taskIs(local.text,{area:local.area,scheduled:null,...(local.project?{projects:local.project}:{})});
@@ -483,7 +488,7 @@ step("local area projects and expanded steps are flat on 320, 390 and 430px scre
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];const note=app.vault.getAbstractFileByPath('Areas/Дом.md');
     await p.ensureAreaBlock(note);await p.createTask('Отдельная задача области',{area:'🏡Дом'},null);
     await p.setOpen('steps:Areas/Ремонт.md',true);const leaf=app.workspace.getLeaf('tab');
-    await leaf.setViewState({type:'markdown',state:{file:note.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+    await leaf.setViewState({type:'markdown',state:{file:note.path,mode:'preview'}});app.workspace.revealLeaf(leaf).catch(e=>console.warn('fixture reveal',e));app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
   await until(()=>page.eval(`const root=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return root?.querySelectorAll('.ft-steps li.ft-task').length>=2;`),'expanded project inside the local area');
   for (const width of [320,390,430]) {
     await page.send('Emulation.setDeviceMetricsOverride',{width,height:HEIGHT,deviceScaleFactor:2,mobile:true});
@@ -500,16 +505,16 @@ step("local area projects and expanded steps are flat on 320, 390 and 430px scre
 });
 
 step("local project grips stay reachable on 320, 390 and 430px screens", async () => {
-  await page.eval(`const file=app.vault.getAbstractFileByPath('Areas/Ремонт.md');const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
-  await until(()=>page.eval(`return [...document.querySelectorAll('.ft-page')].some(e=>e.getClientRects().length&&e.querySelector('li.ft-task'));`),'project page with tasks');
-  await enterReordering(`([...document.querySelectorAll('.ft-page')].find(e=>e.getClientRects().length))?.querySelector('li.ft-task .ft-text')`);
+  await page.eval(`const file=app.vault.getAbstractFileByPath('Areas/Ремонт.md');const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.revealLeaf(leaf).catch(e=>console.warn('fixture reveal',e));app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+  await until(()=>page.eval(`const e=[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-page')].find(e=>e.getBoundingClientRect().width>0);return e?.getBoundingClientRect().width>0&&!!e.querySelector('li.ft-task');`),'project page with tasks');
+  await enterReordering(`[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-page')].find(e=>e.getBoundingClientRect().width>0)?.querySelector('li.ft-task .ft-text')`);
   for(const width of [320,390,430]) {
     await page.send('Emulation.setDeviceMetricsOverride',{width,height:HEIGHT,deviceScaleFactor:2,mobile:true});await sleep(300);
-    const rows=await page.eval(`const root=[...document.querySelectorAll('.ft-page')].find(e=>e.getClientRects().length);return [...root.querySelectorAll('li.ft-task')].map(e=>({left:e.querySelector(':scope > .ft-grip').getBoundingClientRect().left,right:e.getBoundingClientRect().right}));`);
+    const rows=await page.eval(`const root=[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-page')].find(e=>e.getBoundingClientRect().width>0);return [...root.querySelectorAll('li.ft-task')].map(e=>({left:e.querySelector(':scope > .ft-grip').getBoundingClientRect().left,right:e.getBoundingClientRect().right}));`);
     if(!rows.length||rows.some(r=>r.left<0||r.right>width+1))throw new Error('project grip outside '+width+'px screen: '+J(rows));
   }
   await page.send('Emulation.setDeviceMetricsOverride',{width:WIDTH,height:HEIGHT,deviceScaleFactor:2,mobile:true});
-  await tapOn(`([...document.querySelectorAll('.ft-page')].find(e=>e.getClientRects().length))?.querySelector('li.ft-task > .ft-grip')`,'local project task grip');
+  await tapOn(`[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-page')].find(e=>e.getBoundingClientRect().width>0)?.querySelector('li.ft-task > .ft-grip')`,'local project task grip');
   await until(()=>page.eval(`return !!document.querySelector('.menu');`),'task menu from the project page grip');
 });
 
@@ -642,6 +647,8 @@ step("mobile metadata and project controls respond to touch without opening an e
   if(await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('date tap opened editor');
   await calm();
   await tapOn(`window.__layoutRoot()?.querySelector('li.ft-mobile-project .ft-steps-more')`, 'project expansion');
+  await until(()=>page.eval(`return !!window.__layoutRoot().querySelector('.ft-category-picker.is-open .ft-category-expand');`),'project popup expansion action');
+  await tapOn(`window.__layoutRoot().querySelector('.ft-category-picker.is-open .ft-category-expand')`, 'expand project from popup');
   await until(()=>page.eval(`return !!window.__layoutRoot()?.querySelector('li.ft-project-row.is-open');`),'expanded project from its caption');
   await checkLayoutMatrix(page, "embedded-focus-expanded", SHOTS);
   await tapOn(`([...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent.includes('Решить, когда летим'))) ?.querySelector('.ft-running')`, 'return waiting task');
@@ -755,6 +762,9 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
+step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });
+step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,true); });
+step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,true); });
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));
@@ -799,8 +809,8 @@ function buildVault() {
 const HELPERS = `
 window.__m = {
   view() { return document.querySelector('.focus-tasks-view'); },
-  all(sel) { return [...this.view().querySelectorAll(sel)].filter((e) => e.getClientRects().length); },
-  rows() { return this.all('li.ft-task'); },
+  all(sel) { return [...this.view().querySelectorAll(sel)].filter((e) => {const r=e.getBoundingClientRect();return r.width>0&&r.height>0;}); },
+  rows() { return this.all('li.ft-task').filter(e=>e.querySelector('.ft-text')?.getBoundingClientRect().width&&e.querySelector('.ft-box')?.getBoundingClientRect().width); },
   task(n) { return this.rows().find((e) => e.querySelector('.ft-text')?.textContent.trim() === n); },
   project(n) { return this.all('li.ft-project-row').find((e) => e.querySelector('.ft-link')?.textContent.includes(n)); },
   areaTitle(n) { return this.all('.ft-area-title').find((e) => e.textContent.includes(n.replace(/^[^\\p{L}]+/u, '')) || e.textContent.includes(n)); },
@@ -901,6 +911,8 @@ try {
       failed++;
       console.log("  ✗ " + name + "\n      " + e.message);
       await page.shot(path.join(SHOTS, `${NAME}-${i}.png`)).catch(() => {});
+      const diagnostic=await page.eval(`return {active:{file:app.workspace.activeLeaf?.view?.file?.path,type:app.workspace.activeLeaf?.view?.getViewType()},roots:[...document.querySelectorAll('.focus-tasks-view')].map(x=>({cls:x.className,rect:x.getBoundingClientRect().toJSON()})),controls:[...document.querySelectorAll('.ft-area-title>.ft-plus,.ft-area-page-head>.ft-plus,.ft-intent-list-row input')].filter(e=>e.getBoundingClientRect().width).slice(0,6).map(e=>{const r=e.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {cls:e.className,rect:r.toJSON(),hit:hit?.className,label:e.getAttribute('aria-label')};}),presses:[...app.plugins.plugins['focus-tasks'].views].map(v=>({edit:!!v.editing,held:!!v.held,press:v.controlPress?.className})),clicks:window.__supClicks};`).catch(e=>({error:e.message}));
+      fs.writeFileSync(path.join(SHOTS,`${NAME}-${i}.json`),J({name,error:e.message,diagnostic}));
     }
   }
 } catch (e) {

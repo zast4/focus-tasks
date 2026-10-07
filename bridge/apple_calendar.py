@@ -73,6 +73,7 @@ def scan(vault: Path, folder="Задачи", timezone="Europe/Moscow", exclude=(
     if not root.is_relative_to(vault.resolve()) or not root.is_dir():
         raise ValueError("task folder missing or outside vault; refusing reconciliation")
     out = Snapshot()
+    task_uids = set()
     for path in sorted(root.rglob("*.md")):
         if any(path.relative_to(root).parts[:-1] and path.relative_to(root).parts[0] == item for item in exclude):
             continue
@@ -89,15 +90,19 @@ def scan(vault: Path, folder="Задачи", timezone="Europe/Moscow", exclude=(
             if not isinstance(fm, dict):
                 raise ValueError("frontmatter missing")
             kind = str(fm.get("type", "")).strip().lower()
-            if kind not in ("task", "задача"):
-                continue
             uid = str(fm.get("uid") or "")
             if uid:
-                if uid in out.seen:
-                    out.duplicates.add(uid)
                 out.seen.add(uid)
+            # A task explicitly retyped as an idea/project still exists with
+            # its UID. Remove its owned reminder now; Sync grace is for a
+            # missing note, not for a known note outside the actionable queue.
+            if kind not in ("task", "задача"):
+                continue
             if not uid:
                 continue
+            if uid in task_uids:
+                out.duplicates.add(uid)
+            task_uids.add(uid)
             status = str(fm.get("status", "open")).strip().lower()
             tags = fm.get("tags") or []
             if not isinstance(tags, list):

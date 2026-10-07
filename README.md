@@ -49,7 +49,7 @@ What you can do in the view:
 | | |
 |---|---|
 | Complete a task | click its checkbox; the closed task stays in its area's Done block for the day; its checkbox reopens it. An area without open focus work leaves Focus and remains available through All and Done |
-| See what is ahead in a project | the clock counter revealed by hovering the project's row opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
+| See what is ahead in a project | hover the project's count/`+N`; the clock in its popup opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
 | A robot's mark | the list shows no priorities; the one dot it draws is `priority: low`, what a script or a bot leaves on a task it added and you have not looked at — a click on the dot (or «Take the robot's mark off» in the menu) removes it |
 | A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note, not to its step. Set, it alone decides whether the project is in the focus (due) or in the area's ⏳ pile with all of its steps; the steps keep their days |
@@ -59,7 +59,7 @@ What you can do in the view:
 | Duplicate | **⌘/Ctrl+D** while editing or selecting inserts a copy above each source and immediately edits the first copy. Each copy has its own UID; one Undo removes the whole group. A copy of Waiting work is open and its new shelf is revealed if hidden |
 | Undo | **⌘/Ctrl+Z** in the list takes back the last change (a tick, a date, a move, a delete) and selects the rows it touched; while editing, with nothing typed yet, it does the same — typed text keeps the editor's own undo |
 | Date picker | click the date on the right, type `25.12` / `tomorrow` or pick a day, then Save / Enter; the same task card accepts an optional hour, blank means day-only |
-| Add a task | **+** on an area or a project header; «Empty» in an empty area |
+| Add a task | **+** on an area or a project header; «Empty» in an empty area. Adding a second project step unfolds the project before typing; the draft stays in the same step list |
 | Menu | right-click a row; on a phone, long-press its text |
 | Find | **⌘/Ctrl+F** in the list's pane (or the command «Find in the list»): any area, project or open task by part of its name; choosing one opens whatever hides it, scrolls to it and selects it |
 | Reorder / move | desktop: drag the grip; phone: long press, choose Reorder, then drag the temporary grip and finish with Done. Areas reorder among areas, projects within their area, tasks anywhere; drop a task on a header to move it into that area or project |
@@ -106,11 +106,10 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 ## Idea lists
 
-Local categories use plain icon counters: **Focus, Backlog, Ideas**. On a computer, focused areas
-keep only Focus visible; other areas keep Backlog and never offer an impossible Focus category.
-Hovering reveals secondary controls. Projects reveal their counters only on hover. Keyboard focus
-also reveals controls. Hidden controls occupy no space, including + and menus. Touch devices keep all available controls visible; zero-count Backlog/Ideas
-remain accessible for adding the first task or idea.
+An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
+an anchored category popup; on a phone, tap it. Project counts sit next to the project name, reusing
+`+N` to expand additional steps. Their popup omits empty categories. The first project idea can be
+added from its context menu. The popup never changes text width or row height.
 Each independently shows/hides its tasks. Several categories can be open together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
 When an area is folded, all available controls are dimmed. Clicking one unfolds the area and shows
@@ -123,7 +122,11 @@ Adding a task opens its destination category so the new row stays visible. Categ
 task selection; UID links reveal a hidden task. The same controls appear in area/project notes. A project has one header when Focus and Backlog
 are both visible. **All** keeps its existing behavior and has no global Ideas entry.
 Areas show independent lists and project collections under their project names. Inside a project,
-ideas are ordinary task rows with no additional list level or redundant Ideas heading.
+ideas have a warm side line and a lightbulb marker, without an extra list level or redundant heading.
+Every area has a virtual **Ideas** row, including when empty. It groups loose ideas and imports from
+the area note itself; it creates no container file. Named lists remain separate. Empty real lists
+can be completed and reopened like projects. A project can become an idea list through its context
+menu or a drop onto Ideas, preserving every note UID and description. Undo restores the whole change.
 Empty scopes remain accessible, and merely opening them writes no notes. The project collection is
 created on first addition. Existing lists can be linked to a project or kept as area lists.
 Rows share checkboxes, inline editing, dates, selection, drag order, duplicate-above and Undo.
@@ -360,12 +363,10 @@ Shift+клик выделяет все задачи от последней кл
 
 ### Замыслы
 
-Категории используют обычные иконки со счётчиками: **Фокус, Отложка, Замыслы**. На компьютере
-у фокусной области всегда видна мишень, у остальных областей часы; мишени у них нет.
-Остальные переключатели появляются при наведении, у проектов все переключатели появляются
-при наведении. Переход клавиатурой тоже раскрывает переключатели. На сенсорных устройствах
-доступные переключатели видны постоянно, включая пустые отложку и замыслы для первого добавления.
-Скрытые элементы, включая + и меню, не занимают места в раскладке.
+У области видно одно общее число задач фокуса, отложки и замыслов. Наведение или фокус клавиатуры
+на число открывает компактное меню категорий; на телефоне оно открывается касанием. У проекта меню
+привязано к счётчику возле имени (`+N` также раскрывает шаги). Пустые категории проекта скрыты.
+Первый замысел проекта можно добавить через его контекстное меню. Меню не меняет ширину текста и высоту строки.
 Каждый независимо показывает и скрывает свои задачи. Можно открыть несколько категорий одновременно.
 Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.
 У свёрнутой области все доступные иконки приглушены. Нажатие раскрывает область и выбранную категорию,
@@ -393,6 +394,12 @@ Shift+клик выделяет все задачи от последней кл
 вложенные пояснения переходят в описания, отмеченная история сохраняется внутри списка.
 Перед переносом оператор проверяет оригиналы и резервные копии вне vault. Изменившийся источник
 останавливает операцию, повторный запуск сохраняет уже перенесённые списки.
+
+В каждой области есть общий виртуальный список **Замыслы**, даже пустой. Он собирает замыслы без списка
+и импорт из самой заметки области; отдельный файл для него не создаётся. Именованные списки остаются отдельно.
+Пустой настоящий список можно завершить и вернуть галочкой, как проект. Проект можно сделать списком
+замыслов через меню или перетаскиванием в замыслы. UID и описание каждого шага сохраняются; отмена возвращает всю операцию.
+Внутри проекта замыслы отмечены тёплой боковой линией и лампочкой у строки.
 
 ### Страницы областей, телефон и напоминания
 

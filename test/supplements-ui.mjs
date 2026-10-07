@@ -6,53 +6,63 @@ export async function checkSupplementsUI(page, mobile=false) {
   const project=`[...${root}.querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.getBoundingClientRect().width>0&&e.querySelector('.ft-project-name .ft-link')?.textContent==='SUP Project')`;
   const hover=async expr=>{
     await page.front();
-    const at=await page.eval(`if(!window.__supScoped)await app.plugins.plugins['focus-tasks'].openView();const e=${expr},h=e?.closest('.ft-category-host')||e;h?.scrollIntoView({block:'center',behavior:'instant'});const r=h?.getBoundingClientRect();return r&&{x:r.left+r.width/2,y:r.top+r.height/2};`);
-    if(!mobile&&at)await page.mouse('mouseMoved',at.x,at.y,0);
+    if(mobile&&await page.eval(`const picker=(${expr})?.closest('.ft-category-picker');return !!picker&&!picker.classList.contains('is-open')&&!!document.querySelector('.ft-category-picker.is-open');`)){await page.tap({x:8,y:400});await sleep(100);}
+    const at=await page.eval(`if(!window.__supScoped)await app.plugins.plugins['focus-tasks'].openView();const e=${expr},h=e?.closest('.ft-category-host')||e;h?.scrollIntoView({block:'center',behavior:'instant'});const picker=e?.closest('.ft-category-picker'),summary=picker?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more');const r=(summary||h)?.getBoundingClientRect();return r&&{x:r.left+r.width/2,y:r.top+r.height/2,needsTap:!!summary&&!picker.classList.contains('is-open')};`);
+    if(mobile&&at?.needsTap)await page.tap(at);else if(!mobile&&at)await page.mouse('mouseMoved',at.x,at.y,0);
     await sleep(180);
+    if(await page.eval(`return !!(${expr})?.closest('.ft-category-picker');`))await until(async()=>{
+      const live=await page.eval(`const p=(${expr})?.closest('.ft-category-picker');if(p?.classList.contains('is-open')&&(${mobile}||p.matches(':hover')))return {open:true};const summary=p?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more'),r=summary?.getBoundingClientRect();return r?.width?{x:r.left+r.width/2,y:r.top+r.height/2,reenter:summary.matches(':hover')}:false;`);
+      if(live?.open)return true;if(live){if(mobile)await page.tap(live);else {if(live.reenter)await page.mouse('mouseMoved',1,1,0);await page.mouse('mouseMoved',live.x,live.y,0);}await sleep(80);}return false;
+    },'real pointer opens count popup '+expr);
   };
-  const click=async expr=>{
+  const click=async(expr,withRedraw=false)=>{
     await hover(expr);
-    const at=await until(()=>page.eval(`const e=${expr};if(!e)return false;const r=e.getBoundingClientRect(),at={x:r.left+r.width/2,y:r.top+r.height/2},hit=document.elementFromPoint(at.x,at.y);return r.width&&r.height&&hit&&e.contains(hit)?at:false;`),'supplement control: '+expr);
-    if(mobile)await page.tap(at);else await page.click(at);await sleep(120);
+    const locate=()=>page.eval(`const e=${expr};if(!e)return false;const r=e.getBoundingClientRect(),at={x:r.left+r.width/2,y:r.top+r.height/2},hit=document.elementFromPoint(at.x,at.y);return r.width&&r.height&&hit&&e.contains(hit)?at:false;`);
+    let at=await until(locate,'supplement control: '+expr);
+    if(!mobile){
+      // Moving from the header to its controls can wrap a narrow header. Hit the
+      // settled button, as a real pointer does, rather than its previous rectangle.
+      for(let n=0;n<4;n++){await page.mouse('mouseMoved',at.x,at.y,0);await sleep(80);const next=await until(locate,'settled supplement control '+expr).catch(async err=>{const info=await page.eval(`const e=${expr},g=e?.closest('.ft-supplement-switch'),picker=e?.closest('.ft-category-picker');return {button:e?.getBoundingClientRect().toJSON(),popup:g?.getBoundingClientRect().toJSON(),open:picker?.className,active:document.activeElement?.outerHTML.slice(0,120),hit:document.elementFromPoint(${at.x},${at.y})?.outerHTML.slice(0,180)};`);throw Error(err.message+' '+J(info));});if(Math.abs(next.x-at.x)<1&&Math.abs(next.y-at.y)<1){at=next;break;}at=next;}
+    }
+    const category=await page.eval(`const b=${expr};return b?.dataset.ftCategory?{key:b.parentElement.dataset.ftCategoryKey,kind:b.dataset.ftCategory}:null;`);
+    if(category)await page.eval(`window.__supClicks=[];if(!window.__supClickProbe){window.__supClickProbe=e=>{const b=e.target.closest?.('button'),r=b?.getBoundingClientRect();__supClicks.push({type:e.type,key:b?.parentElement.dataset.ftCategoryKey,kind:b?.dataset.ftCategory,x:e.clientX,y:e.clientY,rect:r&&{x:r.x,y:r.y,w:r.width,h:r.height},tag:e.target.tagName});};for(const type of ['pointerdown','pointerup','click'])document.addEventListener(type,__supClickProbe,true);}return true;`);
+    if(withRedraw&&!mobile){
+      await page.eval(`window.__supPressed=${expr};return true;`);
+      await page.mouse('mousePressed',at.x,at.y,1);
+      await page.eval(`app.plugins.plugins['focus-tasks'].refresh();return true;`);await sleep(400);
+      if(!await page.eval(`return __supPressed===${expr}&&__supPressed.isConnected;`))throw Error('metadata redraw replaced the pressed category before release');
+      await page.mouse('mouseReleased',at.x,at.y,0);await sleep(150);
+    }else if(mobile)await page.tap(at);else await page.click(at);await sleep(120);
+    if(category){const seen=await page.eval('return __supClicks;');if(!seen.some(e=>e.type==='click'&&e.key===category.key&&e.kind===category.kind))throw Error('native category click missed '+JSON.stringify({category,at,seen}));}
     const active=await page.eval(`return {type:app.workspace.activeLeaf.view.getViewType(),scoped:!!window.__supScoped};`);if(active.type!=='focus-tasks-view'&&!active.scoped)throw Error('supplement click switched away from Focus: '+expr+' -> '+active.type);
   };
   const cleanRows=async label=>{
     const issues=await page.eval(`const root=${root},issues=[];for(const body of root.querySelectorAll('li.ft-steps')){if(body.getBoundingClientRect().width&&!body.querySelector('li.ft-task'))issues.push('empty expanded steps');}
-      for(const row of root.querySelectorAll('li.ft-project-row')){if(!row.getBoundingClientRect().width)continue;const body=row.nextElementSibling?.matches('.ft-steps')?row.nextElementSibling:null;if(row.querySelector(':scope > .ft-fold')&&!body?.querySelector('li.ft-task'))issues.push('fold arrow without steps');if(row.querySelector('.ft-steps-more')&&!row.querySelector('.ft-text:not(.ft-no-step)')&&!body?.querySelector('li.ft-task'))issues.push('extra step arrow without content');}return issues;`);
+      for(const row of root.querySelectorAll('li.ft-project-row')){if(!row.getBoundingClientRect().width)continue;const body=row.nextElementSibling?.matches('.ft-steps')?row.nextElementSibling:null;if(row.querySelector(':scope > .ft-fold')&&!body?.querySelector('li.ft-task'))issues.push('fold arrow without steps');const more=row.querySelector('.ft-steps-more');if(more?.hasAttribute('data-ft-fold')&&!row.querySelector('.ft-text:not(.ft-no-step)')&&!body?.querySelector('li.ft-task'))issues.push('extra step control without content');if(more?.hasAttribute('data-ft-fold')&&(more.querySelector('svg')||!/^[-−+][1-9][0-9]*$/.test(more.textContent)))issues.push('project expansion must show +N or minus N');}return issues;`);
     if(issues.length)throw Error(label+': '+issues.join('; '));
   };
   const visibility=async(expr,role,label,hasFocus=true)=>{
     await page.front();
     await page.eval(`const g=${expr};g.scrollIntoView({block:'center',behavior:'instant'});document.activeElement?.blur();return true;`);
     const inspect=async(revealed)=>{
-      const issues=await page.eval(`const g=${expr},issues=[];
+      const issues=await page.eval(`const g=${expr},picker=g.closest('.ft-category-picker'),issues=[];
         if(!g.classList.contains('ft-supplement-${role}'))issues.push('wrong scope role');
-        if(g.children.length!==${role==='backlog-area'||!hasFocus?2:3})issues.push('wrong available categories');
-        for(const b of g.children){const hidden=!${mobile}&&!${revealed}&&(${role==='project'}||!b.classList.contains('${role==='focus-area'?'ft-focus-chip':'ft-later-chip'}'));
-          const expected=b.getAttribute('aria-pressed')==='true'?1:0.45,c=getComputedStyle(b),r=b.getBoundingClientRect();
-          if(hidden?(r.width!==0||r.height!==0):(r.width<=0||r.height<=0||Number(c.opacity)!==expected))issues.push(b.className+' hidden='+hidden+' rectangle='+r.width+'x'+r.height+' opacity='+c.opacity);}
-        const h=g.parentElement,hc=getComputedStyle(h),columns=hc.gridTemplateColumns.split(' ').map(parseFloat);
-        for(const e of h.children){const c=getComputedStyle(e),r=e.getBoundingClientRect();if(['absolute','fixed'].includes(c.position))continue;
-          const hidden=c.display==='none'||c.visibility==='hidden'||Number(c.opacity)===0;
-          if(hidden&&(r.width||r.height))issues.push('invisible flow space: '+e.className);
-          const col=Number(c.gridColumnStart);
-          if(hidden&&e.matches('.ft-plus,.ft-more')&&hc.display==='grid'&&col>0&&columns[col-1]>1)issues.push('empty action track: '+e.className);}
-        if(h.matches('.ft-page-head')&&!h.querySelector(':scope > .ft-more')&&hc.display==='grid'&&columns.at(-1)>1)issues.push('absent menu reserves a column');
-        if(h.matches('.ft-mobile-project-caption')&&!h.querySelector(':scope > .ft-steps-more')&&hc.display==='grid'&&columns[1]>1)issues.push('absent fold reserves a column');
-        if(g.getBoundingClientRect().width){const next=g.nextElementSibling;
-          if(next?.matches('.ft-plus')&&!next.getBoundingClientRect().width){const date=next.nextElementSibling;
-            if(date?.matches('.ft-date')&&date.getBoundingClientRect().width){const gap=date.getBoundingClientRect().left-g.getBoundingClientRect().right,allowed=parseFloat(getComputedStyle(g).marginRight)+parseFloat(getComputedStyle(date).marginLeft)+1;if(gap>allowed)issues.push('hidden plus leaves a metadata gap');}}}
-        if(${role==='backlog-area'}&&g.querySelector('.ft-focus-chip'))issues.push('impossible Focus control');return issues;`);
+        const buttons=[...g.querySelectorAll('button[data-ft-category]')];
+        if(${role==='backlog-area'}&&g.querySelector('.ft-focus-chip'))issues.push('impossible Focus control');
+        if(${role==='project'}&&buttons.some(b=>b.querySelector('.ft-supplement-count').textContent==='0'))issues.push('empty project category');
+        for(const b of buttons){const r=b.getBoundingClientRect(),expected=b.getAttribute('aria-pressed')==='true'?1:0.45;
+          if(${revealed}?(r.width<=0||r.height<=0||Number(getComputedStyle(b).opacity)!==expected):(r.width||r.height))issues.push('popup visibility '+b.className+' revealed='+${revealed}+' rect='+r.width+'x'+r.height+' opacity='+getComputedStyle(b).opacity+' open='+picker.className);}
+        if(${revealed})for(const b of buttons){const r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);if(!hit||!b.contains(hit))issues.push('category clipped or covered '+b.className);}
+        const summary=picker.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more'),r=summary.getBoundingClientRect();if(!r.width)issues.push('missing single counter');
+        if(${revealed}){const hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);if(!hit||!summary.contains(hit))issues.push('counter clipped or covered by another row');}
+        if(${revealed}){const box=g.getBoundingClientRect();if(box.left<0||box.right>innerWidth+1||box.top<0||box.bottom>innerHeight+1)issues.push('popup overflow');if(Math.min(box.bottom,r.bottom)-Math.max(box.top,r.top)>1)issues.push('popup covers its trigger');}
+        return issues;`);
       if(issues.length)throw Error(label+': '+issues.join('; '));
     };
-    await page.mouse('mouseMoved',1,1,0);await sleep(40);await inspect(false);
-    if(!mobile){
-      await hover(expr);await inspect(true);
-      await page.mouse('mouseMoved',1,1,0);
-      await page.eval(`const g=${expr},h=g.closest('.ft-category-host')||g.parentElement;h.focus();if(!h.contains(document.activeElement))g.querySelector('button').focus();return true;`);await inspect(true);
-      await page.eval(`(${expr}).lastElementChild.focus();return true;`);await inspect(true);
-      await page.eval('document.activeElement.blur();return true;');await inspect(false);
-    }
+    await page.eval(`document.activeElement?.blur();const picker=(${expr}).closest('.ft-category-picker'),p=app.plugins.plugins['focus-tasks'],v=[...p.views].find(v=>v.containerEl.contains(picker));v?.closeCategoryPicker?.();return true;`);
+    await page.mouse('mouseMoved',1,1,0);await sleep(240);await inspect(false);
+    await hover(expr);await inspect(true);
+    if(!mobile){await page.eval(`(${expr}).querySelector('button[data-ft-category]')?.focus();return true;`);await inspect(true);}
   };
   const geometry=async label=>{
     const result=await page.eval(`const root=${root},issues=[];
@@ -61,7 +71,7 @@ export async function checkSupplementsUI(page, mobile=false) {
           if(c.display==='none'||c.visibility==='hidden'||Number(c.opacity)===0){const r=e.getBoundingClientRect();if(r.width||r.height)issues.push('hidden flow rectangle '+e.className);}}}
       const groups=[...root.querySelectorAll('.ft-supplement-switch')].filter(e=>e.parentElement.getBoundingClientRect().width);if(!groups.length)issues.push('missing component');
       for(const g of groups){const r=g.getBoundingClientRect(),buttons=[...g.children].filter(b=>b.getBoundingClientRect().width);if(r.left<0||r.right>innerWidth+1)issues.push('group outside screen');
-        for(let i=0;i<buttons.length;i++){const b=buttons[i].getBoundingClientRect();if(b.width<${mobile?44:25}||b.height<${mobile?44:24})issues.push('small target');if(b.left<r.left-1||b.right>r.right+1)issues.push('button outside group');if(i&&b.left<buttons[i-1].getBoundingClientRect().right-0.5)issues.push('overlapping segments');}
+        for(let i=0;i<buttons.length;i++){const b=buttons[i].getBoundingClientRect();if(b.width<${mobile?44:25}||b.height<${mobile?44:24})issues.push('small target');if(b.left<r.left-1||b.right>r.right+1)issues.push('button outside group');if(i){const prev=buttons[i-1].getBoundingClientRect();if(Math.min(b.right,prev.right)-Math.max(b.left,prev.left)>0.5&&Math.min(b.bottom,prev.bottom)-Math.max(b.top,prev.top)>0.5)issues.push('overlapping segments');}}
         for(const sibling of [...g.parentElement.children].filter(e=>e!==g&&!e.contains(g)&&!g.contains(e)&&!e.classList.contains('ft-grip'))){const b=sibling.getBoundingClientRect();if(b.width&&b.height&&Math.min(r.right,b.right)-Math.max(r.left,b.left)>1&&Math.min(r.bottom,b.bottom)-Math.max(r.top,b.top)>1)issues.push('group overlaps '+sibling.className);}}
       const rows=[...root.querySelectorAll('.ft-project-intents li.ft-task')].filter(e=>e.getBoundingClientRect().width);
       const normal=[...root.querySelectorAll('li.ft-task:not(.ft-project-row)')].find(e=>!e.closest('.ft-intents')&&e.getBoundingClientRect().width);
@@ -113,7 +123,7 @@ export async function checkSupplementsUI(page, mobile=false) {
   await click(`(${zero}).querySelector(':scope > .ft-area-title > .ft-caret')`);
   await click(`(${zero}).querySelector(':scope > .ft-area-title .ft-intents-chip')`);
   await until(()=>page.eval(`return !!(${zero}).querySelector(':scope > .ft-intents')&&(${zero}).querySelector('.ft-later-chip').getAttribute('aria-pressed')==='true';`),'empty ideas reveal keeps the inherited backlog');
-  await page.eval(`const p=app.plugins.plugins['focus-tasks'],a=(await p.collect(true)).find(a=>a.name==='SUP Zero'),f=await p.createProject(a,'SUP Later project');window.__supQueuePaths={area:a.note.path,project:f.path};await p.setProjectDate(f,'2099-01-01');await p.createTask('SUP Queue step',{area:a.name,project:f.basename,projectFile:f},'2099-01-01');return true;`);
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],a=(await p.collect(true)).find(a=>a.name==='SUP Zero'),f=await p.createProject(a,'SUP Later project');window.__supQueuePaths={area:a.note.path,project:f.path};await p.setProjectDate(f,'2099-01-01');await p.createTask('SUP Queue step',{area:a.name,project:f.basename,projectFile:f},'2099-01-01');const list=await p.ensureProjectIntentList(f);await p.createTask('SUP Queue idea',{area:a.name,projectFile:list.file,project:list.file.basename,intentList:true,listUid:list.uid},null);return true;`);
   const queuedProject=`[...(${zero}).querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent==='SUP Later project')`;
   await until(()=>page.eval(`return !!(${queuedProject})&&!(${zero}).querySelector('.ft-focus-chip');`),'queue-only project exposes no impossible Focus category');
   await visibility(`(${queuedProject}).querySelector('.ft-supplement-switch')`,'project','queue-only project hover',false);
@@ -129,7 +139,7 @@ export async function checkSupplementsUI(page, mobile=false) {
   // Queue-only scopes never expose a Focus button, including the note embeds.
   for(const [slot,selector,role] of [['area','.ft-area-page','backlog-area'],['project','.ft-page','project']]){
     await page.eval(`window.__supScoped=true;const leaf=app.workspace.getLeaf('tab');await leaf.openFile(app.vault.getAbstractFileByPath(__supQueuePaths[${J(slot)}]),{state:{mode:'preview'}});return true;`);
-    const group=`[...${root}.querySelectorAll('${selector} > .ft-area-title > .ft-supplement-switch')].find(e=>e.parentElement.getBoundingClientRect().width>0)`;
+    const group=`[...${root}.querySelectorAll('${selector} > .ft-area-title .ft-supplement-switch')].find(e=>e.parentElement.getBoundingClientRect().width>0)`;
     await until(()=>page.eval(`return !!(${group})&&!(${group}).querySelector('.ft-focus-chip');`),'queue-only '+slot+' note has no Focus control');
     for(let mask=0;mask<4;mask++){
       for(const [kind,on] of [['later',!!(mask&1)],['intents',!!(mask&2)]]){
@@ -142,7 +152,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     }
   }
   await page.eval(`window.__supScoped=false;delete window.__supQueuePaths;await app.plugins.plugins['focus-tasks'].openView();return true;`);
-  await page.eval(`const p=app.plugins.plugins['focus-tasks'];if(p.read().intents.some(x=>x.area==='SUP Zero')||p.tasks().filter(x=>x.area==='SUP Zero').length!==1)throw Error('empty category reveal wrote tasks/lists');await p.removeArea((await p.collect(true)).find(a=>a.name==='SUP Zero'));p.setEverything(false);p.refresh();return true;`);
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];if(p.read().intents.filter(x=>x.area==='SUP Zero').length!==1||p.read().intentTasks.filter(x=>x.area==='SUP Zero').length!==1||p.tasks().filter(x=>x.area==='SUP Zero').length!==1)throw Error('empty category reveal wrote tasks/lists');await p.removeArea((await p.collect(true)).find(a=>a.name==='SUP Zero'));p.setEverything(false);p.refresh();return true;`);
   await until(()=>page.eval(`return !(${zero})&&!!(${area});`),'empty area fixture removed');
   for(let mask=0;mask<8;mask++){
     for(const [kind,on] of [['focus',!!(mask&1)],['later',!!(mask&2)],['intents',!!(mask&4)]]){
@@ -153,7 +163,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     if(!await page.eval(`return !!(${project})===${!!(mask&3)};`))throw Error('hidden focus retained an empty project header: '+mask);
     await cleanRows('area category combination '+mask);
     await visibility(`(${area}).querySelector(':scope > .ft-area-title .ft-supplement-switch')`,'focus-area','area hover combination '+mask);
-    if(!await page.eval(`const a=${area},g=a.querySelector(':scope > .ft-area-title .ft-supplement-switch'),buttons=[...g.children];return JSON.stringify(buttons.map(e=>Number(e.querySelector('.ft-supplement-count').textContent)))==='[2,2,2]'&&buttons.every(e=>{const c=getComputedStyle(e);return !!e.querySelector('svg')&&c.backgroundColor==='rgba(0, 0, 0, 0)'&&c.borderTopWidth==='0px'&&!c.textDecorationLine.includes('underline');})&&!a.querySelector('.ft-intents-head');`))throw Error('category numbers, plain icons/style or visibility changed');
+    if(!await page.eval(`const a=${area},g=a.querySelector(':scope > .ft-area-title .ft-supplement-switch'),buttons=[...g.querySelectorAll("button[data-ft-category]")];return JSON.stringify(buttons.map(e=>Number(e.querySelector('.ft-supplement-count').textContent)))==='[2,2,2]'&&buttons.every(e=>{const c=getComputedStyle(e);return !!e.querySelector('svg')&&c.backgroundColor==='rgba(0, 0, 0, 0)'&&c.borderTopWidth==='0px'&&!c.textDecorationLine.includes('underline');})&&!a.querySelector('.ft-intents-head');`))throw Error('category numbers, plain icons/style or visibility changed');
   }
   // Exercise the project's own controls through real clicks. Restoring the area's Focus
   // restores its hidden projects; a project with all categories off leaves no empty header.
@@ -171,7 +181,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     await until(()=>page.eval(`const a=${area},text=[...a.querySelectorAll('.ft-text')].map(e=>e.textContent);return !!(${project})===${!!mask}&&text.includes('SUP Focus')===${!!(mask&1)}&&text.includes('SUP Project later')===${!!(mask&2)}&&!!a.querySelector('.ft-project-intents')===${!!(mask&4)};`),'project category combination '+mask);
     await cleanRows('project category combination '+mask);
     if(mask)await visibility(`(${project}).querySelector('.ft-supplement-switch')`,'project','project hover combination '+mask);
-    if(mask===4&&!await page.eval(`return !(${project}).querySelector('.ft-fold,.ft-steps-more,.ft-no-step,input.task-list-item-checkbox');`))throw Error('ideas-only project exposes empty fold/completion controls');
+    if(mask===4&&!await page.eval(`return !(${project}).querySelector('.ft-fold,.ft-no-step,input.task-list-item-checkbox');`))throw Error('ideas-only project exposes empty fold/completion controls');
   }
   // Return to the normal Focus-only combination before the interaction regression scenarios.
   for(const [kind,on] of [['focus',true],['later',false],['intents',false]]){
@@ -181,7 +191,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     await click(expr);
   }
   await click(`(${area}).querySelector(':scope > .ft-area-title .ft-intents-chip')`);
-  await until(()=>page.eval(`return (${area}).querySelectorAll('.ft-intent-list-row').length===2;`),'area shows independent and project collections');
+  await until(()=>page.eval(`return (${area}).querySelectorAll('.ft-intent-list-row:not(.ft-loose-ideas-row)').length===2;`),'area shows independent and project collections');
   if(!await page.eval(`return [...(${area}).querySelectorAll('.ft-intent-list-row .ft-link')].some(e=>e.textContent.startsWith('SUP Project'));`))throw Error('project collection needs its project name');
   await click(`(${area}).querySelector(':scope > .ft-area-title .ft-later-chip')`);
   await until(()=>page.eval(`return !!(${area}).querySelector(':scope > .ft-intents')&&!!(${area}).querySelector(':scope > .ft-future-block:not(.ft-intents)');`),'backlog and area ideas open together');
@@ -214,17 +224,39 @@ export async function checkSupplementsUI(page, mobile=false) {
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];const file=await p.createProject({name:'Supplements UI',note:app.vault.getAbstractFileByPath(__supPaths.area)},'SUP Empty',null,null,true);__supPaths.empty=file.path;p.refresh();return true;`);
   const emptyProject=`[...${root}.querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent==='SUP Empty')`;
   await until(()=>page.eval(`return !!(${emptyProject});`),'empty project visible');
-  if(!await page.eval(`return (${emptyProject}).querySelector('.ft-supplement-switch').children.length===3;`))throw Error('all categories, including zero, must stay accessible');
-  await click(`(${emptyProject}).querySelector('.ft-intents-chip')`);
-  await until(()=>page.eval(`return !!${root}.querySelector('.ft-project-intents[data-intent-project="'+__supPaths.empty+'"]');`),'empty project ideas opened');
-  if(!await page.eval(`return app.plugins.plugins['focus-tasks'].projectIntentLists(app.vault.getAbstractFileByPath(__supPaths.empty)).length===0;`))throw Error('opening empty ideas created notes');
-  await click(`${root}.querySelector('.ft-project-intents[data-intent-project="'+__supPaths.empty+'"] .ft-empty-add')`);
-  await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'first idea lazily creates collection and editor');
-  await page.type('SUP First empty project idea');await page.key('Enter');await page.key('Escape');
+  await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return !!p.classify(app.vault.getAbstractFileByPath(__supPaths.empty))?.project&&![...p.views].some(v=>v.busy);`),'empty project metadata settled');
+  await sleep(450);
+  if(!await page.eval(`return !(${emptyProject}).querySelector('.ft-category-picker');`))throw Error('empty project exposes a dead count popup');
+  await page.eval(`(${emptyProject}).querySelector('.ft-project-name').scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(150);
+  const emptyAt=await page.eval(`const e=(${emptyProject}).querySelector('.ft-project-name'),r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);
+  if(mobile){await page.touch('touchStart',[emptyAt]);await sleep(750);await page.touch('touchEnd',[]);}else await page.rightClick(emptyAt);
+  const addIdea=`[...document.querySelectorAll('.menu-item')].find(e=>e.textContent.trim()===${J(mobile?'Добавить замысел':'Add an idea')})`;
+  await until(()=>page.eval(`return !!(${addIdea});`),'empty project Add idea menu');await click(addIdea);
+  await until(()=>page.eval(`return !!document.querySelector('.modal input[type=text]');`),'first project idea name');
+  await page.type('SUP First empty project idea');await page.key('Enter');
   await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return p.projectIntentLists(app.vault.getAbstractFileByPath(__supPaths.empty)).length===1&&p.read().intentTasks.some(x=>x.text==='SUP First empty project idea');`),'first idea belongs to its project');
   for(const width of mobile?[320,390,430]:[620,1000]){
     await page.send('Emulation.setDeviceMetricsOverride',{width,height:viewport.height,deviceScaleFactor:mobile?2:1,mobile});
-    for(const font of [18,26]){await page.eval(`document.body.style.setProperty('--font-text-size','${font}px');document.body.style.setProperty('--font-ui-medium','${font}px');return true;`);await sleep(400);await visibility(`(${area}).querySelector(':scope > .ft-area-title .ft-supplement-switch')`,'focus-area','area width '+width+'/'+font);await visibility(`(${project}).querySelector('.ft-supplement-switch')`,'project','project width '+width+'/'+font);await geometry('pane '+width+'px/'+font+'px');if(width===(mobile?390:1000)&&font===18)await page.shot(new URL('./shots/supplements-'+(mobile?'phone':'desktop')+'.png',import.meta.url).pathname);}
+    for(const font of [18,26]){
+      await page.eval(`document.body.style.setProperty('--font-text-size','${font}px');document.body.style.setProperty('--font-ui-medium','${font}px');return true;`);await sleep(400);
+      await visibility(`(${area}).querySelector(':scope > .ft-area-title .ft-supplement-switch')`,'focus-area','area width '+width+'/'+font);
+      await visibility(`(${project}).querySelector('.ft-supplement-switch')`,'project','project width '+width+'/'+font);
+      await geometry('pane '+width+'px/'+font+'px');
+      if(!mobile&&width===620){
+        for(const expr of [`(${area}).querySelector(':scope > .ft-area-title .ft-later-chip')`,`(${project}).querySelector('.ft-later-chip')`]){
+          await sleep(500);
+          const before=await page.eval(`return (${expr}).getAttribute('aria-pressed');`);
+          await click(expr,true);
+          await until(()=>page.eval(`return (${expr}).getAttribute('aria-pressed')!==${J(before)};`),'narrow counter first click changes '+expr+' at '+font+'px');
+          await page.eval(`const p=app.plugins.plugins['focus-tasks'];p.refresh();await Promise.all([...p.views].filter(v=>v.containerEl.querySelector('.ft-supplement-switch')).map(v=>v.rerendered()));return true;`);
+          await sleep(120);
+          if(!await page.eval(`return (${expr}).getBoundingClientRect().width>0;`))throw Error('a narrow hovered counter disappeared after redraw at '+font+'px');
+          await click(expr);
+          await until(()=>page.eval(`return (${expr}).getAttribute('aria-pressed')===${J(before)};`),'narrow counter round trip restores '+expr+' at '+font+'px');
+        }
+      }
+      if(width===(mobile?390:1000)&&font===18)await page.shot(new URL('./shots/supplements-'+(mobile?'phone':'desktop')+'.png',import.meta.url).pathname);
+    }
   }
   for(const [path,selector] of [['project','.ft-page'],['area','.ft-area-page']]){
     await page.eval(`window.__supScoped=true;const f=app.vault.getAbstractFileByPath(__supPaths[${J(path)}]);if(!f)throw Error('missing scoped note '+${J(path)});const leaf=app.workspace.getLeaf('tab');await leaf.openFile(f,{state:{mode:'preview'}});return true;`);
@@ -232,7 +264,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     const n=await page.eval(`return ${root}.querySelector(${J(selector+' .ft-supplement-switch')}).children.length;`);
     if(n!==3)throw Error('wrong scoped segment count');
     await geometry(selector);
-    await visibility(`[...${root}.querySelectorAll('${selector} > .ft-area-title > .ft-supplement-switch')].find(e=>e.parentElement.getBoundingClientRect().width>0)`,path==='area'?'focus-area':'project','scoped '+path+' hover');
+    await visibility(`[...${root}.querySelectorAll('${selector} > .ft-area-title .ft-supplement-switch')].find(e=>e.parentElement.getBoundingClientRect().width>0)`,path==='area'?'focus-area':'project','scoped '+path+' hover');
     if(path==='area'){
       const ideas=`[...${root}.querySelectorAll('${selector} > .ft-area-title .ft-intents-chip')].find(e=>e.closest('.ft-category-host')?.getBoundingClientRect().width>0)`;
       if(!await page.eval(`return (${ideas}).getAttribute('aria-pressed')==='true';`))await click(ideas);
@@ -246,7 +278,7 @@ export async function checkSupplementsUI(page, mobile=false) {
       await until(()=>page.eval(`const block=[...${root}.querySelectorAll('${selector}')].find(e=>e.getBoundingClientRect().width>0),text=[...block.querySelectorAll('.ft-text')].map(e=>e.textContent);return text.includes('SUP Focus')===${!!(mask&1)}&&text.includes('SUP Project later')===${!!(mask&2)}&&!!block.querySelector('${path==='area'?'.ft-intents':'.ft-project-intents'}')===${!!(mask&4)};`),'scoped '+path+' combination '+mask);
       if(path==='area'&&!await page.eval(`return !!(${project})===${!!(mask&3)};`))throw Error('scoped area retained a hidden project: '+mask);
       await cleanRows('scoped '+path+' combination '+mask);
-      await visibility(`[...${root}.querySelectorAll('${selector} > .ft-area-title > .ft-supplement-switch')].find(e=>e.parentElement.getBoundingClientRect().width>0)`,path==='area'?'focus-area':'project','scoped '+path+' hover combination '+mask);
+      await visibility(`[...${root}.querySelectorAll('${selector} > .ft-area-title .ft-supplement-switch')].find(e=>e.parentElement.getBoundingClientRect().width>0)`,path==='area'?'focus-area':'project','scoped '+path+' hover combination '+mask);
     }
     if(await page.eval(`return [...${root}.querySelectorAll('${selector} .ft-text')].some(e=>e.textContent==='SUP Pending');`))throw Error('pending Waiting leaked into a category');
     const waiting=`[...${root}.querySelectorAll('${selector} .ft-page-waiting')].find(e=>e.getBoundingClientRect().width>0)`;

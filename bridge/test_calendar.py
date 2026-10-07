@@ -212,6 +212,35 @@ class ScanTests(unittest.TestCase):
         self.assertEqual(out.desired, {})
         self.assertEqual(out.duplicates, {"one"})
 
+    def test_retyping_a_timed_task_removes_its_event_without_a_missing_file_grace(self):
+        for kind in ("замысел", "список замыслов", "проект", "project", "note"):
+            with self.subTest(kind=kind):
+                self.write()
+                remote, state = MemoryCalendar(), {"tasks": {}}
+                reconcile(scan(self.vault), state, remote, now=NOW)
+                path = self.vault / "Задачи/One.md"
+                path.write_text(path.read_text().replace("type: задача", "type: " + kind))
+                snapshot = scan(self.vault)
+                self.assertIn("one", snapshot.seen, "the note still exists with its original UID")
+                self.assertNotIn("one", snapshot.desired)
+                reconcile(snapshot, state, remote, now=NOW)
+                self.assertNotIn("one", remote.items)
+                self.assertNotIn("one", state["tasks"])
+
+    def test_an_idea_to_task_round_trip_uses_one_calendar_identity(self):
+        self.write()
+        remote, state = MemoryCalendar(), {"tasks": {}}
+        reconcile(scan(self.vault), state, remote, now=NOW)
+        path = self.vault / "Задачи/One.md"
+        original = path.read_text()
+        path.write_text(original.replace("type: задача", "type: замысел"))
+        reconcile(scan(self.vault), state, remote, now=NOW)
+        self.assertNotIn("one", remote.items)
+        path.write_text(original)
+        reconcile(scan(self.vault), state, remote, now=NOW)
+        self.assertEqual(remote.calls, [("upsert", "one"), ("delete", "one"), ("upsert", "one")])
+        self.assertEqual(set(remote.items), {"one"})
+
     def test_bad_yaml_protects_previous_path(self):
         self.write(extra="invalid: [\n")
         self.assertIn("Задачи/One.md", scan(self.vault).blocked_paths)

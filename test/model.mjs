@@ -646,7 +646,7 @@ test("moving a task into a project and back writes the link", async () => {
     taskNote(a, "Run", { area: "Sport", scheduled: TODAY });
   });
   const task = plugin.tasks()[0];
-  await plugin.moveTasks([task], { into: true, target: { type: "project", area: { name: "Sport" }, project: { file: { basename: "Marathon" } } } });
+  await plugin.moveTasks([task], { into: true, target: { type: "project", area: { name: "Sport" }, project: { file: plugin.notes().find(n => n.project).file } } });
   eq(frontmatter(app, "Tasks/Run.md").projects, ["[[Marathon]]"]);
   await plugin.moveTasks([plugin.tasks()[0]], { into: true, target: { type: "area", area: { name: "Sport" } } });
   eq(frontmatter(app, "Tasks/Run.md").projects, undefined, "the link is gone");

@@ -39,7 +39,7 @@ export async function checkIntentsUI(page, mobile=false) {
   else {const at=await page.eval(`const e=(${area}).querySelector(':scope > .ft-area-title');e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);await page.rightClick(at);}
   await until(()=>page.eval(`return !!(${menu('📔 Ideas')});`),'area ideas menu');
   await click(menu('📔 Ideas'));await until(()=>page.eval(`return !!(${area}).querySelector('.ft-intents');`),'ideas opened per area');
-  await click(`(${area}).querySelector('.ft-intents-add')`);
+  await click(`(${area}).querySelector('.ft-intents-add:not(.ft-loose-idea-add)')`);
   await until(()=>page.eval(`return !!document.querySelector('.modal input.ft-input');`),'new list editor');await sleep(mobile?400:100);
   await click(`document.querySelector('.modal input.ft-input')`);await page.type('UI List');await click(`document.querySelector('.modal button.mod-cta')`);
   await until(()=>page.eval(`return !!(${list});`),'list created');

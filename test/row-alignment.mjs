@@ -45,22 +45,23 @@ export async function checkRowAlignment(page, today, tomorrow, shots) {
             const rect=e=>{const b=e.getBoundingClientRect();return {x:b.left,y:b.top,w:b.width,h:b.height,right:b.right,cy:b.top+b.height/2};};
             const line=row.querySelector(':scope > .ft-line, :scope > .ft-text'),first=rect(line).y+parseFloat(getComputedStyle(line).lineHeight)/2;
             const selectors=['.ft-box input','.ft-grip svg','.ft-running svg','.ft-priority','.ft-chip svg','.ft-plus svg','.ft-due svg','.ft-due > span:not(.ft-due-icon)','.ft-calendar-status svg','.ft-date-text'];
-            const controls=selectors.flatMap(selector=>[...row.querySelectorAll(selector)].filter(e=>e.getClientRects().length).map(e=>({selector,...rect(e)})));
+            const controls=selectors.flatMap(selector=>[...row.querySelectorAll(selector)].filter(e=>e.getClientRects().length).map(e=>({selector,floating:!!e.closest('.ft-hover-tools'),...rect(e)})));
             const actors=[...row.children].filter(e=>e.matches('.ft-running,.ft-priority,.ft-chip,.ft-plus,.ft-due,.ft-date')&&e.getClientRects().length).map(rect);
-            return {context:${J(context)},width:${width},font:${font},actualFont:parseFloat(getComputedStyle(line).fontSize),actualWidth:rect(root).w,project:row.classList.contains('ft-project-row'),first,row:rect(row),controls,actors};
+            const tools=row.querySelector('.ft-hover-tools');return {context:${J(context)},width:${width},font:${font},actualFont:parseFloat(getComputedStyle(line).fontSize),actualWidth:rect(root).w,project:row.classList.contains('ft-project-row'),first,row:rect(row),tools:tools&&rect(tools),controls,actors};
           `);
           if(Math.abs(report.actualFont-font)>0.2||Math.abs(report.actualWidth-width)>0.2)throw Error('layout matrix dimensions were not applied');
           if(!report.controls.some(x=>x.selector==='.ft-calendar-status svg'))throw Error('missing calendar fixture '+context);
           if(report.project&&!report.controls.some(x=>x.selector==='.ft-plus svg'))throw Error('missing hovered project add button '+context);
-          if(report.project&&context==='pane'&&!report.controls.some(x=>x.selector==='.ft-chip svg'))throw Error('missing hovered project clock fixture '+context+' '+width+'/'+font);
           if(name===names[1]&&!report.controls.some(x=>x.selector==='.ft-running svg'))throw Error('missing Waiting control fixture');
           for(const item of report.controls) {
             if(item.w<4||item.h<4)throw Error('zero-size control '+item.selector);
-            if(Math.abs(item.cy-report.first)>1.5)throw Error(`${context} ${width}px/${font}px: ${item.selector} off first line by ${(item.cy-report.first).toFixed(2)}px`);
+            const baseline=item.floating?report.tools.cy:report.first;
+            if(Math.abs(item.cy-baseline)>1.5)throw Error(`${context} ${width}px/${font}px: ${item.selector} off its action line by ${(item.cy-baseline).toFixed(2)}px`);
+            if(item.floating&&report.tools.y+report.tools.h>report.row.y+1)throw Error('floating actions cover the active row');
             if(item.selector!=='.ft-grip svg'&&(item.x<report.row.x-1||item.right>report.row.right+1))throw Error('control outside row '+item.selector);
           }
           for(let i=1;i<report.actors.length;i++)if(report.actors[i].x<report.actors[i-1].right-1)throw Error('overlapping controls');
-          const icons=report.controls.filter(x=>x.selector.endsWith('svg'));
+          const icons=report.controls.filter(x=>!x.floating&&x.selector.endsWith('svg'));
           if(Math.max(...icons.map(x=>x.w))-Math.min(...icons.map(x=>x.w))>0.5)throw Error('inconsistent row icon sizes');
           reports.push(report);
         }

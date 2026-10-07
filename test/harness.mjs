@@ -210,7 +210,7 @@ function obsidianStub(app) {
     addCommand(cmd) { (this.commands = this.commands || []).push(cmd); }
     registerView() {}
     registerObsidianProtocolHandler(name, handler) { (this.protocolHandlers ||= {})[name] = handler; }
-    registerMarkdownCodeBlockProcessor() {}
+    registerMarkdownCodeBlockProcessor(name, fn) { (this.codeProcessors ||= new Map()).set(name, fn); }
     registerEvent() {}
   }
   class Notice {

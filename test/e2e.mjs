@@ -8,6 +8,7 @@
 // checks the files on disk. The window is closed and the vault forgotten at the end (--keep keeps them).
 //
 //   node test/e2e.mjs            (--keep leaves the vault and its window open)
+import { checkProjectDraftUI } from './project-draft-ui.mjs';
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,6 +17,9 @@ import { Page, PORT, J, sleep, ymd, until } from "./cdp.mjs";
 import { checkRowAlignment } from "./row-alignment.mjs";
 import { checkIntentsUI } from "./intents-ui.mjs";
 import { checkSupplementsUI } from "./supplements-ui.mjs";
+import { checkListCompletionUI } from "./list-completion-ui.mjs";
+import { checkIdeaEntitiesUI } from "./idea-entities-ui.mjs";
+import { checkHoverLayoutUI } from "./hover-layout-ui.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const args = process.argv.slice(2);
@@ -68,7 +72,7 @@ window.__ft = {
     window.__ftTarget = el;
     // Hover a real header first; never force invisible controls into the layout.
     if (!el.getClientRects().length && el.closest('.focus-tasks-view')) {
-      const row = el.closest('.ft-category-host,li.ft-task,.ft-area-title,.ft-page-head') || el.parentElement;
+      const picker=el.closest(".ft-category-picker");const row=picker?.querySelector(":scope > .ft-category-total,:scope > .ft-steps-more") || el.closest('.ft-category-host,li.ft-task,.ft-area-title,.ft-page-head') || el.parentElement;
       row.scrollIntoView({block:'center',behavior:'instant'});
       const r=row.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};
     }
@@ -866,11 +870,11 @@ step("the last step of a project checked off: the project stays as an empty row,
   await taskIs("Order new ones", { area: "💪Sport", projects: "[[Cleanup]]", scheduled: TODAY });
   await editing();
   await page.key("Escape");
-  await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && !r.hasClass('is-empty') && r.querySelector('.ft-text')?.textContent.trim() === 'Order new ones';`),
-    "the project's row shows the new step");
+  await until(() => page.eval(`const r = __ft.project('Cleanup'),task=__ft.task('Order new ones'); return !!r && !r.hasClass('is-empty') && r.hasClass('is-open') && task?.closest('.ft-steps')===r.nextElementSibling;`),
+    "the new step stays in the unfolded project after cancelling the next draft");
   await idle();
   // closing the project is a menu item, offered once nothing in it is open; the box in the closed block undoes it
-  await click(`__ft.at(__ft.project('Cleanup').querySelector('input'))`);
+  await click(`__ft.at(__ft.task('Order new ones').querySelector('input'))`);
   await taskIs("Order new ones", { status: "done" });
   await until(() => page.eval(`return !!__ft.project('Cleanup')?.hasClass('is-empty')`), "empty again");
   await menuOn(`__ft.at(__ft.name('Cleanup'))`);
@@ -1904,8 +1908,8 @@ step("a project has one header: its first step, a fold arrow and unified categor
     p.saveFolds(); p.refresh(); return true;`);
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
-    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && !!row.querySelector('.ft-steps-more svg') && row.querySelector('.ft-steps-more').textContent.trim()==='' && [...row.querySelectorAll('.ft-supplement-count')].map(e=>e.textContent).join('|')==='2|1|0';`),
-    "one row: the project, first step, fold arrow and task-category counts");
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && !row.querySelector('.ft-steps-more svg') && row.querySelector('.ft-steps-more').textContent.trim()==='+1' && [...row.querySelectorAll('.ft-supplement-count')].map(e=>e.textContent).join('|')==='2|1';`),
+    "one row: the project, first step, +1 and task-category counts");
   if (await page.eval(`return !!__ft.task('Flat two')`)) throw new Error("the second step is on screen while the row is folded");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-project')`)) throw new Error("a project header is still drawn somewhere");
   // +1 opens the steps under the row, and the row is then the name alone
@@ -1937,7 +1941,7 @@ step("a project has one header: its first step, a fold arrow and unified categor
   }
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
-    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat two' && !row.querySelector('.ft-steps-more');`),
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat two' && !row.nextElementSibling?.classList.contains('ft-steps');`),
     "the next step took the row");
   await plugin(`if (!p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true); p.refresh(); return true;`);
   await until(() => page.eval(`
@@ -2497,6 +2501,10 @@ step("commands are registered", async () => {
 
 step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
+step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,false); });
+step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,false); });
+step("hover and keyboard tools never rewrap the task or cover its text", async () => { await checkHoverLayoutUI(page); });
+step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,false); });
 step("row controls share first-line centres in pane, area and project views", async () => {
   fs.mkdirSync(SHOTS,{recursive:true});
   await checkRowAlignment(page,TODAY,TOMORROW,SHOTS);
@@ -2553,11 +2561,15 @@ step("calendar badges follow cloud receipts, project clocks and grouped reschedu
   for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})?.querySelector('.ft-calendar-status.is-pending')`),'changed clock awaits new acknowledgement');
   await page.eval(`for(const receipt of Object.values(__calendarReceipt.tasks))receipt.scheduled=${J(TOMORROW+'T18:25')};await __calendarWrite();return true;`);
   for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})?.querySelector('.ft-calendar-status.is-synced')`),'updated event is confirmed');
-  const calendarSetting=async()=>page.eval(`app.setting.open();app.setting.openTabById('focus-tasks');await new Promise(r=>setTimeout(r,300));const row=[...app.setting.activeTab.containerEl.querySelectorAll('.setting-item')].find(r=>r.querySelector('.setting-item-name')?.textContent?.includes('Apple Calendar'));const text=row?.querySelector('.setting-item-description')?.textContent;app.setting.close();return text;`);
-  if(!(await calendarSetting())?.startsWith('Connected.'))throw new Error('valid phone receipt is reported as a connection problem');
+  const calendarSetting=async expected=>{
+    await page.eval(`app.setting.open();app.setting.openTabById('focus-tasks');return true;`);
+    try{return await until(()=>page.eval(`const row=[...app.setting.activeTab.containerEl.querySelectorAll('.setting-item')].find(r=>r.querySelector('.setting-item-name')?.textContent?.includes('Apple Calendar')),text=row?.querySelector('.setting-item-description')?.textContent;return text?.startsWith(${J(expected)})?text:false;`),'Calendar settings state '+expected);}
+    finally{await page.eval(`app.setting.close();return true;`);}
+  };
+  if(!(await calendarSetting('Connected.'))?.startsWith('Connected.'))throw new Error('valid phone receipt is reported as a connection problem');
   await page.eval(`__calendarReceipt.connected=false;await __calendarWrite();return true;`);
   for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})?.querySelector('.ft-calendar-status.is-error')`),'connection error never stays green');
-  if(!(await calendarSetting())?.startsWith('Reminders have not synced yet.'))throw new Error('settings hide a Calendar connection failure');
+  if(!(await calendarSetting('Reminders have not synced yet.'))?.startsWith('Reminders have not synced yet.'))throw new Error('settings hide a Calendar connection failure');
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setDates(p.tasks().filter(t=>${J(names)}.includes(t.text)),${J(TOMORROW)},null);return true;`);
   for(const name of names)await until(()=>page.eval(`return !!__ft.task(${J(name)})&&!__ft.task(${J(name)}).querySelector('.ft-calendar-status')`),'removing time removes the badge');
   await idle();
@@ -2581,7 +2593,7 @@ step("a Calendar UID link finds the renamed, moved and folded task without openi
   const code="import sys,datetime as dt;sys.path.insert(0,'bridge');from apple_calendar import Reminder,focus_url;print(focus_url(Reminder(sys.argv[2],'', 'Old task title',dt.datetime.now(dt.timezone.utc),False,sys.argv[1])))";
   const uri=execFileSync(python,['-c',code,NAME,target.uid],{cwd:ROOT,encoding:'utf8'}).trim();
   await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t=>t.uid===${J(target.uid)})`),'URI target indexed');
-  await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.rename(p.tasks().find(t=>t.uid===${J(target.uid)}),'Renamed Calendar UID target');await p.setFields(p.tasks().find(t=>t.uid===${J(target.uid)}),{projects:['[[UID destination project]]'],scheduled:${J(TODAY)}});await p.setProjectDate(app.vault.getAbstractFileByPath(${J(target.project)}),${J(TOMORROW)});p.setEverything(false);p.data.folded['area:Audit Area']=true;delete p.data.opened['future:Audit Area'];p.data.opened['steps:'+${J(target.project)}]=false;p.saveFolds();p.refresh();return true;`);
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.uid===${J(target.uid)});await p.rename(task,'Renamed Calendar UID target');await p.setFields(task,{projects:['[[UID destination project]]'],scheduled:${J(TODAY)}});await p.setProjectDate(app.vault.getAbstractFileByPath(${J(target.project)}),${J(TOMORROW)});p.setEverything(false);p.data.folded['area:Audit Area']=true;delete p.data.opened['future:Audit Area'];p.data.opened['steps:'+${J(target.project)}]=false;p.saveFolds();p.refresh();return true;`);
   execFileSync('open',[uri]);
   await until(()=>page.eval(`const v=app.workspace.activeLeaf?.view;return v?.getViewType()==='focus-tasks-view'&&v.renderer?.rows().some(([el,t])=>t.uid===${J(target.uid)}&&el.classList.contains('is-selected'))`),'native URI selects renamed project step',15000);
   const after=await page.eval(`const v=app.workspace.activeLeaf.view.renderer,row=v.rows().find(([,t])=>t.uid===${J(target.uid)});if(row[1].text!=='Renamed Calendar UID target'||v.selected.size!==1||[...v.selected][0].uid!==${J(target.uid)})throw Error('wrong task selected');return app.workspace.getLeavesOfType('markdown').map(l=>l.id).sort();`);

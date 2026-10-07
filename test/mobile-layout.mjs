@@ -7,7 +7,7 @@ export async function layoutFixture(page, today) {
   await page.eval(`
     if(app.vault.getName()!=='focus-tasks-mobile')throw new Error('fixture vault required');
     if(window.__layoutFixture)return true;
-    window.__layoutRoot=()=>[...document.querySelectorAll('.focus-tasks-view')].find(e=>e.getBoundingClientRect().width>0);
+    window.__layoutRoot=()=>[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.focus-tasks-view')].find(e=>e.getBoundingClientRect().width>0);
     const p=app.plugins.plugins['focus-tasks'];
     p.build={mode:'test',commit:'mobile-layout-fixture',queue:1};
     const note=async(file,front,body='')=>app.vault.create(file,'---\\n'+front+'\\n---\\n'+body);
@@ -105,7 +105,7 @@ function inspectLayout() {
       glyph.selectNodeContents(emoji);const first=document.createTreeWalker(name,NodeFilter.SHOW_TEXT).nextNode();
       if(first){letter.setStart(first,0);letter.setEnd(first,1);if(letter.getBoundingClientRect().left-glyph.getBoundingClientRect().right<3)fail('area name is stuck to its emoji',header);}
     }
-    const controls=[...header.querySelectorAll(':scope > .ft-grip, :scope > .ft-caret, :scope > .ft-plus, :scope > .ft-more, :scope > .ft-chip')].filter(visible);
+    const controls=[...header.querySelectorAll(':scope > .ft-grip, :scope > .ft-caret, :scope > .ft-plus, :scope > .ft-more, :scope > .ft-chip, :scope > .ft-area-caption .ft-category-total, :scope > .ft-category-picker > .ft-category-total')].filter(visible);
     for(const c of controls) {
       const q=rect(c);
       if(q.left<0||q.right>innerWidth+1)fail('header control outside screen '+c.className,header);
@@ -141,7 +141,7 @@ function inspectLayout() {
     const caption=row.querySelector('.ft-mobile-project-caption');
     const more=caption?.querySelector('.ft-steps-more');
     if(more?.classList.contains('is-late')||more?.classList.contains('is-open')) {
-      const probe=document.createElement('span');probe.style.color=more.classList.contains('is-open')?'var(--interactive-accent)':'var(--text-error)';
+      const probe=document.createElement('span');probe.style.color=more.classList.contains('is-open')?'var(--text-normal)':'var(--text-error)';
       more.parentElement.appendChild(probe);const expected=getComputedStyle(probe).color;probe.remove();
       if(getComputedStyle(more).color!==expected)fail('project count loses overdue/open state colour',row);
     }
