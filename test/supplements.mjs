@@ -27,12 +27,12 @@ test('revealing a folded area keeps an enabled category on and leaves the others
   const key='intents:Work',later={key:'futureoff:Work',inverted:true},focus={key:'focusoff:Work',inverted:true};
   await p.toggleSupplement(key,'intents',later,focus);
   p.data.opened['project-focuson:'+file.path]=true;p.data.opened['later:'+file.path]=true;
-  const before={...p.data.opened};
   for(const kind of ['focus','backlog','intents']){
     assert.equal(await p.toggleSupplement(key,kind,later,focus,true),true);
     assert.equal(p.categoryShown(focus),true);assert.equal(p.categoryShown(later),true);assert.equal(p.isShown(key,true),true);
   }
-  assert.deepEqual(p.data.opened,before);
+  assert.equal(p.categoryShown(focus),true); assert.equal(p.categoryShown(later),true);
+  assert.equal(p.isShown('later:'+file.path,true),false);
   assert.equal(p.everything(),false);
 });
 
@@ -41,7 +41,7 @@ test('revealing a disabled category enables it without enabling other categories
   const key='intents:Work',later={key:'future:Work'},focus={key:'focusoff:Work',inverted:true};
   await p.toggleSupplement(key,'focus',later,focus);
   assert.equal(await p.toggleSupplement(key,'backlog',later,focus,true),true);
-  assert.equal(p.categoryShown(later),true);assert.equal(p.categoryShown(focus),false);assert.equal(p.isShown(key,true),false);
+  assert.equal(p.categoryShown(later),true);assert.equal(p.categoryShown(focus),true);assert.equal(p.isShown(key,true),false);
   assert.equal(await p.toggleSupplement(key,'backlog',later,focus),false);
 });
 
@@ -203,14 +203,14 @@ test('programmatic opening after search or moving a list also respects parent/ch
   await p.setOpen(key, true); assert.equal(p.isShown('intents:Work', true), false);
 });
 
-test('all eight category combinations preserve independent visibility and All', async () => {
+test('legacy hidden Focus preferences cannot hide tasks; other categories stay independent', async () => {
   for (let mask = 0; mask < 8; mask++) {
     const { p } = await setup(); p.setEverything(true);
     const later = { key: 'future:Work' }, focus = { key: 'focusoff:Work', inverted: true };
     if (!(mask & 1)) await p.toggleSupplement('intents:Work', 'focus', later, focus);
     if (mask & 2) await p.toggleSupplement('intents:Work', 'backlog', later, focus);
     if (mask & 4) await p.toggleSupplement('intents:Work', 'intents', later, focus);
-    assert.equal(p.categoryShown(focus), !!(mask & 1)); assert.equal(p.categoryShown(later), !!(mask & 2));
+    assert.equal(p.categoryShown(focus), true); assert.equal(p.categoryShown(later), !!(mask & 2));
     assert.equal(p.isShown('intents:Work', true), !!(mask & 4)); assert.equal(p.everything(), true);
   }
 });
@@ -225,7 +225,7 @@ test('project focus/backlog overrides have the same state in note and list, with
   assert.equal(p.categoryShown({ ...later, defaultOpen: false }), false);
   assert.equal(p.isShown(key, true), true);
   await p.toggleSupplement(key, 'focus', later, focus);
-  assert.equal(p.categoryShown(focus), false); assert.equal(p.isShown(key, true), true);
+  assert.equal(p.categoryShown(focus), true); assert.equal(p.isShown(key, true), true);
   await p.toggleSupplement(key, 'focus', later, focus);
   assert.equal(p.categoryShown({ ...focus, defaultOpen: false }), true);
   assert.equal(p.categoryShown(later), false);
@@ -260,17 +260,17 @@ test('scope counts follow effective project-date membership and avoid duplicate 
   const { p, file } = await setup(), day = new Date().toLocaleDateString('en-CA');
   await p.createTask('Dated today', { area:'Work', project:file.basename, projectFile:file }, day);
   await p.createTask('Undated', { area:'Work', project:file.basename, projectFile:file }, null);
-  await p.setProjectDate(file,'2099-01-01');
+  await p.frontOwned(file,fm=>fm.scheduled='2099-01-01');
   let scope = (await p.collect(false,true)).find(a=>a.name==='Work');
   assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[1,1]);
-  await p.setProjectDate(file,'2000-01-01');
+  await p.frontOwned(file,fm=>fm.scheduled='2000-01-01');
   scope = (await p.collect(false,true)).find(a=>a.name==='Work');
   assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[1,1]);
   scope.rows.push(scope.rows[0]);scope.ahead.push(scope.ahead[0]);
   assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[1,1]);
 });
 
-test('area category switches apply to all its projects, even after a scoped project override', async () => {
+test('area category switches reset local overrides without expanding projects', async () => {
   const { p,file } = await setup(), key='project-intents:'+file.path;
   const focus={key:'project-focusoff:'+file.path,onKey:'project-focuson:'+file.path,defaultOpen:true};
   const later={key:'later:'+file.path,projectPath:file.path,defaultOpen:false};
@@ -279,11 +279,12 @@ test('area category switches apply to all its projects, even after a scoped proj
   await p.toggleSupplement('intents:Work','intents');
   const areaFocus={key:'focusoff:Work',inverted:true}, areaLater={key:'future:Work'};
   await p.toggleSupplement('intents:Work','focus',areaLater,areaFocus);
-  assert.equal(p.categoryShown(focus),false);assert.equal(p.categoryShown(later),true);
+  assert.equal(p.categoryShown(focus),true);assert.equal(p.categoryShown(later),true);
   await p.toggleSupplement('intents:Work','focus',areaLater,areaFocus);
   assert.equal(p.categoryShown(focus),true);
   await p.toggleSupplement('intents:Work','backlog',areaLater,areaFocus);
-  assert.equal(p.categoryShown(later),true);
+  assert.equal(p.categoryShown({...later,inherited:true,defaultOpen:true}),true);
+  assert.equal(p.isShown('later:'+file.path,true),false);
   await p.toggleSupplement('intents:Work','backlog',areaLater,areaFocus);
   assert.equal(p.categoryShown(later),false);assert.equal(p.categoryShown(focus),true);
   assert.equal(p.isShown('intents:Work',true),true);
@@ -293,26 +294,70 @@ test('area category switches apply to all its projects, even after a scoped proj
 test('Focus availability follows effective scope membership, not visibility or task count alone', async () => {
   const { p, file } = await setup();
   const target={area:'Work',project:file.basename,projectFile:file};
-  await p.setProjectDate(file,'2099-01-01');
+  await p.frontOwned(file,fm=>fm.scheduled='2099-01-01');
   await p.createTask('Future step',target,'2099-01-01');
   let area=(await p.collect(false,true)).find(a=>a.name==='Work');
   assert.equal(p.scopeTasks(area).hasFocus,false);
   assert.equal(p.scopeTasks(area,file.path).hasFocus,false);
   assert.equal(p.scopeTasks(undefined).hasFocus,false);
-  await p.setProjectDate(file,'2000-01-01');
+  await p.frontOwned(file,fm=>fm.scheduled='2000-01-01');
   area=(await p.collect(false,true)).find(a=>a.name==='Work');
-  assert.equal(p.scopeTasks(area).hasFocus,true);
+  assert.equal(p.scopeTasks(area).hasFocus,false);
   p.data.opened['focusoff:Work']=true;
   p.data.opened['project-focusoff:'+file.path]=true;
-  assert.equal(p.scopeTasks((await p.collect(false,true)).find(a=>a.name==='Work')).hasFocus,true);
+  assert.equal(p.scopeTasks((await p.collect(false,true)).find(a=>a.name==='Work')).hasFocus,false);
 });
 
-test('a genuinely empty dated project still offers Focus, a completed project does not hold its area', async () => {
+test('area backlog inherits compact previews without writing project expansion preferences', async () => {
+  const { p, app, file } = await setup(), path = file.path;
+  const later = { key: 'future:Work' }, focus = { key: 'focusoff:Work', inverted: true };
+  p.data.opened['steps:' + path] = true;
+  p.data.opened['project-header:' + path] = true;
+  p.data.opened['project-local-ahead:' + path] = true;
+  p.data.opened['later:' + path] = true;
+  const files = new Map(app.vault.files);
+  for (const on of [true, false, true, false]) {
+    assert.equal(await p.toggleSupplement('intents:Work', 'backlog', later, focus), on);
+    assert.equal(p.isShown('steps:' + path, true), true);
+    for (const prefix of ['project-header:', 'project-local-ahead:', 'later:', 'pagefold:']) assert.equal(p.isShown(prefix + path, true), false);
+    assert.equal(p.categoryShown({key:'later:'+path,projectPath:path,inherited:true,defaultOpen:on}), on);
+    assert.equal(p.categoryShown(focus), true);
+  }
+  assert.deepEqual(new Map(app.vault.files), files);
+});
+
+test('local category chooses its preview without importing another area bucket or hiding Focus', async () => {
+  const { p, file } = await setup(), path = file.path;
+  const focus = {key:'project-focusoff:'+path,onKey:'project-focuson:'+path,defaultOpen:true,inherited:true,hostPile:'focus'};
+  const later = {key:'later:'+path,projectPath:path,defaultOpen:false,inherited:true};
+  p.data.opened['later:'+path] = true; // stale inherited state from the old area implementation
+  assert.equal(p.categoryShown(later), false);
+  await p.toggleSupplement('project-intents:'+path, 'backlog', later, focus);
+  assert.equal(p.isShown('project-header:'+path,true), true);
+  assert.equal(p.isShown('project-local-ahead:'+path,true), false);
+  assert.equal(p.categoryShown({...focus,inherited:false}), true);
+  assert.equal(p.categoryShown({...later,inherited:false}), true);
+  for (let i=0;i<3;i++) {
+    await p.toggleSupplement('project-intents:'+path, 'focus', {...later,inherited:false}, {...focus,inherited:false});
+    assert.equal(p.categoryShown({...focus,inherited:false}), true);
+    assert.equal(p.categoryShown({...later,inherited:false}), true);
+  }
+});
+
+test('local backlog placement and folding follow a project rename and Undo', async () => {
+  const { p, file } = await setup(), path = file.path;
+  for(const prefix of ['project-local-ahead:','backlog-steps:']) p.data.opened[prefix+path]=true;
+  await p.renameProject(file, 'Renamed project');
+  for(const prefix of ['project-local-ahead:','backlog-steps:']) { assert.equal(p.isShown(prefix+file.path,true),true); assert.equal(p.isShown(prefix+path,true),false); }
+  await p.undo();
+  for(const prefix of ['project-local-ahead:','backlog-steps:']) assert.equal(p.isShown(prefix+path,true),true);
+});
+
+test('a legacy project date cannot create an empty Focus area', async () => {
   const { p, file } = await setup();
-  await p.setProjectDate(file,'2000-01-01');
+  await p.frontOwned(file,fm=>fm.scheduled='2000-01-01');
   let area=(await p.collect(false,true)).find(a=>a.name==='Work');
   assert.equal(p.scopeTasks(area,file.path).focus.length,0);
-  assert.equal(p.scopeTasks(area,file.path).hasFocus,true);
-  area.rows[0].project.finished=true;
+  assert.equal(p.scopeTasks(area,file.path).hasFocus,false);
   assert.equal(p.scopeTasks(area).hasFocus,false);
 });

@@ -5,7 +5,7 @@ export async function checkIdeaEntitiesUI(page,mobile=false){
  const project=key=>`[...${root}.querySelectorAll('.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent===${J('IE '+key)})`;
  const menu=label=>`[...document.querySelectorAll('.menu-item')].find(e=>e.textContent.trim()===${J(label)})`;
  const point=async expr=>{await page.front();await page.eval(`const e=${expr};e?.scrollIntoView({block:'center',behavior:'instant'});if(!${mobile})e?.closest('.ft-category-host,.ft-hover-host')?.focus();return true;`);await sleep(250);return until(()=>page.eval(`const e=${expr},r=e?.getBoundingClientRect();if(!r?.width)return false;const p={x:r.left+r.width/2,y:r.top+r.height/2};return e.contains(document.elementFromPoint(p.x,p.y))?p:false;`),'entity control '+expr);};
- const click=async expr=>{const at=await point(expr);if(mobile)await page.tap(at);else await page.click(at);await sleep(250);};
+ const click=async expr=>{const at=await point(expr);if(mobile)await page.tap(at,60,false);else await page.click(at,0,false);await sleep(250);};
  const looseOrder=async last=>until(()=>page.eval(`const rows=[...(${area}).querySelector('.ft-intents[data-intent-area="Idea entities UI"]').querySelectorAll('li.ft-project-row')];return rows.length>=2&&rows[${last?'rows.length-1':'0'}].classList.contains('ft-loose-ideas-row');`),last?'empty default Ideas is last':'populated default Ideas keeps its first position');
  await page.eval(`if(app.vault.getName()!==${J(mobile?'focus-tasks-mobile':'focus-tasks-e2e')})throw Error('fixture guard');const p=app.plugins.plugins['focus-tasks'];const file=await p.createArea('Idea entities UI');window.__ie={area:file.path};return true;`);
  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].notes().some(n=>n.area==='Idea entities UI');`),'entity area metadata');
@@ -14,7 +14,15 @@ export async function checkIdeaEntitiesUI(page,mobile=false){
  await until(()=>page.eval(`return !!(${area})?.querySelector('.ft-loose-ideas-row');`),'loose idea add');
  await looseOrder(true);
  if(!await page.eval(`const row=(${area}).querySelector('.ft-loose-ideas-row');return row&&!row.querySelector('input')&&row.querySelector('.ft-project-name .ft-link')?.textContent===${J(mobile?'Замыслы':'Ideas')};`))throw Error('empty default Ideas group must exist without a container completion checkbox');
- await click(`(${area}).querySelector('.ft-loose-ideas-row .ft-no-step, .ft-loose-ideas-row .ft-plus')`);await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'loose editor');await page.type('IE Loose possibility');await page.key('Enter');await page.key('Escape');
+ const looseAdd=`(${area}).querySelector('.ft-loose-ideas-row .ft-no-step, .ft-loose-ideas-row .ft-plus')`;
+ if(mobile){
+   const at=await point(looseAdd);await page.touch('touchStart',[at]);
+   // A metadata refresh between press and release must preserve this creation control's click.
+   await page.eval(`app.plugins.plugins['focus-tasks'].refresh();return true;`);await sleep(80);await page.touch('touchEnd',[]);
+ }else await click(looseAdd);
+ await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'loose editor survives an index refresh during the tap');await page.type('IE Loose possibility');await page.key('Enter');
+ await until(()=>page.eval(`return !!${root}.querySelector('.ft-draft-row [contenteditable=true]');`),'Enter opens the next loose idea editor');await page.key('Escape');
+ await until(()=>page.eval(`return !${root}.querySelector('[contenteditable=true]');`),'Escape closes the next loose idea editor');
  await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],t=p.read().intentTasks.find(x=>x.text==='IE Loose possibility');return t?.loose&&!t.project&&!p.tasks().some(x=>x.uid===t.uid);`),'private loose idea saved');
  await looseOrder(false);
  const looseBox=`[...(${area}).querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent.trim()==='IE Loose possibility')?.querySelector('input[type=checkbox]')`;
@@ -24,7 +32,7 @@ export async function checkIdeaEntitiesUI(page,mobile=false){
  if(!await page.eval(`return [...(${area}).querySelectorAll('.ft-loose-ideas-row .ft-project-name .ft-link')].some(x=>x.textContent===${J(mobile?'Замыслы':'Ideas')});`))throw Error('loose idea lacks its default Ideas group');
  await page.eval(`__ie.views=app.plugins.plugins['focus-tasks'].views.size;return true;`);
  const at=await point(`(${project('Menu')}).querySelector('.ft-project-name')`);
- if(mobile){await page.touch('touchStart',[at]);await sleep(750);await page.touch('touchEnd',[]);}else await page.rightClick(at);
+ if(mobile){await page.touch('touchStart',[at]);await sleep(750);await page.touch('touchEnd',[]);}else await page.rightClick(at,false);
  await until(()=>page.eval(`return !!(${menu(mobile?'Сделать замыслом':'Make an idea list')});`),'project conversion menu');await click(menu(mobile?'Сделать замыслом':'Make an idea list'));
  await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],f=app.vault.getAbstractFileByPath(__ie.Menu),l=p.intentOf(f);return l?.isList&&p.intentEntries(l).some(x=>x.text==='IE Menu step');`),'menu converts project and step');
  await page.eval(`await app.plugins.plugins['focus-tasks'].txTail;return true;`);await sleep(500);

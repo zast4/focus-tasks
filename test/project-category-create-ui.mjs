@@ -17,28 +17,30 @@ export async function checkProjectCategoryCreateUI(page,mobile=false){
   if(mobile)await page.tap(at);else await page.click(at);await sleep(140);
  };
  const category=kind=>`(${header()}).querySelector('.ft-${kind==='backlog'?'later':kind}-chip')`;
- const ensure=async(kind,on)=>{await until(()=>page.eval(`return !!(${header()});`),'project header');if(await page.eval(`return (${category(kind)}).getAttribute('aria-pressed')==='true';`)!==on)await click(category(kind),true);await until(()=>page.eval(`return (${category(kind)}).getAttribute('aria-pressed')===${J(String(on))};`),'category '+kind+' '+on);};
+ const ensure=async(kind,on)=>{if(kind==='focus')return;await until(()=>page.eval(`return !!(${header()});`),'project header');if(await page.eval(`return (${category(kind)}).getAttribute('aria-pressed')==='true';`)!==on)await click(category(kind),true);await until(()=>page.eval(`return (${category(kind)}).getAttribute('aria-pressed')===${J(String(on))};`),'category '+kind+' '+on);};
  const create=async(expr,title,kind)=>{
   await click(expr);await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'category editor');
   if(!await page.eval(`const e=${root}.querySelector('[contenteditable=true]');return !!e.closest(${J(kind==='backlog'?'.ft-later-steps,.ft-future-block':kind==='focus'?'.ft-project-empty-focus':'.ft-project-intents')});`))throw Error('draft escaped its '+kind+' list');
   await page.type(title);await page.key('Enter');await page.key('Escape');
   await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],t=[...p.tasks(),...p.read().intentTasks].find(t=>t.text===${J(title)});if(!t||t.area!==__ecc.area)return false;return ${J(kind)}==='intents'?!!t.intent&&p.projectIntentLists(app.vault.getAbstractFileByPath(__ecc.path)).some(l=>p.intentEntries(l).some(x=>x.uid===t.uid)):!t.intent&&p.projectFile(t)?.path===__ecc.path&&t.date===(${J(kind)}==='focus'?__ecc.day:null);`),'correct category note '+title);
  };
- await until(()=>page.eval(`const r=${header()};return !!r&&r.querySelectorAll('button[data-ft-category]').length===3&&r.querySelector('.ft-focus-chip .ft-supplement-count').textContent==='1'&&r.querySelector('.ft-later-chip .ft-supplement-count').textContent==='0'&&r.querySelector('.ft-intents-chip .ft-supplement-count').textContent==='0';`),'all three categories on Focus-only project');
+ await until(()=>page.eval(`return !!(${header()})?.querySelector('.ft-steps-more');`),'compact Focus-only project');
+ await click(`(${header()}).querySelector('.ft-steps-more')`);
+ await until(()=>page.eval(`const r=${header()};return !!r&&r.querySelectorAll('button[data-ft-category]').length===2&&!r.querySelector('.ft-focus-chip')&&r.querySelector('.ft-later-chip .ft-supplement-count').textContent==='0'&&r.querySelector('.ft-intents-chip .ft-supplement-count').textContent==='0';`),'all three categories on Focus-only project');
  await ensure('backlog',true);
  await create(`(${area()}).querySelector('.ft-later-steps [data-ft-project-category=backlog]')`,'ECC Backlog','backlog');
  const seed=`[...(${area()}).querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent==='ECC Seed Focus')`;
  await click(`(${seed}).querySelector('input[type=checkbox]')`);
- await until(()=>page.eval(`return (${header()}).querySelector('.ft-focus-chip .ft-supplement-count').textContent==='0';`),'Focus empty after completion');
- await ensure('focus',false);await ensure('focus',true);
+ await until(()=>page.eval(`return !!(${area()}).querySelector('.ft-project-empty-focus');`),'Focus empty after completion');
+ await ensure('focus',true);
  await create(`(${area()}).querySelector('.ft-project-empty-focus [data-ft-project-category=focus]')`,'ECC New Focus','focus');
  await ensure('intents',true);
  await create(`(${area()}).querySelector('.ft-project-intents .ft-intents-add')`,'ECC Idea','intents');
- await until(()=>page.eval(`return [...(${header()}).querySelectorAll('.ft-supplement-count')].map(x=>x.textContent).join(',')==='1,1,1';`),'independent populated categories');
+ await until(()=>page.eval(`return [...(${header()}).querySelectorAll('.ft-supplement-count')].map(x=>x.textContent).join(',')==='1,1';`),'independent populated categories');
  // A project note has the same zero categories and creation semantics, even with a future day.
- await page.eval(`const p=app.plugins.plugins['focus-tasks'],area={name:__ecc.area,note:p.notes().find(n=>!n.project&&n.area===__ecc.area).file},file=await p.createProject(area,'ECC Future page');await p.setProjectDate(file,__ecc.future);__ecc.path=file.path;const text=await app.vault.read(file);if(!text.includes('focus-tasks'))await app.vault.append(file,${J('\n```focus-tasks\n```\n')});await app.workspace.getLeaf('tab').openFile(file,{state:{mode:'preview'}});return true;`);
+ await page.eval(`const p=app.plugins.plugins['focus-tasks'],area={name:__ecc.area,note:p.notes().find(n=>!n.project&&n.area===__ecc.area).file},file=await p.createProject(area,'ECC Future page');await p.frontOwned(file,fm=>fm.scheduled=__ecc.future);__ecc.path=file.path;const text=await app.vault.read(file);if(!text.includes('focus-tasks'))await app.vault.append(file,${J('\n```focus-tasks\n```\n')});await app.workspace.getLeaf('tab').openFile(file,{state:{mode:'preview'}});return true;`);
  root="[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-page')].find(e=>e.getBoundingClientRect().width>0)";header=()=>`(${root})?.querySelector(':scope > .ft-area-title')`;
- await until(()=>page.eval(`return (${header()})?.querySelectorAll('button[data-ft-category]').length===3;`),'visible project note offers all empty categories');
+ await until(()=>page.eval(`return (${header()})?.querySelectorAll('button[data-ft-category]').length===2;`),'visible project note offers Backlog and Ideas');
  await ensure('focus',true);
  await create(`${root}.querySelector('.ft-project-empty-focus [data-ft-project-category=focus]')`,'ECC Future project Focus','focus');
  await ensure('backlog',true);

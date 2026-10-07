@@ -132,7 +132,7 @@ const STRINGS = {
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
     botMark: "Added by a robot, not looked at yet — a click takes the mark off", botMarkOff: "Take the robot's mark off",
-    projectDate: "Project date…", projectNoDate: "No project date", projectDated: "The project's own date: it decides whether the project is in the focus",
+    projectDated: "Date of the first project task",
     inProgress: "Waiting…", backToWork: "Take it back",
     waitingSince: "In other hands; look again {0}", waitingNoDate: "In other hands; no day set to look again",
     waitingButton: "Waiting", waitingShelf: "{0} in other hands", waitingEmpty: "Nothing in other hands", until: "by {0}",
@@ -232,7 +232,7 @@ const STRINGS = {
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
     botMark: "Добавил бот, ещё не смотрел - клик снимает метку", botMarkOff: "Снять метку бота",
-    projectDate: "Дата проекта…", projectNoDate: "Проект без даты", projectDated: "Своя дата проекта: она решает, в фокусе ли проект",
+    projectDated: "Дата первой задачи проекта",
     inProgress: "Жду…", backToWork: "Взять обратно",
     waitingSince: "Жду; посмотреть {0}", waitingNoDate: "Жду; день не назначен",
     waitingButton: "Жду", waitingShelf: "жду: {0}", waitingEmpty: "Ничего не ждёшь", until: "до {0}",
@@ -1069,7 +1069,7 @@ class FocusRenderer extends MarkdownRenderChild {
         if (!ahead) delete p.data.opened["focusoff:" + task.area];
         else delete p.data.opened["futureoff:" + task.area];
         if (pf) {
-          p.data.opened["steps:" + pf.path] = true;
+          p.data.opened[(ahead ? "backlog-steps:" : "steps:") + pf.path] = true;
           if (ahead) { p.data.opened["later:" + pf.path] = true; delete p.data.opened["pagefold:" + pf.path]; }
           else { p.data.opened["project-focuson:" + pf.path] = true; delete p.data.opened["project-focusoff:" + pf.path]; }
         }
@@ -1096,7 +1096,7 @@ class FocusRenderer extends MarkdownRenderChild {
     this.plugin.setIntentsShown(false);
     const p = this.plugin;
     for (const key of Object.keys(p.data.opened)) if (key.startsWith("intents:") || key.startsWith("project-intents:")) delete p.data.opened[key];
-    for (const key of Object.keys(p.data.opened)) if (/^(focusoff:|project-focusoff:|project-focuson:|project-header:|later:)/.test(key)) delete p.data.opened[key];
+    for (const key of Object.keys(p.data.opened)) if (/^(focusoff:|project-focusoff:|project-focuson:|project-header:|project-local-ahead:|later:)/.test(key)) delete p.data.opened[key];
     for (const a of areas) {
       delete p.data.folded["area:" + a.name];
       delete p.data.opened["future:" + a.name];
@@ -1294,6 +1294,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const summaryKey=this.containerEl.contains(active)&&active?.matches?.(".ft-category-total,.ft-steps-more")?active.closest(".ft-category-picker")?.getAttribute("data-ft-category-key"):null;
     const hoverHost = this.containerEl.contains(active) ? active?.closest?.(".ft-hover-host") : null;
     const hoverKey = hoverHost?.getAttribute("data-ft-hover-key");
+    const foldKey = this.containerEl.contains(active) && active?.matches(".ft-steps-more") ? active.getAttribute("data-ft-steps-control") : null;
     const pointerFocus = hoverKey && hoverHost.getAttribute("data-ft-pointer-focus");
     const category = this.containerEl.contains(active) && active?.matches?.("button[data-ft-category]")
       ? { key: active.closest(".ft-supplement-switch")?.getAttribute("data-ft-category-key"), kind: active.getAttribute("data-ft-category") } : null;
@@ -1315,8 +1316,10 @@ class FocusRenderer extends MarkdownRenderChild {
       const group = [...this.containerEl.querySelectorAll(".ft-supplement-switch")].find(g =>
         g.getAttribute("data-ft-category-key") === category.key && g.closest(".ft-category-host")?.getBoundingClientRect().width);
       const button = group && [...group.children].find(b => b.getAttribute("data-ft-category") === category.kind);
-      if (button) { group.closest(".ft-category-picker")?.ftShow(); button.focus({ preventScroll: true }); }
+      if (button) { group.closest(".ft-category-picker")?.ftShow?.(); button.focus({ preventScroll: true }); }
     } else if(summaryKey){const picker=[...this.containerEl.querySelectorAll(".ft-category-picker")].find(x=>x.getAttribute("data-ft-category-key")===summaryKey);picker?.ftShow();picker?.querySelector(":scope > .ft-category-total,:scope > .ft-steps-more")?.focus({preventScroll:true});
+    } else if (foldKey) {
+      [...this.containerEl.querySelectorAll(".ft-steps-more")].find(e=>e.getAttribute("data-ft-steps-control")===foldKey)?.focus({preventScroll:true});
     } else if (hoverKey) {
       const host=[...this.containerEl.querySelectorAll(".ft-hover-host")].find(x=>x.getAttribute("data-ft-hover-key")===hoverKey);
       if(pointerFocus)host?.setAttribute("data-ft-pointer-focus","1");host?.focus({preventScroll:true});
@@ -1387,15 +1390,15 @@ class FocusRenderer extends MarkdownRenderChild {
     const counts = this.scopeFor(area.name);
     const focus = { key: "focusoff:" + area.name, inverted: true, count: counts.focus.length };
     const later = { key: "area-page-backlogoff:" + file.path, inverted: true, count: counts.backlog.length };
-    const focusShown = p.categoryShown(focus), laterShown = p.categoryShown(later);
+    const focusShown = true, laterShown = p.categoryShown(later);
     const visible = this.scopeRows(area, focusShown, laterShown);
     this.supplements(head, { key: "intents:" + area.name, focus, later, presentation: counts.hasFocus ? "focus-area" : "backlog-area", count: this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name), area.name) });
     const target = { area: area.name, project: null, noDate: true };
     const last = () => [...box.querySelectorAll(":scope > ul.ft-list > li")].pop() || head;
     this.plus(head, t("addToArea"), async () => this.creationView(target, "intents:" + area.name, focus, later), last);
     this.more(head, (menu) => this.areaMenu(menu, area));
-    if (visible.rows.length) await this.list(box, visible.rows, { area, all: true, pile: "focus", focusVisible: focusShown, backlogDefault: laterShown });
-    if (visible.ahead.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), visible.ahead, area, { all: true, focusVisible: focusShown, backlogDefault: laterShown });
+    if (visible.rows.length) await this.list(box, visible.rows, { area, all: true, pile: "focus" });
+    if (visible.ahead.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), visible.ahead, area, { all: true });
     const add = box.createDiv({ cls: "ft-empty ft-empty-add", text: "+ " + t("addTask") });
     add.onclick = async () => this.draft(last(), await this.creationView(target, "intents:" + area.name, focus, later));
     await this.intentsBlock(box, area.name);
@@ -1455,7 +1458,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const later = { key: "later:" + path, projectPath: path, defaultOpen: true, count: counts.backlog.length };
     const ideasShown = p.isShown(intentKey, true);
     const pileShown = p.categoryShown(later);
-    this.supplements(head, { key: intentKey, focus, later, count: this.ideaCount(p.projectIntentLists(b)) });
+    this.projectSupplements(head, { key: intentKey, focus, later, count: this.ideaCount(p.projectIntentLists(b)), backlogPrimary:false });
     this.plus(head, t("addStep"), async () => this.creationView(target, intentKey, focus, later), () => lastRow() || head);
     if (p.categoryShown(focus)) {
       if (counts.focus.length) await this.list(box, counts.focus.map((task) => ({ kind: "task", task })), { area, pile: "focus" });
@@ -1810,41 +1813,24 @@ class FocusRenderer extends MarkdownRenderChild {
     if (task && text) this.editInline(task, text, null);
   }
 
-  // One date for the selected rows; the selection is done then. A selected project's row dates the
-  // project itself, not a step of it.
+  // Date actions apply to tasks. Project dates are derived and never written separately.
   async dateSelection(day) {
-    const chosen = this.chosen();
+    const chosen = this.tasksChosen();
+    if (!chosen.length) return;
     this.clearSelection();
-    if (chosen.length) await this.plugin.setDates(chosen, day);
+    await this.plugin.setDates(chosen, day);
   }
 
   // The picker for the selected rows, at the date of `task` (the top one by default).
-  pickDates(task = this.chosen()[0]) {
+  pickDates(task = this.tasksChosen()[0]) {
+    if (task?.isProject) task = this.tasksChosen()[0];
     const row = this.rows().find(([, x]) => x === task)?.[0];
     const label = row?.querySelector(".ft-date");
     if (!label) return;
     row.scrollIntoView({ block: "nearest" });
-    if (task.isProject) this.editProjectDate(task.project, label);
-    else this.editDate(task, label);
+    if (!task.isProject) this.editDate(task, label);
   }
 
-  // The picker for a project's own date. Set, it decides whether the project is in the focus; the
-  // steps keep their days.
-  editProjectDate(project, el) {
-    if (this.editing) return;
-    this.clearSelection();
-    this.card(el, () => new DatePicker(el, project.date || null, async (day) => {
-      await this.plugin.setProjectDate(project.file, day);
-      this.editing = false;
-      this.picker = null;
-      this.render();
-    }, () => {
-      this.editing = false;
-      this.picker = null;
-      el.removeClass("is-active");
-      this.render();
-    }));
-  }
 
   clearSelection() {
     this.touch = (this.touch || 0) + 1;
@@ -1933,7 +1919,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const focus = { key: "focusoff:" + area.name, inverted: true, count: counts.focus.length };
     const later = { key: ((all || wide) ? "futureoff:" : "future:") + area.name, inverted: all || wide, count: counts.backlog.length };
     const intentKey = "intents:" + area.name;
-    const focusShown = p.categoryShown(focus), futureShown = p.categoryShown(later);
+    const focusShown = true, futureShown = p.categoryShown(later);
     const visible = this.scopeRows(area, focusShown, futureShown);
     this.supplements(title, { key: intentKey, count: this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name), area.name),
       focus, later, presentation: all ? "backlog-area" : "focus-area", expanded: open, unfold: async () => { if (!open) await p.toggleShown(key, all); } });
@@ -1942,7 +1928,7 @@ class FocusRenderer extends MarkdownRenderChild {
     this.more(title, (menu) => this.areaMenu(menu, area));
     this.grip(title, { type: "area", area });
     if (!open) return;
-    if (visible.rows.length) await this.list(box, visible.rows, { area, all, pile: "focus", focusVisible: focusShown, backlogDefault: futureShown });
+    if (visible.rows.length) await this.list(box, visible.rows, { area, all, pile: "focus" });
     else if (all) {
       // «Empty» is the first row's placeholder: a click turns it into a new task being typed
       const empty = box.createDiv({ cls: "ft-empty ft-empty-add", text: t("empty"), attr: { "aria-label": t("addTask") } });
@@ -1951,7 +1937,7 @@ class FocusRenderer extends MarkdownRenderChild {
         if (draft) empty.remove();
       };
     }
-    if (visible.ahead.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), visible.ahead, area, { all, focusVisible: focusShown, backlogDefault: futureShown });
+    if (visible.ahead.length) await this.ahead(box.createDiv({ cls: "ft-future-block" }), visible.ahead, area, { all });
     await this.intentsBlock(box, area.name);
   }
 
@@ -2275,19 +2261,22 @@ class FocusRenderer extends MarkdownRenderChild {
 
   scopeRows(area, focus, backlog) {
     const scope = this.scopeAreas.find(x => x.name === area.name) || area;
-    const projectVisible = (row, ahead = false) => {
-      const path = row.project.file.path, counts = this.scopeFor(area.name, path);
-      const focusShown = this.plugin.categoryShown({ key: "project-focusoff:" + path, onKey: "project-focuson:" + path, defaultOpen: focus });
-      const backlogShown = this.plugin.categoryShown({ key: "later:" + path, projectPath: path, defaultOpen: backlog });
-      return (!ahead && (focus || focusShown)) || ((backlog || backlogShown) && (counts.backlog.length > 0 || (ahead && !counts.focus.length)))
-        || this.plugin.isShown("project-intents:" + path, true)
-        || this.plugin.isShown("project-header:" + path, true);
-    };
-    const rows = scope.rows.filter(r => r.kind === "project" ? projectVisible(r) : focus);
-    const paths = new Set(rows.filter(r => r.kind === "project").map(r => r.project.file.path));
-    // A project has one header, even when both of its task categories are visible.
-    const ahead = scope.ahead.filter(r => r.kind === "task" ? backlog : !paths.has(r.project.file.path)
-      && projectVisible(r, true));
+    const p = this.plugin;
+    const local = row => p.isShown("project-header:" + row.project.file.path, true);
+    // An area changes the overview, not every project's expansion. A mixed project
+    // has a compact preview in each bucket; an explicit local choice owns one header.
+    const select = (source, enabled, isAhead) => source.filter(r => r.kind !== "project" ? enabled : local(r)
+      ? p.isShown("project-local-ahead:" + r.project.file.path, true) === isAhead : enabled)
+      .map(r => ({ ...r, localCategories: r.kind === "project" && local(r) }));
+    const rows = select(scope.rows, focus, false), ahead = select(scope.ahead, backlog, true);
+    const seen = new Set([...rows, ...ahead].filter(r => r.kind === "project" && r.localCategories).map(r => r.project.file.path));
+    for (const row of [...scope.rows, ...scope.ahead]) {
+      if (row.kind !== "project" || !local(row) || seen.has(row.project.file.path)) continue;
+      const path = row.project.file.path;
+      seen.add(path);
+      const target = p.isShown("project-local-ahead:" + path, true) ? ahead : rows;
+      target.push({ ...row, localCategories: true });
+    }
     return { rows, ahead };
   }
 
@@ -2329,12 +2318,12 @@ class FocusRenderer extends MarkdownRenderChild {
     }
   }
 
-  supplements(head, { key, count = 0, later = null, focus = null, presentation = "project", expanded = true, unfold = null, onChoose = null, trigger = null, totalText = null, expandSteps = null }) {
+  supplements(head, { key, instanceKey = key, count = 0, later = null, focus = null, presentation = "project", expanded = true, unfold = null, onChoose = null, trigger = null, totalText = null, expandSteps = null }) {
     const p = this.plugin, ideas = p.isShown(key, true);
     const options = p.categoryChoices({count, later, focus, presentation});
     if(presentation==="project"&&!options.length)return;
     const total = (focus?.count || 0) + (later?.count || 0) + count;
-    const picker = head.createSpan({cls:"ft-category-picker",attr:{"data-ft-category-key":key}});
+    const picker = head.createSpan({cls:"ft-category-picker",attr:{"data-ft-category-key":instanceKey}});
     head.addClass("ft-category-host");
     if(presentation!=="project"){
       const label=head.querySelector(":scope > .ft-page-name")||head.querySelector(":scope > .ft-emoji + span:not(.ft-category-picker)");
@@ -2348,7 +2337,7 @@ class FocusRenderer extends MarkdownRenderChild {
     accessibleName(summary,t("extraViews") + " · " + total);
     summary.setAttr("aria-expanded","false");
     const group=picker.createSpan({cls:"ft-supplement-switch ft-supplement-"+presentation,
-      attr:{role:"group","data-ft-category-key":key}});
+      attr:{role:"group","data-ft-category-key":instanceKey}});
     let line = null, lines = null, host = null, caption = null, size = null, nameLink = null, row = null, tightHost = null;
     const place=()=>{
       // Categories replace the counter in the header's own flow.
@@ -2371,13 +2360,13 @@ class FocusRenderer extends MarkdownRenderChild {
         head.removeClass("ft-category-measure");line=picker.closest(".ft-line");
         if(line){const r=line.getBoundingClientRect(),h=parseFloat(getComputedStyle(line).lineHeight);lines=Math.max(1,Math.round(r.height/h));line.style.height=r.height+"px";line.style.overflow="hidden";}
       }
-      picker.addClass("is-open");summary.setAttr("aria-expanded","true");this.categoryOpen=key;
-      this.closeCategoryPicker=()=>{this.releasePin?.();picker.removeClass("is-open");host?.style.removeProperty("height");tightHost?.removeClass("ft-categories-tight");caption?.style.removeProperty("min-width");nameLink?.style.removeProperty("max-width");row?.style.removeProperty("--ft-category-width");line?.style.removeProperty("-webkit-line-clamp");line?.style.removeProperty("height");line?.style.removeProperty("overflow");summary.setAttr("aria-expanded","false");if(this.categoryOpen===key)this.categoryOpen=null;};
+      picker.addClass("is-open");summary.setAttr("aria-expanded","true");this.categoryOpen=instanceKey;
+      this.closeCategoryPicker=()=>{this.releasePin?.();picker.removeClass("is-open");host?.style.removeProperty("height");tightHost?.removeClass("ft-categories-tight");caption?.style.removeProperty("min-width");nameLink?.style.removeProperty("max-width");row?.style.removeProperty("--ft-category-width");line?.style.removeProperty("-webkit-line-clamp");line?.style.removeProperty("height");line?.style.removeProperty("overflow");summary.setAttr("aria-expanded","false");if(this.categoryOpen===instanceKey)this.categoryOpen=null;};
       place();
     };
     const companion=()=>picker.closest("li.ft-project-row")?.querySelector(".ft-category-expand")?.matches(":hover,:focus");
     const leave=()=>{clearTimeout(this.categoryCloseTimer);this.categoryCloseTimer=setTimeout(()=>{
-      if(picker.isConnected&&!picker.contains(document.activeElement)&&!companion()&&this.categoryOpen===key)this.closeCategoryPicker?.();
+      if(picker.isConnected&&!picker.contains(document.activeElement)&&!companion()&&this.categoryOpen===instanceKey)this.closeCategoryPicker?.();
     },180);};
     summary.addEventListener("mouseenter",()=>{if(!Platform.isMobile)show();});
     picker.addEventListener("mouseleave",leave);group.addEventListener("mouseenter",()=>clearTimeout(this.categoryCloseTimer));
@@ -2391,7 +2380,7 @@ class FocusRenderer extends MarkdownRenderChild {
       else if(e.key==="ArrowDown"){e.preventDefault();e.stopPropagation();show();group.querySelector("button")?.focus();}
       else if(e.key==="Escape"){e.preventDefault();e.stopPropagation();this.closeCategoryPicker?.();}});
     picker.addEventListener("keydown",e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();summary.focus();this.closeCategoryPicker?.();}});
-    picker.addEventListener("focusout",()=>setTimeout(()=>{if(picker.isConnected&&!picker.contains(document.activeElement)&&!picker.matches(":hover")&&!companion()&&this.categoryOpen===key)this.closeCategoryPicker?.();},0));
+    picker.addEventListener("focusout",()=>setTimeout(()=>{if(picker.isConnected&&!picker.contains(document.activeElement)&&!picker.matches(":hover")&&!companion()&&this.categoryOpen===instanceKey)this.closeCategoryPicker?.();},0));
     if(!this.categoryPickerListeners){
       this.categoryPickerListeners=true;
       this.registerDomEvent(document,"pointerdown",e=>{if(!e.target.closest?.(".ft-category-picker,.ft-category-expand"))this.closeCategoryPicker?.();},true);
@@ -2401,15 +2390,17 @@ class FocusRenderer extends MarkdownRenderChild {
     for(const {kind,n} of options){
       const enabled=kind==="intents"?ideas:p.categoryShown(kind==="focus"?focus:later),active=expanded&&enabled;
       const label=kind==="intents"?t("intents"):kind==="focus"?t("focusTitle"):t("backlog");
-      const button=group.createEl("button",{cls:"ft-chip "+(kind==="intents"?"ft-intents-chip":kind==="focus"?"ft-focus-chip":"ft-later-chip"),
+      const indicator = kind === "focus" && presentation !== "project";
+      const button=group.createEl(indicator ? "span" : "button",{cls:"ft-chip "+(kind==="intents"?"ft-intents-chip":kind==="focus"?"ft-focus-chip":"ft-later-chip"),
         attr:{"aria-pressed":String(!!active),title:label+" · "+n,"data-ft-category":kind}});
       accessibleName(button,label+" · "+n);
       button.toggleClass("is-on",!!active);button.toggleClass("is-off",!active);
       setIcon(button.createSpan({cls:"ft-chip-icon"}),kind==="intents"?"lightbulb":kind==="focus"?"crosshair":"clock");
       button.createSpan({cls:"ft-supplement-count",text:String(n)});
+      if (indicator) { button.setAttr("role", "img"); button.removeAttribute("aria-pressed"); continue; }
       button.addEventListener("pointerdown",()=>{clearTimeout(this.controlReleaseTimer);this.controlPress=button;});
-      button.onclick=async e=>{e.stopPropagation();if(this.editing||this.held)return;this.clearSelection();
-        this.pin={selector:'.ft-category-picker[data-ft-category-key="'+CSS.escape(key)+'"] button[data-ft-category="'+kind+'"]',y:button.getBoundingClientRect().top};
+      button.onclick=async e=>{e.stopPropagation();if(this.editing||this.held || (kind === "focus" && active))return;this.clearSelection();
+        this.pin={selector:'.ft-category-picker[data-ft-category-key="'+CSS.escape(instanceKey)+'"] button[data-ft-category="'+kind+'"]',y:button.getBoundingClientRect().top};
         const on=await p.toggleSupplement(key,kind,later,focus,!expanded);if(onChoose)onChoose(kind,on);if(on&&unfold)await unfold();p.refresh();};
     }
     if(expandSteps){const target=Platform.isMobile?group:(picker.closest("li.ft-project-row")||group);const more=target.createEl("button",{cls:"ft-category-expand",text:(expandSteps.open?"−":"+")+expandSteps.count,attr:{"aria-label":expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count),title:expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count)}});
@@ -2418,6 +2409,29 @@ class FocusRenderer extends MarkdownRenderChild {
       more.onclick=e=>{e.stopPropagation();expandSteps.run();};}
     picker.ftShow=show;picker.ftPlace=place;
     if(!options.length){summary.setAttr("aria-disabled","true");summary.removeAttribute("aria-haspopup");}
+    return group;
+  }
+
+  projectSupplements(head, {key, instanceKey=key, focus, later, count, backlogPrimary=false}) {
+    const p=this.plugin;
+    head.addClass("ft-category-host");
+    const picker=head.createSpan({cls:"ft-category-picker is-open ft-project-categories",attr:{"data-ft-category-key":instanceKey}});
+    const group=picker.createSpan({cls:"ft-supplement-switch ft-supplement-project",attr:{role:"group","data-ft-category-key":instanceKey}});
+    const options=backlogPrimary ? [["intents",count]] : [["backlog",later.count||0],["intents",count]];
+    for(const [kind,n] of options){
+      const active=kind==="intents"?p.isShown(key,true):p.categoryShown(later),label=t(kind==="intents"?"intents":"backlog");
+      const button=group.createEl("button",{cls:"ft-chip "+(kind==="intents"?"ft-intents-chip":"ft-later-chip"),attr:{"data-ft-category":kind,"aria-pressed":String(active),title:label+" · "+n}});
+      // Native title is the sole hover explanation; Obsidian's aria-label tooltip would duplicate it.
+      const id="ft-project-category-name-"+Math.random().toString(36).slice(2,11);
+      picker.createSpan({cls:"ft-accessible-label",text:label+" · "+n,attr:{id}});button.setAttr("aria-labelledby",id);
+      button.toggleClass("is-on",active);button.toggleClass("is-off",!active);
+      setIcon(button.createSpan({cls:"ft-chip-icon"}),kind==="intents"?"lightbulb":"clock");
+      button.createSpan({cls:"ft-supplement-count",text:String(n)});
+      button.addEventListener("pointerdown",()=>{clearTimeout(this.controlReleaseTimer);this.controlPress=button;});
+      button.onclick=async e=>{e.stopPropagation();if(this.editing||this.held)return;this.clearSelection();
+        this.pin={selector:'.ft-project-categories[data-ft-category-key="'+CSS.escape(instanceKey)+'"] button[data-ft-category="'+kind+'"]',y:button.getBoundingClientRect().top};
+        await p.toggleSupplement(key,kind,later,focus);p.refresh();};
+    }
     return group;
   }
 
@@ -2489,8 +2503,10 @@ class FocusRenderer extends MarkdownRenderChild {
       this.cancelMobilePress?.();
       clearTimeout(this.mobileClickTimer);
       this.mobileSuppressClick = null;
+      // Empty creation prompts are controls. Index refreshes must not cancel
+      // their taps through the task text's long-press suppression.
       if (e.pointerType !== "touch" || !e.isPrimary || this.editing ||
-          e.target.closest("a, button, input, textarea, [contenteditable=true], .ft-box, .ft-grip, .ft-date, .ft-running, .ft-priority, .ft-plus, .ft-more, .ft-chip, .ft-steps-more, .ft-category-picker, .ft-project-tag, .ft-place")) return;
+          e.target.closest("a, button, input, textarea, [contenteditable=true], .ft-box, .ft-grip, .ft-date, .ft-running, .ft-priority, .ft-plus, .ft-more, .ft-chip, .ft-steps-more, .ft-category-picker, .ft-project-tag, .ft-place, .ft-no-step")) return;
       const row = e.target.closest("li.ft-task[data-ft], .ft-area-title[data-ft]");
       let item = row && this.items?.get(row);
       if (!item) return;
@@ -2859,7 +2875,8 @@ class FocusRenderer extends MarkdownRenderChild {
     if (this.editing) { if (!this.endEdit) return; await this.endEdit(true, false); }
     if (this.editing) return;
     if (!this.selected.has(task)) this.clearSelection();
-    const tasks = this.selected.size ? this.chosen() : [task];
+    const tasks = this.selected.size ? this.tasksChosen() : task.isProject ? [] : [task];
+    if (!tasks.length) return;
     // A running task has no ordinary date: the day on it is the day it comes back, so the same click
     // asks that question again instead of offering «today / no date», which would strand it.
     if (tasks.every((x) => x.status === STATUS_WAITING)) return this.askReturn(tasks, el);
@@ -3117,9 +3134,11 @@ class FocusRenderer extends MarkdownRenderChild {
   async projectDraftAnchor(anchor,target,afterUid=null) {
     // Category-specific creation stays in its own list, including an empty one.
     if (target.projectCategory && anchor.closest(".ft-project-category-add,.ft-project-empty-focus,.ft-later-steps")) return anchor;
+    const origin = anchor.closest("li.ft-project-row"), bucket = origin?.getAttribute("data-ft-project-bucket")
+      || (anchor.closest(".ft-future-block") ? "backlog" : "focus");
     const find=()=>[...this.containerEl.querySelectorAll("li.ft-project-row")].find(e=>{
       const item=this.items?.get(e);return target.intentLoose?item?.project?.looseIdeas&&item.area.name===target.area
-        :target.projectFile&&item?.project?.file===target.projectFile;
+        :target.projectFile&&item?.project?.file===target.projectFile && e.getAttribute("data-ft-project-bucket") === bucket;
     });
     const row=find(),item=row&&this.items?.get(row);
     if(!row||row.hasClass("is-open"))return anchor;
@@ -3128,7 +3147,7 @@ class FocusRenderer extends MarkdownRenderChild {
         :item.project.intentList?this.plugin.intentEntries(item.project):this.plugin.tasks().filter(t=>this.plugin.samePlace(t,item.project.file));
       if(!tasks.some(t=>![STATUS_DONE,STATUS_CANCELLED,STATUS_SOMEDAY].includes(t.status)&&!waitingBack(t)))return anchor;
     }
-    const key=item.project.looseIdeas?"intent-loose-steps:"+item.area.name:"steps:"+item.project.file.path;
+    const key=item.project.looseIdeas?"intent-loose-steps:"+item.area.name:row.getAttribute("data-ft-steps-key");
     await this.plugin.setOpen(key,true);
     await this.rerendered();
     const live=find(),body=live?.nextElementSibling?.hasClass("ft-steps")?live.nextElementSibling:null;
@@ -3355,11 +3374,6 @@ class FocusRenderer extends MarkdownRenderChild {
     menu.addItem(i=>i.setTitle(t("addIntent")).setIcon("lightbulb").onClick(async()=>{try{const list=await p.ensureProjectIntentList(project);p.addTask(null,{area:list.area,project:list.file.basename,projectFile:list.file,intentList:true,listUid:list.uid,noDate:true});}catch(e){new Notice(e.message);}}));
     menu.addItem(i => i.setTitle(t("projectToIntent")).setIcon("lightbulb").onClick(() => p.projectToIntentList(project, area.name).catch(e => new Notice(e.message))));
     if (head) menu.addItem((i) => i.setTitle(t("rename")).setIcon("pencil").onClick(() => this.renameProject(head, area, project)));
-    if (head) menu.addItem((i) => i.setTitle(t("projectDate")).setIcon("calendar-days").onClick(() => {
-      const label = head.querySelector(":scope > .ft-date") || head;
-      this.editProjectDate(project, label);
-    }));
-    if (project.date) menu.addItem((i) => i.setTitle(t("projectNoDate")).setIcon("calendar-x").onClick(() => p.setProjectDate(project.file, null)));
     // Closing a project is the user's call, never the last box's: an emptied project waits for its
     // next step or for this. Only offered when nothing in it is open.
     if (!(project.tasks || []).length && !(project.later || []).length)
@@ -3457,7 +3471,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const chosen = this.tasksChosen();
     if (chosen.length && chosen.every((x) => x.status === STATUS_WAITING)) {
       menu.addItem((i) => i.setTitle(t("returnWhen") + "…").setIcon("calendar-clock").onClick(() => this.askReturn(chosen)));
-    } else {
+    } else if (chosen.length) {
       menu.addItem((i) => i.setTitle(t("today")).setIcon("calendar-check").onClick(() => this.dateSelection(day(0))));
       menu.addItem((i) => i.setTitle(t("tomorrow")).setIcon("calendar-plus").onClick(() => this.dateSelection(day(1))));
       menu.addItem((i) => i.setTitle(t("pickDate")).setIcon("calendar-days").onClick(() => this.pickDates(task)));
@@ -3556,7 +3570,7 @@ class FocusRenderer extends MarkdownRenderChild {
     if (!controls.length) return;
     li.setAttr("tabindex","0");li.addClass("ft-hover-host");
     const item=this.items?.get(li)||this.fresh?.get(li);
-    li.setAttr("data-ft-hover-key",item?.type==="project"?item.project.file.path:item?.task?.uid||"");
+    li.setAttr("data-ft-hover-key",item?.type==="project"?item.project.file.path+"::"+(li.getAttribute("data-ft-project-bucket")||"list"):item?.task?.uid||"");
     controls.sort((a,b)=>Number(a.matches(".ft-category-expand"))-Number(b.matches(".ft-category-expand")));
     const tools=li.createSpan({cls:"ft-hover-tools"});for(const control of controls)tools.appendChild(control);
     tools.addEventListener("mouseenter",()=>{if(!this.editing&&!this.held){li.setAttr("data-ft-pointer-focus","1");li.focus({preventScroll:true});}});
@@ -3584,20 +3598,22 @@ class FocusRenderer extends MarkdownRenderChild {
     const p = this.plugin;
     const { project } = row;
     const area = opts.area;
-    const key = project.looseIdeas ? "intent-loose-steps:" + area.name : "steps:" + project.file.path;
+    const key = project.looseIdeas ? "intent-loose-steps:" + area.name : (opts.pile === "ahead" ? "backlog-steps:" : "steps:") + project.file.path;
     const isList = !!project.intentList;
     const foldMode = project.looseIdeas || !isList;
-    if (isList && row.steps.length) this.folds.push([key, !!foldMode]);
+    if ((isList && row.steps.length) || (!isList && opts.pile === "ahead")) this.folds.push([key, !!foldMode]);
     const counts = isList ? null : this.scopeFor(area.name, project.file.path);
-    const focus = { key: "project-focusoff:" + project.file.path, onKey: "project-focuson:" + project.file.path, defaultOpen: opts.pile !== "ahead" && opts.focusVisible !== false, count: counts?.focus.length || 0, available: counts?.hasFocus };
-    const later = { key: "later:" + project.file.path, projectPath: project.file.path, defaultOpen: opts.backlogDefault ?? (!!opts.all || opts.pile === "ahead"), count: counts?.backlog.length || 0 };
+    const inherited = row.localCategories === false;
+    const focus = { key: "project-focusoff:" + project.file.path, onKey: "project-focuson:" + project.file.path, defaultOpen: opts.pile !== "ahead", count: counts?.focus.length || 0, available: counts?.hasFocus, inherited, hostPile: opts.pile };
+    const later = { key: "later:" + project.file.path, projectPath: project.file.path, defaultOpen: opts.pile === "ahead", count: counts?.backlog.length || 0, inherited };
     const focusShown = p.categoryShown(focus), laterShown = p.categoryShown(later);
     const inBacklog = !isList && !focusShown && laterShown;
     const steps = isList ? row.steps : inBacklog ? (laterShown ? counts.backlog : []) : (focusShown ? counts.focus : []);
     const headerOnly = !isList && !steps.length && (counts.focus.length > 0 || counts.backlog.length > 0 || (!focusShown && !laterShown));
-    const open = steps.length > 0 && p.isShown(key, foldMode);
+    const open = (isList ? steps.length > 0 : true) && p.isShown(key, foldMode);
     const step = open ? null : steps[0] || null;
     const li = ul.createEl("li", { cls: "task-list-item ft-task ft-project-row" });
+    if (!isList) { li.setAttr("data-ft-project-path", project.file.path); li.setAttr("data-ft-project-bucket", opts.pile === "ahead" ? "backlog" : "focus"); li.setAttr("data-ft-steps-key", key); }
     if (isList) { li.addClass("ft-intent-list-row"); li.setAttr("data-intent-id", project.uid); }
     if(project.looseIdeas)li.addClass("ft-loose-ideas-row");
     if (opts.level) li.style.setProperty("--ft-level", String(opts.level));
@@ -3612,7 +3628,13 @@ class FocusRenderer extends MarkdownRenderChild {
     if (open) {
       const fold = li.createSpan({ cls: "ft-box ft-fold", attr: { "aria-label": t("hideSteps") } });
       setIcon(fold, open ? "chevron-down" : "chevron-right");
-      fold.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, foldMode); p.refresh(); };
+      fold.onclick = async (e) => {
+        e.stopPropagation(); if (this.editing || this.held) return;
+        if (!isList) this.pin = { selector: 'li[data-ft-project-path="' + CSS.escape(project.file.path) + '"][data-ft-project-bucket="' + (opts.pile === "ahead" ? "backlog" : "focus") + '"] .ft-steps-more', y: fold.getBoundingClientRect().top };
+        if (isList) await p.toggleShown(key, foldMode);
+        else await p.toggleProjectExpansion(project.file.path, key, opts.pile, open);
+        p.refresh();
+      };
     } else if (headerOnly) {
       li.createSpan({ cls: "ft-box" });
     } else if (!step && project.looseIdeas) {
@@ -3656,16 +3678,23 @@ class FocusRenderer extends MarkdownRenderChild {
     // it does not move when the row opens. The quiet controls — the ⏳ of the project's pile and the
     // «+» for a step, both under the pointer only — sit after the step, before the date, where their
     // hidden width is whitespace anyway.
-    if (steps.length > 1 || (isList && steps.length > 0)) {
+    if (!isList || steps.length > 0) {
       const hidden = steps.slice(1);
-      const extra = hidden.length || 1;
-      const more = line.createSpan({ cls: "ft-steps-more",attr:{"data-ft-fold":"true"} });
+      const extra = isList ? hidden.length || 1 : Math.max(0, counts.focus.length + counts.backlog.length - (open ? 0 : steps.length ? 1 : 0));
+      const more = line.createSpan({ cls: "ft-steps-more",attr:{"data-ft-fold":"true","data-ft-steps-control":key,tabindex:"0",role:"button"} });
       more.setText((open ? "−" : "+") + extra);
       more.toggleClass("is-open", open);
       // late steps behind the row must not hide behind it: the number turns red
       if (!open && hidden.some((x) => x.date && x.date < today() && !waitingBack(x))) more.addClass("is-late");
-      more.setAttr("aria-label", isList ? t(open ? "listCollapse" : "listExpand") : open ? t("hideSteps") : t("moreSteps", hidden.length));
-      more.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, foldMode); p.refresh(); };
+      more.setAttr("aria-label", isList ? t(open ? "listCollapse" : "listExpand") : open ? t("hideSteps") : t("moreSteps", extra));
+      more.onclick = async (e) => {
+        e.stopPropagation(); if (this.editing || this.held) return;
+        this.pin = { selector: 'li[data-ft-project-path="' + CSS.escape(project.file.path) + '"][data-ft-project-bucket="' + (opts.pile === "ahead" ? "backlog" : "focus") + '"] .ft-steps-more', y: more.getBoundingClientRect().top };
+        if (isList) await p.toggleShown(key, foldMode);
+        else await p.toggleProjectExpansion(project.file.path, key, opts.pile, open);
+        p.refresh();
+      };
+      more.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();e.stopPropagation();more.click();}};
     }
     let text = null;
     if (step) {
@@ -3679,34 +3708,22 @@ class FocusRenderer extends MarkdownRenderChild {
       if (!isList) text.setAttr("data-ft-project-category", category);
       text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), isList ? target() : p.projectCategoryTarget(project, area.name, category)); };
     }
-    // A project with a day of its own shows that day. Changing it preserves the steps' own days.
     const own = () => {
+      if (!project.date) return;
       const date = li.createSpan();
       this.dateLabel(date, { date: project.date, at: null, status: STATUS_OPEN });
-      date.addClass("is-project");   // after dateLabel: it sets the classes afresh
+      date.addClass("is-project");
+      date.setAttr("role", "img");
       date.setAttr("aria-label", t("projectDated"));
-      date.onclick = (e) => { if (picking(e)) return; e.stopPropagation(); this.editProjectDate(project, date); };
     };
-    // What the project holds beside today's steps hangs off its own row, as off an area's header:
-    // the ⏳ opens its pile of what is not today, right under the row. Quiet — under the pointer,
-    // lit while open, the count in its tooltip. Not in the area's ⏳ pile, where the row is that pile.
     const intentKey = "project-intents:" + project.file.path;
-    const ideasShown = !isList && p.isShown(intentKey, true);
-    if (!isList) {
-      const total=counts.focus.length+counts.backlog.length+this.ideaCount(p.projectIntentLists(project));
-      let trigger=line.querySelector(".ft-steps-more");
-      if(!trigger){trigger=name.parentElement.createSpan({cls:total>1?"ft-steps-more":"ft-category-total",text:total>1?"+"+Math.max(0,total-(step?1:0)):String(total)});name.after(trigger);}
-      const parent=trigger.parentElement,before=trigger.nextSibling;
-      const group=this.supplements(parent,{key:intentKey,count:this.ideaCount(p.projectIntentLists(project)),focus,later,trigger,
-        expandSteps:steps.length>1?{open,count:steps.length-1,run:async()=>{await p.toggleShown(key,foldMode);p.refresh();}}:null});
-      if(group){const picker=group.parentElement;if(before)parent.insertBefore(picker,before);}
-      else trigger.remove();
-    }
+    const ideasShown = !isList && open && p.isShown(intentKey, true);
+    if (!isList && open) this.projectSupplements(line, {key:intentKey, instanceKey:opts.pile === "ahead" ? intentKey + "::backlog" : intentKey,
+      focus, later, count:this.ideaCount(p.projectIntentLists(project)), backlogPrimary:inBacklog});
     // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
     this.plus(li, t("addStep"), async () => this.creationView(target(), intentKey, focus, later), anchor);
     if (step) {
-      if (project.date && !step.at) own();
-      else {
+      {
         const date = li.createSpan();
         this.dateLabel(date, step);
         date.onclick = (e) => {
@@ -3727,7 +3744,7 @@ class FocusRenderer extends MarkdownRenderChild {
       });
       li.oncontextmenu = (e) => { e.preventDefault(); this.taskMenu(step, e); };
     } else {
-      if (project.date) own();
+      own();
       li.oncontextmenu = projectMenu;
     }
     this.track(li, { type: "project", area, project, task: step });
@@ -3737,12 +3754,12 @@ class FocusRenderer extends MarkdownRenderChild {
       await this.list(body, steps.map((task) => ({ kind: "task", task })), { ...opts, level: (opts.level || 0) + 1 });
     }
     // the project's pile of what is not today: its own list under the row (and under the open steps)
-    if (!isList && focusShown && !counts.focus.length && !(text?.hasClass("ft-no-step") && !inBacklog))
+    if (!isList && !inherited && focusShown && !counts.focus.length && !(text?.hasClass("ft-no-step") && !inBacklog))
       this.projectEmptyTaskAdd(ul.createEl("li", { cls: "ft-steps ft-project-empty-focus" }), area.name, project, "focus");
-    if (!isList && !inBacklog && laterShown) {
+    if (!isList && !inherited && !inBacklog && laterShown) {
       const pile = ul.createEl("li", { cls: "ft-later-steps ft-future-block" });
       if (counts.backlog.length) await this.ahead(pile, counts.backlog.map((task) => ({ kind: "task", task })), area, { level: (opts.level || 0) + 1 });
-      if (counts.backlog.length || text?.getAttribute("data-ft-project-category") !== "backlog") this.projectEmptyTaskAdd(pile, area.name, project, "backlog");
+      if (!counts.backlog.length && text?.getAttribute("data-ft-project-category") !== "backlog") this.projectEmptyTaskAdd(pile, area.name, project, "backlog");
     }
     if (ideasShown) await this.projectIntentsBlock(ul.createEl("li", { cls: "ft-project-ideas-slot" }), area.name, project);
     if (Platform.isMobile) {
@@ -3751,8 +3768,9 @@ class FocusRenderer extends MarkdownRenderChild {
       li.addClass(open || headerOnly ? "ft-mobile-project-header" : "ft-mobile-project");
       const caption = li.createSpan({ cls: "ft-mobile-project-caption" });
       caption.appendChild(name);
-      const more = line.querySelector(".ft-category-picker,.ft-steps-more");
-      if (more) caption.appendChild(more);
+      // The counter and its supplements are siblings. Keep both in the mobile
+      // caption before removing an expanded header's task line.
+      for (const control of line.querySelectorAll(":scope > .ft-steps-more, :scope > .ft-category-picker")) caption.appendChild(control);
       line.querySelector(".ft-sep")?.remove();
       for (const control of li.querySelectorAll(":scope > .ft-plus, :scope > .ft-later-chip, :scope > .ft-category-picker")) caption.appendChild(control);
       if (open || headerOnly) line.remove();
@@ -4136,11 +4154,12 @@ module.exports = class FocusTasks extends Plugin {
 
   categoryShown(view) {
     if (!view) return false;
+    if (view.inherited) return !!view.defaultOpen;
     if (view.onKey) {
       if (this.isShown(view.onKey, true)) return true;
-      if (this.isShown(view.key, true)) return false;
-      return !!view.defaultOpen;
+      return !!view.defaultOpen || !!view.count;
     }
+    if (view.key.startsWith("focusoff:") || view.key.startsWith("area-page-focusoff:")) return true;
     if (view.projectPath) {
       if (this.isShown("later:" + view.projectPath, true)) return true;
       if (this.isShown("pagefold:" + view.projectPath, true)) return false;
@@ -4150,9 +4169,26 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   // Each category owns its visibility. Opening ideas never changes focus/backlog or All.
+  // +N expands this project alone, merging its two previews into a retained header.
+  async toggleProjectExpansion(path, key, pile, open) {
+    this.data.opened[key] = !open;
+    if (open) {
+      delete this.data.opened["project-header:" + path];
+      delete this.data.opened["project-local-ahead:" + path];
+      delete this.data.opened["project-intents:" + path];
+    } else {
+      this.data.opened["project-header:" + path] = true;
+      this.data.opened["project-local-ahead:" + path] = pile === "ahead";
+      delete this.data.opened["project-focusoff:" + path];
+      this.data.opened["later:" + path] = true;
+      delete this.data.opened["pagefold:" + path];
+    }
+    await this.saveFolds();
+  }
+
   categoryChoices({count=0,later=null,focus=null,presentation="project"}={}) {
     return [["focus",focus?.count||0],["backlog",later?.count||0],["intents",count]].filter(([kind,n])=>
-      presentation === "project" || kind !== "focus" || (presentation !== "backlog-area" && focus?.available !== false)
+      presentation === "backlog-project" ? kind === "intents" : kind !== "focus" || (!["project", "backlog-area"].includes(presentation) && focus?.available !== false)
     ).map(([kind,n])=>({kind,n}));
   }
 
@@ -4167,10 +4203,23 @@ module.exports = class FocusTasks extends Plugin {
     const view = kind === "focus" ? focus : kind === "backlog" ? later : { key: intentKey };
     if (!view) return false;
     // A local choice hides tasks, not the header needed to reverse that choice.
-    if (intentKey.startsWith("project-intents:")) this.data.opened["project-header:" + intentKey.slice("project-intents:".length)] = true;
+    if (intentKey.startsWith("project-intents:")) {
+      const path = intentKey.slice("project-intents:".length);
+      if (focus?.inherited) {
+        // Start the local view with precisely the categories shown in this preview.
+        for (const name of ["project-focuson:", "project-focusoff:", "later:", "pagefold:"]) delete this.data.opened[name + path];
+        this.data.opened[(focus.defaultOpen ? "project-focuson:" : "project-focusoff:") + path] = true;
+        this.data.opened[(later.defaultOpen ? "later:" : "pagefold:") + path] = true;
+      }
+      this.data.opened["project-header:" + path] = true;
+      if (focus?.hostPile) {
+        if (focus.hostPile === "ahead") this.data.opened["project-local-ahead:" + path] = true;
+        else delete this.data.opened["project-local-ahead:" + path];
+      }
+    }
     // A collapsed ancestor hides the category without clearing its saved preference.
     // Its dim control must reveal that category, never toggle an already enabled one off.
-    const on = reveal || !this.categoryShown(view);
+    const on = kind === "focus" || reveal || !this.categoryShown(view);
     if (view.onKey) {
       if (on) { this.data.opened[view.onKey] = true; delete this.data.opened[view.key]; }
       else { this.data.opened[view.key] = true; delete this.data.opened[view.onKey]; }
@@ -4193,11 +4242,11 @@ module.exports = class FocusTasks extends Plugin {
       for (const project of this.notes().filter(x => x.project && x.area === area)) {
         const path = project.file.path;
         delete this.data.opened["project-header:" + path];
+        delete this.data.opened["project-local-ahead:" + path];
         if (kind !== "focus" && kind !== "backlog") continue;
         const yes = (kind === "focus" ? "project-focuson:" : "later:") + path;
         const no = (kind === "focus" ? "project-focusoff:" : "pagefold:") + path;
-        if (on) { this.data.opened[yes] = true; delete this.data.opened[no]; }
-        else { this.data.opened[no] = true; delete this.data.opened[yes]; }
+        delete this.data.opened[yes]; delete this.data.opened[no];
       }
     }
     if (kind === "intents" && on) this.closeRelatedIntentScopes(intentKey);
@@ -4599,7 +4648,7 @@ module.exports = class FocusTasks extends Plugin {
   // rest — undated, dated later, sent off, and the projects whose every step is such (or that have
   // none). `done`: checked off today, for the block at the bottom. `all` puts every open task of every
   // area into `rows`. Tasks are notes; areas and projects are their own notes.
-  // Count/render the same effective membership, including project dates and returned Waiting.
+  // Count/render the same effective membership from task dates and returned Waiting.
   // A project/list header is not a task. Hidden steps still count; pending Waiting does not.
   scopeTasks(area, path = null) {
     const tasks = rows => {
@@ -4633,7 +4682,7 @@ module.exports = class FocusTasks extends Plugin {
     for (const n of this.notes()) {
       const area = areaOf(n.area);
       if (!n.project) { if (!area.note) area.note = n.file; continue; }
-      const bucket = { file: n.file, uid: n.uid, area, date: n.date || null, tasks: [], later: [], done: [], waiting: [], running: 0 };
+      const bucket = { file: n.file, uid: n.uid, area, date: null, tasks: [], later: [], done: [], waiting: [], running: 0 };
       projects.set(n.file.path, bucket);
       area.projects.push(bucket);
     }
@@ -4686,6 +4735,9 @@ module.exports = class FocusTasks extends Plugin {
         b.tasks.sort(cmpRow);
         b.later.sort(cmpAhead);
         b.done.sort((x, y) => cmp(x.text, y.text));
+        // Project dates are read from the first active step in the same order as the list.
+        b.firstTask = [...b.tasks, ...b.later].sort(cmpRow)[0] || null;
+        b.date = b.firstTask?.date || null;
         if (all) { area.rows.push({ kind: "project", project: b, steps: b.tasks }); continue; }
         // A project whose last step was checked off today keeps its row in the focus — empty, with
         // nowhere to go but «the next step» or «done». So does one made today from an area that is
@@ -4694,9 +4746,8 @@ module.exports = class FocusTasks extends Plugin {
         // its steps are: behind the area's ⏳, empty or not.
         b.finished = !b.tasks.length && !b.later.length && b.done.some(inFocus);
         b.fresh = !b.tasks.length && !b.later.length && this.data.opened["fresh:" + b.file.path] === now;
-        // An explicitly scheduled step can be due before its project's own day.
-        // Creating a Focus step preserves the project day and still reveals that step today.
-        const here = b.date ? b.date <= now || b.tasks.length : b.tasks.length || b.finished || b.fresh;
+        // A saved date on the project note cannot put an empty project in Focus.
+        const here = b.tasks.length || b.finished || b.fresh;
         if (here) area.rows.push({ kind: "project", project: b, steps: b.tasks });
         if (!here || b.later.length) area.ahead.push({ kind: "project", project: b, steps: b.later });
       }
@@ -5146,9 +5197,10 @@ module.exports = class FocusTasks extends Plugin {
   }
 
   async setDates(tasks, day, at = undefined) {
-    return this.track(t("aDate"), tasks.map((x) => x.file), async (tx) => {
-      for (const task of tasks) if (!await (task.isProject ? this.setProjectDate(task.file, day, tx)
-        : at === undefined ? this.setDate(task, day, tx) : this.setScheduled(task, day, at, tx))) return false;
+    const editable = tasks.filter(x => !x.isProject);
+    if (!editable.length) return false;
+    return this.track(t("aDate"), editable.map((x) => x.file), async (tx) => {
+      for (const task of editable) if (!await (at === undefined ? this.setDate(task, day, tx) : this.setScheduled(task, day, at, tx))) return false;
       return true;
     });
   }
@@ -5844,18 +5896,8 @@ module.exports = class FocusTasks extends Plugin {
     });
   }
 
-  // The project's own day, in its note (`scheduled`); null takes it off.
-  async setProjectDate(file, day, tx = null) {
-    return this.track(t("aDate"), [file], async active => {
-      await this.frontOwned(file, (fm) => {
-        if (!this.classify(file, fm)?.project) throw new Error(t("changed"));
-        if (day) fm.scheduled = day; else delete fm.scheduled;
-      }, active);
-      this.forgetScan();
-      this.refresh();
-      return true;
-    }, tx);
-  }
+  // Kept for older integrations: a project has no independently editable schedule.
+  async setProjectDate() { return false; }
 
   // Several at once: one notice and one undo for all of them.
   async removeTasks(tasks) {
@@ -6315,7 +6357,7 @@ module.exports = class FocusTasks extends Plugin {
       if (i >= 0) { list[i] = "p:" + path; touched = true; }
     }
     for (const map of [this.data.opened, this.data.folded]) {
-      for (const prefix of ["project:", "later:", "done:", "waiting:", "pagefold:", "steps:", "fresh:", "project-intents:", "project-header:", "project-focusoff:", "project-focuson:", "area-page-backlogoff:"]) {
+      for (const prefix of ["project:", "later:", "done:", "waiting:", "pagefold:", "steps:", "backlog-steps:", "project-local-ahead:", "fresh:", "project-intents:", "project-header:", "project-focusoff:", "project-focuson:", "area-page-backlogoff:"]) {
         if (map[prefix + old]) { map[prefix + path] = map[prefix + old]; delete map[prefix + old]; touched = true; }
       }
     }
@@ -6443,6 +6485,7 @@ module.exports = class FocusTasks extends Plugin {
       await this.forget("steps:" + project.file.path);
       await this.forget("project-intents:" + project.file.path);
       await this.forget("project-header:" + project.file.path);
+      await this.forget("project-local-ahead:" + project.file.path); await this.forget("backlog-steps:" + project.file.path);
       this.data.order.tasks["area:" + area.name] = this.areaSeats(area.name).filter((k) => k !== "p:" + project.file.path);
       await this.saveAll();
     });
@@ -6488,6 +6531,7 @@ module.exports = class FocusTasks extends Plugin {
         await this.forget("project:" + f.path);
         await this.forget("steps:" + f.path);
         await this.forget("project-header:" + f.path);
+        await this.forget("project-local-ahead:" + f.path); await this.forget("backlog-steps:" + f.path);
       }
       await this.forget("area:" + area.name);
       await this.forget("intents:" + area.name);

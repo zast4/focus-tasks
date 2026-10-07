@@ -135,12 +135,8 @@ these as actionable tasks or area/project notes. `read().intentTasks` is separat
 intent entries. Changing an entry's date never promotes it. Explicit promotion preserves UID,
 sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
-Area headers show one aggregate count; project headers reuse their count/`+N` beside the name.
-Hover/focus opens inline category controls in place of the count; touch opens it by tapping. Project controls offer
-all three categories, even at zero. Empty Focus/Backlog/Ideas expose category-specific creation.
-`projectCategoryTarget` schedules Focus today and Backlog undated without persisting its UI-only
-`projectCategory` flag. Task dates determine their categories independently of the project's own day;
-the project day can keep its header in Focus but never promotes its undated tasks.
+Area headers show one aggregate count, replaced by inline controls on hover/focus or touch.
+Project +N directly expands its tasks; only expanded projects show Backlog and Ideas, including zero counts. Backlog-primary projects only offer Ideas. Empty categories expose their creation entry. `projectCategoryTarget` schedules Focus today and Backlog undated without persisting its UI-only `projectCategory` flag. Project dates follow the first active task; old project schedules never determine Focus membership.
 Explicitly opened project headers also retain their area after completion of its last Focus task.
 Area controls keep supported empty
 Backlog/Ideas available. `scopeTasks.hasFocus` includes actionable empty projects and ignores
@@ -158,11 +154,14 @@ Focus uses device `focusoff:<area>` / `project-focusoff:<path>` (plus explicit p
 future keys keep the All inversion. Project backlog shares explicit later/pagefold state across
 row/note views; numbers do not depend on control visibility. `scopeTasks` counts effective `collect(false,true)`
 row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
-change numbers. A project renders once when its focused and future steps are both visible.
-When a project's Focus is hidden, its row disappears unless its Backlog tasks or Ideas are shown.
-An empty primary category never creates a fold arrow or an empty steps block. Ideas-only headers
+change numbers. Area Focus stays visible; its category icon is a read-only count, and stale hide preferences are ignored.
+Area Backlog opens a separate overview below Focus, with compact project previews. A mixed project
+may have one preview per bucket, but each task appears once. Focus and Backlog expansion preferences
+are separate (`steps:` / `backlog-steps:`), so an expanded Focus project does not expand its Backlog.
+Direct +N expansion keeps one local header at the clicked preview (`project-local-ahead:`) and opens its Focus and Backlog tasks. Expanded projects offer Backlog and Ideas controls, including empty counts; a Backlog-primary project only offers Ideas. Focus has no project toggle. Collapse restores the overview.
+Empty projects retain a +0 expansion entry and a creation placeholder; no empty steps block is rendered. Ideas-only headers
 reserve the checkbox column without offering project completion or a false "no step" placeholder.
-Area category switches also apply to project overrides in that area. `creationView` opens the
+Area category switches reset matching local overrides without opening every project. Filled project Backlog has no add helper; Enter continues its undated list. Empty categories retain their creation entry. `creationView` opens the
 new task's effective destination without changing the task's date. Switching categories clears
 selection, and UID navigation restores a hidden destination. No extra Ideas heading or global
 footer entry is added.
@@ -170,7 +169,7 @@ footer entry is added.
 The project's own `uid` is assigned only on explicit binding/first addition. One collection per
 project prevents ambiguous addition/order; a project renders its collection directly as task rows.
 Areas include project collections under their current project names. Parent and child idea blocks
-open exclusively, including search/programmatic opening. A project has one header and one collection block even when several categories are visible. Opening an empty scope is
+open exclusively, including search/programmatic opening. An explicit local project view has one header and one collection block even when several categories are visible. Opening an empty scope is
 read-only. Existing lists can be bound/unbound. Rename, move, promotion, deletion and Undo include
 project collections. A project replaced under the same filename cannot inherit an old UID's ideas.
 `node --test test/supplements.mjs` and `test/supplements-ui.mjs` cover these contracts.
@@ -332,6 +331,8 @@ git push && git push origin 0.2.0
 The GitHub Action publishes a release with `main.js`, `manifest.json`, `styles.css` and a zip;
 BRAT users get it on their next update check. Commits use the GitHub noreply email.
 
-Categories replace one aggregate count (project `+N`) in the header flow on hover/focus or phone tap. Native matrices check replacement position, row height, hidden controls, tap/keyboard entry, empty-category creation and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.
+Area categories replace their aggregate count in place on hover/focus or phone tap. Project +N is a direct expansion control and never becomes a hover menu. Native matrices check replacement position, row height, hidden controls, tap/keyboard entry, empty-category creation and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.
 
 Category switches pin the pressed control through redraws; a short list reserves enough scroll room to keep the control beneath the pointer until manual scrolling or another pinned change. Pins release on replacement, closed pickers and hidden or detached targets. Local category closure hides project contents while its parent category is visible; area closure hides the corresponding projects. Category accessible names use labelled-by references; title supplies the only visible tooltip. Idea lamps remain outside the editable text, and area-level loose ideas are added through the default Ideas row.
+
+Project schedules are derived by `collect` from the first active task using the same manual/date order as the task list. Legacy `scheduled` on project notes is preserved but ignored for membership. Project menu/date shortcuts cannot write an independent date; mixed bulk date actions only change task notes. `setProjectDate` remains a non-mutating compatibility method returning false.

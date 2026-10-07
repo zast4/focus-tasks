@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { checkAreaOverviewUI } from './area-overview-ui.mjs';
 // The phone suite: the same plugin in Obsidian's own mobile emulation, driven with touch events on a
 // phone-sized screen. It checks what a finger can reach and what a narrow screen does to the layout —
 // the things the desktop suite cannot see.
@@ -106,6 +107,9 @@ const step = (name, fn) => steps.push({ name, fn });
 // Between steps: close whatever the on-screen keyboard left behind (Obsidian's own suggestion
 // popup swallows the next tap) and let the list settle.
 async function calm() {
+  // A previous fixture's Undo toast can cover the next phone control. Dismiss
+  // its presentation without invoking Undo or changing any fixture data.
+  await page.eval(`if(app.vault.getName()!==${J(NAME)}||app.vault.adapter.getBasePath()!==${J(VAULT)})throw Error('fixture guard');document.querySelectorAll('.notice-container').forEach(e=>e.remove());return true;`);
   if(await page.eval(`return !!document.querySelector('.ft-category-picker.is-open');`).catch(()=>false))await page.tap({x:8,y:400}).catch(()=>{});
   await page.eval(`document.querySelectorAll('.ft-reorder-done').forEach(e=>e.click());return true;`).catch(()=>{});
   if(await page.eval(`return !!document.querySelector('.ft-picker,.menu,.modal,[contenteditable=true].ft-text');`).catch(()=>false))await page.key("Escape").catch(() => {});
@@ -150,17 +154,18 @@ step("mobile task preview follows its own category and preserves the project dat
       await p.createProject(area, ${J(name)});
       await p.createTask(${J(task)}, {area: '🏡Дом', project: ${J(name)}}, ${J(nextDay)});
       p.data.opened[${J(key)}] = true;
-      await p.setProjectDate(app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}), ${J(TODAY)});
+      await app.fileManager.processFrontMatter(app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}),fm=>{fm.scheduled=${J(TODAY)};});
       return true;`);
     const check = async (projectDay, stepDay, future) => {
       await until(() => page.eval(`return app.plugins.plugins['focus-tasks'].tasks().some(t => t.text === ${J(task)});`), 'first step indexed');
       await page.eval(`
         const p = app.plugins.plugins['focus-tasks'];
         await p.setDate(p.tasks().find(t => t.text === ${J(task)}), ${J(stepDay)});
-        await p.setProjectDate(app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}), ${J(projectDay)});
+        await app.fileManager.processFrontMatter(app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}),fm=>{if(${J(projectDay)})fm.scheduled=${J(projectDay)};else delete fm.scheduled;});
         return true;`);
       await taskIs(task, {scheduled: stepDay});
-      await sleep(450);
+      await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],b=(await p.collect(true)).flatMap(a=>a.projects).find(b=>b.file.basename===${J(name)});return b?.date===${J(stepDay)}&&p.classify(app.vault.getAbstractFileByPath(${J('Areas/' + name + '.md')}))?.date===${J(projectDay)};`),'project date follows its first task while legacy fields persist');
+      await until(()=>page.eval(`const r=__m.project(${J(name)});return !!r&&!!r.closest('.ft-future-block')===${future};`),'task preview in its expected bucket');
       await until(() => page.eval(`return !!__m.project(${J(name)});`), 'project row rendered');
       const before = read(`Задачи/${task}.md`);
       const state = await page.eval(`
@@ -168,13 +173,13 @@ step("mobile task preview follows its own category and preserves the project dat
         return {future: !!r.closest('.ft-future-block'), dim: r.classList.contains('is-later'),
           opacity: Number(getComputedStyle(r).opacity), ownDate: !!r.querySelector('.ft-date.is-project')};`);
       if (state.future !== future || state.dim !== future || state.opacity !== (future ? 0.7 : 1)
-          || state.ownDate !== !!projectDay) {
+          || state.ownDate) {
         throw new Error('project=' + projectDay + ', step=' + stepDay + ': ' + J(state));
       }
       if (read(`Задачи/${task}.md`) !== before) throw new Error('rendering changed the first step note');
     };
-    await check(TODAY, nextDay, false);
-    await check(TODAY, null, false);
+    await check(TODAY, nextDay, true);
+    await check(TODAY, null, true);
     await check(nextDay, TODAY, false);
     await check(null, TODAY, false);
     await check(null, nextDay, true);
@@ -649,8 +654,6 @@ step("mobile metadata and project controls respond to touch without opening an e
   if(await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('date tap opened editor');
   await calm();
   await tapOn(`window.__layoutRoot()?.querySelector('li.ft-mobile-project .ft-steps-more')`, 'project expansion');
-  await until(()=>page.eval(`return !!window.__layoutRoot().querySelector('.ft-category-picker.is-open .ft-category-expand');`),'project popup expansion action');
-  await tapOn(`window.__layoutRoot().querySelector('.ft-category-picker.is-open .ft-category-expand')`, 'expand project from popup');
   await until(()=>page.eval(`return !!window.__layoutRoot()?.querySelector('li.ft-project-row.is-open');`),'expanded project from its caption');
   await checkLayoutMatrix(page, "embedded-focus-expanded", SHOTS);
   await tapOn(`([...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent.includes('Решить, когда летим'))) ?.querySelector('.ft-running')`, 'return waiting task');
@@ -763,9 +766,10 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 });
 
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
+step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,true); });
-step("all three project categories support empty-list creation with correct dates", async () => { await checkProjectCategoryCreateUI(page,true); });
+step("empty project categories create Focus, Backlog and Ideas with correct dates", async () => { await checkProjectCategoryCreateUI(page,true); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });
 step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,true); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,true); });
@@ -848,7 +852,9 @@ async function openVault() {
     p.settings.language = 'ru'; p.applyLanguage();
     p.settings.folder = 'Areas'; p.settings.tasksFolder = 'Задачи';
     p.settings.typeArea = 'область'; p.settings.typeProject = 'проект';
-    app.saveLocalStorage('focus-tasks-all',null);
+    if(app.vault.getName()!==${J(NAME)}||app.vault.adapter.getBasePath()!==${J(VAULT)})throw Error('fixture guard');
+    for(const key of ['focus-tasks-all','focus-tasks-done','focus-tasks-waiting'])app.saveLocalStorage(key,null);
+    p.data.folded={};p.data.opened={};await p.saveFolds();
     await p.saveAll();
     return true;`);
   // A phone screen, and Obsidian's own mobile build: it reloads the window, so reconnect after it.
@@ -878,7 +884,9 @@ async function openVault() {
     p.settings.language = 'ru'; p.applyLanguage();
     p.settings.folder = 'Areas'; p.settings.tasksFolder = 'Задачи';
     p.settings.typeArea = 'область'; p.settings.typeProject = 'проект';
-    app.saveLocalStorage('focus-tasks-all',null);
+    if(app.vault.getName()!==${J(NAME)}||app.vault.adapter.getBasePath()!==${J(VAULT)})throw Error('fixture guard');
+    for(const key of ['focus-tasks-all','focus-tasks-done','focus-tasks-waiting'])app.saveLocalStorage(key,null);
+    p.data.folded={};p.data.opened={};await p.saveFolds();
     await p.saveAll();
     return true;`);
   await until(() => page.eval(`return !!app.plugins.plugins['focus-tasks']`), "the plugin is on in mobile mode", 20000);

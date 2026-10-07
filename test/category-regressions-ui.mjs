@@ -6,9 +6,9 @@ export async function checkCategoryRegressionsUI(page,mobile=false){
  const project=`[...(${area}).querySelectorAll('.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent==='CR Stable project caption')`;
  const backlogProject=`[...(${area}).querySelectorAll('.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent==='CR Backlog-only project')`;
  const picker=`(${project}).querySelector('.ft-category-picker')`;
- const click=async at=>mobile?page.tap(at):page.click(at);
- const point=async expr=>page.eval(`const e=${expr},r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);
- const hover=async expr=>{const at=await point(expr);if(mobile)await page.tap(at);else await page.mouse('mouseMoved',at.x,at.y,0);await sleep(220);if(!await page.eval(`return !!(${expr}).closest('.ft-category-picker')?.classList.contains('is-open');`))throw Error('count replacement moved away from its hover/tap target: '+expr+' '+JSON.stringify({at,detail:await page.eval(`const e=${expr},r=e?.getBoundingClientRect();return {rect:r?.toJSON(),hit:document.elementFromPoint(${at.x},${at.y})?.className};`)}));};
+ const click=async at=>mobile?page.tap(at,60,false):page.click(at,0,false);
+ const point=async expr=>until(()=>page.eval(`const e=${expr},r=e?.getBoundingClientRect(),p=r&&{x:r.left+r.width/2,y:r.top+r.height/2};return p&&r.width&&r.height&&e.contains(document.elementFromPoint(p.x,p.y))?p:false;`),'reachable regression control '+expr);
+ const hover=async expr=>{await page.front();await page.eval(`document.activeElement?.blur();for(const v of app.plugins.plugins['focus-tasks'].views)v.closeCategoryPicker?.();return true;`);const at=await point(expr);if(mobile)await page.tap(at,60,false);else await page.mouse('mouseMoved',at.x,at.y,0);await sleep(220);if(!await page.eval(`return !!(${expr}).closest('.ft-category-picker')?.classList.contains('is-open');`))throw Error('count replacement moved away from its hover/tap target: '+expr+' '+JSON.stringify({at,detail:await page.eval(`const e=${expr},r=e?.getBoundingClientRect();return {rect:r?.toJSON(),hit:document.elementFromPoint(${at.x},${at.y})?.className};`)}));};
  const scrollTo=async expr=>{
    // A real scroll releases the pressed-control pin before programmatic positioning.
    const box=await page.eval(`const v=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.containerEl===${root}.querySelector('.focus-tasks-view')),r=v.scroller.getBoundingClientRect();return {x:r.left+4,y:r.top+r.height/2};`);
@@ -25,11 +25,11 @@ export async function checkCategoryRegressionsUI(page,mobile=false){
  await until(()=>page.eval(`return !!(${area})?.querySelector('.ft-idea-mark')&&!!(${project});`),'regression fixtures rendered');
  await sleep(1250); // Earlier scenarios may still hold a pressed-control pin.
 
- // Closing/reopening Focus must keep the actual pressed target beneath the pointer.
+ // Opening/closing area Backlog must keep the actual pressed target beneath the pointer.
  await page.eval(`const h=(${area}).querySelector('.ft-area-title'),p=app.plugins.plugins['focus-tasks'],v=[...p.views].find(v=>v.containerEl.contains(h)),s=v.scroller;s.scrollTop+=h.getBoundingClientRect().top-s.getBoundingClientRect().top-28;return true;`);
  await hover(`(${area}).querySelector('.ft-category-total')`);
- const focus=`(${area}).querySelector('.ft-focus-chip')`,focusAt=await point(focus);
- for(const on of [false,true,false,true]){
+ const focus=`(${area}).querySelector('.ft-later-chip')`,focusAt=await point(focus);
+ for(const on of [true,false,true,false]){
    await click(focusAt);
    await until(()=>page.eval(`return (${focus}).getAttribute('aria-pressed')===${J(String(on))};`),'Focus toggled '+on);
    await sleep(160);
@@ -39,52 +39,26 @@ export async function checkCategoryRegressionsUI(page,mobile=false){
  const tail=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='CR After')`;
  await page.eval(`document.activeElement?.blur();for(const v of app.plugins.plugins['focus-tasks'].views)v.closeCategoryPicker?.();const h=(${tail}).querySelector('.ft-area-title'),v=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.containerEl.contains(h)),s=v.scroller;s.scrollTop+=h.getBoundingClientRect().top-s.getBoundingClientRect().top-28;return true;`);
  await hover(`(${tail}).querySelector('.ft-category-total')`);
- const tailFocus=`(${tail}).querySelector('.ft-focus-chip')`,tailAt=await point(tailFocus);
- for(const on of [false,true,false,true]){
+ const tailFocus=`(${tail}).querySelector('.ft-later-chip')`,tailAt=await point(tailFocus);
+ for(const on of [true,false,true,false]){
    await click(tailAt);await until(()=>page.eval(`return (${tailFocus}).getAttribute('aria-pressed')===${J(String(on))};`),'tail Focus '+on);await sleep(on?160:1400);
    if(!await page.eval(`return (${tailFocus}).contains(document.elementFromPoint(${tailAt.x},${tailAt.y}));`))throw Error('last area toggle jumps when its content shrinks below the viewport');
  }
  await sleep(1250);
- await page.eval(`document.activeElement?.blur();for(const v of app.plugins.plugins['focus-tasks'].views)v.closeCategoryPicker?.();return true;`);
  await scrollTo(project);
- await page.mouse('mouseMoved',1,1,0);await sleep(220);
- const before=await page.eval(`const r=(${project}).querySelector('.ft-project-name .ft-link').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width};`);
- await hover(`${picker}.querySelector('.ft-steps-more,.ft-category-total')`);
- const after=await page.eval(`const r=(${project}).querySelector('.ft-project-name .ft-link').getBoundingClientRect();return {x:r.x,y:r.y,width:r.width};`);
- if(Math.abs(before.x-after.x)>1||Math.abs(before.y-after.y)>1)throw Error('project caption shifts on count hover: '+JSON.stringify({before,after}));
- if(!mobile)for(const width of [340,220]){
-   await page.eval(`document.activeElement?.blur();for(const v of app.plugins.plugins['focus-tasks'].views){v.releasePin?.();v.closeCategoryPicker?.();}const root=${root};root.style.width=${J(String(width))}+'px';return true;`);
- await scrollTo(project);
-   await page.mouse('mouseMoved',1,1,0);await sleep(200);
-   const rect=await page.eval(`const r=(${project}).querySelector('.ft-project-name .ft-link').getBoundingClientRect();return {x:r.x,y:r.y};`);
-   await hover(`${picker}.querySelector('.ft-steps-more,.ft-category-total')`);
-   if(!await page.eval(`const r=(${project}).querySelector('.ft-project-name .ft-link').getBoundingClientRect();return Math.abs(r.x-${rect.x})<=1&&Math.abs(r.y-${rect.y})<=1;`))throw Error('project caption shifts in '+width+'px pane');
- }
- if(!mobile){await page.eval(`document.activeElement?.blur();for(const v of app.plugins.plugins['focus-tasks'].views)v.closeCategoryPicker?.();${root}.style.removeProperty('width');return true;`);await scrollTo(project);await hover(`${picker}.querySelector('.ft-steps-more,.ft-category-total')`);}
- if(!await page.eval(`const picker=${picker},g=picker.querySelector('.ft-supplement-switch'),buttons=[...g.querySelectorAll('button[data-ft-category]')];return !g.hasAttribute('aria-label')&&!picker.querySelector('.ft-steps-more,.ft-category-total').hasAttribute('aria-label')&&buttons.every(b=>!b.hasAttribute('aria-label')&&!!b.title&&document.getElementById(b.getAttribute('aria-labelledby'))?.textContent===b.title);`))throw Error('category tooltips duplicate or accessible names are missing');
- if(!mobile){
-   await hover(`${picker}.querySelector('.ft-focus-chip')`);await sleep(800);
-   if(await page.eval(`return [...document.querySelectorAll('.tooltip')].some(e=>e.getBoundingClientRect().width&&getComputedStyle(e).opacity!=='0'&&/Focus|Фокус/.test(e.textContent));`))throw Error('Obsidian tooltip duplicates the native category tooltip');
-   const gap=await page.eval(`const a=${picker}.querySelector('.ft-focus-chip').getBoundingClientRect(),b=${picker}.querySelector('.ft-later-chip').getBoundingClientRect();return {x:(a.right+b.left)/2,y:a.top+a.height/2,separation:b.left-a.right};`);
-   if(Math.abs(gap.separation)>1)throw Error('category hit targets have an empty gap');
-   await page.mouse('mouseMoved',gap.x,gap.y,0);await sleep(800);
-   if(await page.eval(`return [...document.querySelectorAll('.tooltip')].some(e=>e.getBoundingClientRect().width&&getComputedStyle(e).opacity!=='0'&&/Focus, backlog|Фокус, отложка/.test(e.textContent));`))throw Error('group tooltip appears between category buttons');
- }
-
- // The parent's Backlog is visible: a local close hides children, keeps its header/control.
- await page.eval(`document.activeElement?.blur();for(const v of app.plugins.plugins['focus-tasks'].views)v.closeCategoryPicker?.();(${area}).querySelector('.ft-area-title').scrollIntoView({block:'center',behavior:'instant'});return true;`);
- await hover(`(${area}).querySelector('.ft-category-total')`);
- await click(await point(`(${area}).querySelector('.ft-area-title .ft-later-chip')`));
- try{await until(()=>page.eval(`return !!(${backlogProject})?.querySelector('.ft-later-chip');`),'parent backlog enabled');}catch(error){throw Error(error.message+' '+JSON.stringify(await page.eval(`const a=${area};return {buttons:[...a.querySelectorAll(':scope>.ft-area-title [data-ft-category]')].map(b=>({kind:b.dataset.ftCategory,pressed:b.getAttribute('aria-pressed')})),projects:[...a.querySelectorAll('.ft-project-row')].map(e=>({name:e.querySelector('.ft-link')?.textContent,classes:e.className})),leaf:app.workspace.activeLeaf.view.getViewType()};`)));}
- await sleep(1250);
- await page.eval(`document.activeElement?.blur();for(const v of app.plugins.plugins['focus-tasks'].views)v.closeCategoryPicker?.();return true;`);
- await scrollTo(backlogProject);
- const backlogPicker=`(${backlogProject}).querySelector('.ft-category-picker')`;
- await hover(`${backlogPicker}.querySelector('.ft-steps-more,.ft-category-total')`);
- const later=`${backlogPicker}.querySelector('.ft-later-chip')`,laterAt=await point(later);
+ await click(await point(`(${project}).querySelector('.ft-steps-more')`));
+ await until(()=>page.eval(`return !!(${picker})?.querySelector('.ft-later-chip');`),'expanded project categories');
+ if(mobile&&!await page.eval(`const r=${project},caption=r.querySelector('.ft-mobile-project-caption'),buttons=[...r.querySelectorAll('button[data-ft-category]')];return !!caption&&buttons.length===2&&buttons.every(b=>caption.contains(b)&&b.isConnected&&b.getBoundingClientRect().width>0&&b.getBoundingClientRect().height>0);`))throw Error('expanded mobile header drops its category controls');
+ if(!await page.eval(`const g=${picker}.querySelector('.ft-supplement-switch'),buttons=[...g.querySelectorAll('button[data-ft-category]')];return !g.hasAttribute('aria-label')&&buttons.length===2&&!g.querySelector('.ft-focus-chip')&&buttons.every(b=>!b.hasAttribute('aria-label')&&!!b.title&&document.getElementById(b.getAttribute('aria-labelledby'))?.textContent===b.title);`))throw Error('category tooltips duplicate or accessible names are missing');
+ const laterAt=await point(`${picker}.querySelector('.ft-later-chip')`);
  for(const on of [false,true,false,true]){
-   await click(laterAt);await until(()=>page.eval(`return !!(${backlogProject})&&(${later}).getAttribute('aria-pressed')===${J(String(on))}&&[...(${area}).querySelectorAll('.ft-text')].some(e=>e.textContent==='CR Only later 0')===${on};`),'local project backlog '+on);
-   if(!await page.eval(`return (${later}).contains(document.elementFromPoint(${laterAt.x},${laterAt.y}));`)){const detail=await page.eval(`const b=${later},row=${backlogProject};return {button:b.getBoundingClientRect().toJSON(),row:row.className,caption:row.querySelector('.ft-mobile-project-caption')?.getBoundingClientRect().toJSON(),font:getComputedStyle(row.querySelector('.ft-project-name')).fontSize};`);throw Error('project backlog control moved: '+JSON.stringify({point:laterAt,on,detail}));}
+   await click(laterAt);await until(()=>page.eval(`return (${picker}).querySelector('.ft-later-chip').getAttribute('aria-pressed')===${J(String(on))};`),'project Backlog '+on);
+   if(!await page.eval(`return (${picker}).querySelector('.ft-later-chip').contains(document.elementFromPoint(${laterAt.x},${laterAt.y}));`))throw Error('project category moves away from the pointer');
+ }
+ if(!mobile){
+   const gap=await page.eval(`const a=${picker}.querySelector('.ft-later-chip').getBoundingClientRect(),b=${picker}.querySelector('.ft-intents-chip').getBoundingClientRect();return {x:(a.right+b.left)/2,y:a.top+a.height/2};`);
+   await page.mouse('mouseMoved',gap.x,gap.y,0);await sleep(800);
+   if(await page.eval(`return [...document.querySelectorAll('.tooltip')].some(e=>e.textContent.includes('Focus, backlog and ideas'));`))throw Error('group tooltip appears between icons');
  }
  await sleep(1250);
  if(await page.eval(`return !!(${area}).querySelector('.ft-loose-idea-add');`))throw Error('redundant area Add idea remains');

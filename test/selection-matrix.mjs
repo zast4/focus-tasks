@@ -20,7 +20,7 @@ for(const group of groups)for(const gesture of ['day preserving hours','explicit
   p.history=[];
   const day=gesture==='clear date'?null:'2035-09-13';
   await p.setDates(selected,day,gesture==='explicit clock'?'09:15':undefined);
-  assert.equal(p.history.length,1,'the group owns one undo entry');
+  assert.equal(p.history.length,selected.some(x=>!x.isProject)?1:0,'only editable tasks own one undo entry');
   for(const f of files){
    const previous=old.get(f.path),fm=frontmatter(app,f.path),entity=selected.find(t=>t.file.path===f.path);
    assert.equal(bodyOf(app,f.path),previous.body);
@@ -31,12 +31,12 @@ for(const group of groups)for(const gesture of ['day preserving hours','explicit
    assert.equal(fm.status,entity&&gesture==='clear date'&&previous.fm.status==='waiting'?'open':previous.fm.status);
    assert.deepEqual(fm.projects,previous.fm.projects);
    assert.deepEqual(fm.custom,previous.fm.custom);
-   if(!entity){assert.equal(app.vault.files.get(f.path),before.get(f.path),'unselected notes remain byte-identical');continue;}
+   if(!entity||entity.isProject){assert.equal(app.vault.files.get(f.path),before.get(f.path),'unselected notes remain byte-identical');continue;}
    const hour=entity.isProject?null:gesture==='explicit clock'?'09:15':String(previous.fm.scheduled||'').split('T')[1];
    const expected=day?day+(hour?'T'+hour:''):undefined;
    assert.equal(fm.scheduled,expected,'project clocks do not spill into their steps; explicit midnight is preserved');
   }
-  await p.undo();
+  if(selected.some(x=>!x.isProject))await p.undo();
   for(const f of files)assert.equal(app.vault.files.get(f.path),before.get(f.path),'one Undo restores every original byte');
  });
 }

@@ -3,7 +3,7 @@ export async function checkListCompletionUI(page,mobile=false){
  const root=`(window.__lcScoped?[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.focus-tasks-view')].find(x=>x.getBoundingClientRect().width):app.workspace.getLeavesOfType('focus-tasks-view')[0].view.containerEl)`;
  const row=key=>`[...${root}.querySelectorAll('.ft-intent-list-row')].find(e=>e.getAttribute('data-intent-id')===__lc[${J(key)}].uid&&e.getBoundingClientRect().width)`;
  const click=async (expr,refreshWhilePressed=false)=>{
-  await page.front();const trigger=await page.eval(`const e=${expr};e?.scrollIntoView({block:'center',behavior:'instant'});const picker=e?.closest('.ft-category-picker');if(picker&&!picker.classList.contains('is-open')){const r=picker.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}if(!${mobile})e?.closest('.ft-hover-host')?.focus();return null;`);if(trigger){if(mobile)await page.tap(trigger);else await page.mouse('mouseMoved',trigger.x,trigger.y,0);}await sleep(250);
+  await page.front();await page.eval(`if(!window.__lcScoped)await app.plugins.plugins['focus-tasks'].openView();return true;`);const trigger=await page.eval(`const e=${expr};e?.scrollIntoView({block:'center',behavior:'instant'});const picker=e?.closest('.ft-category-picker');if(picker&&!picker.classList.contains('is-open')){const r=picker.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};}if(!${mobile})e?.closest('.ft-hover-host')?.focus();return null;`);if(trigger){if(mobile)await page.tap(trigger,60,false);else await page.mouse('mouseMoved',trigger.x,trigger.y,0);}await sleep(250);
   const at=await until(()=>page.eval(`const e=${expr},r=e?.getBoundingClientRect();if(!r?.width)return false;const at={x:r.x+r.width/2,y:r.y+r.height/2},hit=document.elementFromPoint(at.x,at.y);return e.contains(hit)?at:false;`),'list control '+expr);
   if(refreshWhilePressed){
    if(!mobile)await page.mouse('mouseMoved',at.x,at.y,0);
@@ -18,7 +18,7 @@ export async function checkListCompletionUI(page,mobile=false){
     await page.eval(`delete window.__lcPressed;return true;`);
    }
    if(!retained)throw Error('refresh removed a checkbox before its click was delivered');
-  }else if(mobile)await page.tap(at);else await page.click(at);
+  }else if(mobile)await page.tap(at,60,false);else await page.click(at,0,false);
   await sleep(350);
  };
  const status=key=>page.eval(`return app.plugins.plugins['focus-tasks'].intentOf(app.vault.getAbstractFileByPath(__lc[${J(key)}].path))?.done;`);
@@ -38,7 +38,11 @@ export async function checkListCompletionUI(page,mobile=false){
  await until(()=>page.eval(`return !!(${row('active')})?.querySelector('input[aria-label="${mobile?'Завершить список':'Complete list'}"]');`),'empty list completion replaces the entry checkbox');
  await click(`(${row('active')}).querySelector('input[aria-label="${mobile?'Завершить список':'Complete list'}"]')`);await until(()=>status('active'),'exhausted list completed');
  // The same empty-list checkbox is present under a project's Ideas and in its own note.
- await page.eval(`const p=app.plugins.plugins['focus-tasks'];delete p.data.opened['intents:List completion UI'];p.data.opened['project-intents:'+__lc.project]=true;await p.saveFolds();p.refresh();await app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.rerendered();return true;`);
+ await page.eval(`const p=app.plugins.plugins['focus-tasks'];delete p.data.opened['intents:List completion UI'];await p.saveFolds();p.refresh();await app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.rerendered();return true;`);
+ const boundProject=`${root}.querySelector('li[data-ft-project-path="'+__lc.project+'"]')`;
+ await until(()=>page.eval(`return !!(${boundProject})?.querySelector('.ft-steps-more');`),'bound project direct +N');
+ if(!await page.eval(`return (${boundProject}).classList.contains('is-open');`))await click(`(${boundProject}).querySelector('.ft-steps-more')`);
+ await click(`(${boundProject}).querySelector('.ft-intents-chip')`);
  await until(()=>page.eval(`return !!(${row('bound')})?.querySelector('input[type=checkbox]');`),'bound empty list checkbox');
  await click(`(${row('bound')}).querySelector('input[type=checkbox]')`);await until(()=>status('bound'),'bound list completed');
  await page.eval(`window.__lcScoped=true;const f=app.vault.getAbstractFileByPath(__lc.project),leaf=app.workspace.getLeaf('tab');await leaf.openFile(f,{state:{mode:'preview'}});app.workspace.revealLeaf(leaf).catch(e=>console.warn('fixture reveal',e));app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);

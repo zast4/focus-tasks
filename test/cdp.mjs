@@ -140,8 +140,8 @@ export class Page {
     return this.send("Input.dispatchTouchEvent", { type, touchPoints: points.map((p) => ({ x: p.x, y: p.y, id: 1 })) });
   }
 
-  async tap({ x, y }, hold = 60) {
-    await this.front();
+  async tap({ x, y }, hold = 60, bringToFront = true) {
+    if (bringToFront) await this.front();
     await this.touch("touchStart", [{ x, y }]);
     await sleep(hold);
     await this.touch("touchEnd", []);

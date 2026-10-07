@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {FakeApp,loadPlugin,areaNote,projectNote,writeNote,frontmatter} from './harness.mjs';
 import moment from 'moment';
 
-for(const kind of ['focus','backlog','intents'])test(`closing the last project ${kind} retains its header without affecting siblings`,async()=>{
+for(const kind of ['backlog','intents'])test(`closing the last project ${kind} retains its header without affecting siblings`,async()=>{
  const app=new FakeApp();areaNote(app,'Work');const file=projectNote(app,'Work','Project'),other=projectNote(app,'Work','Other'),p=await loadPlugin(app),path=file.path;
  const key='project-intents:'+path,focus={key:'project-focusoff:'+path,onKey:'project-focuson:'+path,defaultOpen:false},later={key:'later:'+path,projectPath:path,defaultOpen:false};
  const before=new Map(app.vault.files);
@@ -36,15 +36,15 @@ test('a retained project header follows a rename and is cleared when the project
 });
 for(const presentation of ['focus-area','backlog-area','project']) for(let mask=0;mask<8;mask++) test(`${presentation} menu has only supported categories for population ${mask}`,async()=>{
  const p=await loadPlugin(new FakeApp());const focus={count:mask&1?3:0},later={count:mask&2?4:0},count=mask&4?5:0;
- const actual=p.categoryChoices({presentation,focus,later,count});const expected=[['focus',focus.count],['backlog',later.count],['intents',count]].filter(([kind])=>kind!=='focus'||presentation!=='backlog-area').map(([kind,n])=>({kind,n}));
+ const actual=p.categoryChoices({presentation,focus,later,count});const expected=[['focus',focus.count],['backlog',later.count],['intents',count]].filter(([kind])=>kind!=='focus'||!['project','backlog-area'].includes(presentation)).map(([kind,n])=>({kind,n}));
  assert.deepEqual(actual,expected);assert.equal(new Set(actual.map(x=>x.kind)).size,actual.length);
 });
-test('every project offers all three categories even when its Focus is empty or its day is future',async()=>{const p=await loadPlugin(new FakeApp());assert.deepEqual(p.categoryChoices({focus:{count:0,available:false},later:{count:3},count:0}),[{kind:'focus',n:0},{kind:'backlog',n:3},{kind:'intents',n:0}]);});
+test('project supplements offer Backlog and Ideas without a redundant Focus button',async()=>{const p=await loadPlugin(new FakeApp());assert.deepEqual(p.categoryChoices({focus:{count:0,available:false},later:{count:3},count:0}),[{kind:'backlog',n:3},{kind:'intents',n:0}]);});
 
 for(const all of [false,true])for(const offset of [null,-1,0,3])test(`explicit project creation targets preserve their categories and project day=${offset} in All=${all}`,async()=>{
  const app=new FakeApp();areaNote(app,'Work');const file=projectNote(app,'Work','Project'),p=await loadPlugin(app);p.setEverything(all);
  const projectDay=offset===null?null:moment().add(offset,'days').format('YYYY-MM-DD');
- if(projectDay)await p.setProjectDate(file,projectDay);
+ if(projectDay)await p.frontOwned(file,fm=>fm.scheduled=projectDay);
  for(const category of ['backlog','focus']){
   const target=p.projectCategoryTarget({file},'Work',category),task=await p.createTask('Created '+category,target,target.day),fm=frontmatter(app,task.file.path);
   assert.equal(fm.type,'задача');assert.equal(task.area,'Work');assert.equal(p.projectFile(task)?.path,file.path);
@@ -83,4 +83,33 @@ test('embedded own fences do not create recursive renderers while original Markd
  const p=await loadPlugin(new FakeApp());const fn=p.codeProcessors.get('focus-tasks');assert.ok(fn);let children=0;
  for(const kind of ['.focus-tasks-view','.ft-intent-description','.ft-text'])fn('area: Work',{closest:selector=>selector.includes(kind)?{}:null},{sourcePath:'Project.md',addChild:()=>children++});
  assert.equal(children,0);
+});
+
+for(const pile of ['focus','ahead'])test(`+N expands one ${pile} project and restores the overview on collapse`,async()=>{
+ const app=new FakeApp();areaNote(app,'Work');const f=projectNote(app,'Work','Build'),sibling=projectNote(app,'Work','Other'),p=await loadPlugin(app),before=new Map(app.vault.files),key=(pile==='ahead'?'backlog-steps:':'steps:')+f.path;
+ p.data.opened['future:Work']=true;p.data.opened['steps:'+sibling.path]=true;
+ await p.toggleProjectExpansion(f.path,key,pile,false);
+ assert.equal(p.isShown(key,true),true);assert.equal(p.isShown('project-header:'+f.path,true),true);
+ assert.equal(p.isShown('project-local-ahead:'+f.path,true),pile==='ahead');assert.equal(p.isShown('later:'+f.path,true),true);
+ const loaded=await loadPlugin(app);assert.equal(loaded.isShown(key,true),true);
+ await p.toggleProjectExpansion(f.path,key,pile,true);
+ assert.equal(p.isShown(key,true),false);assert.equal(p.isShown('project-header:'+f.path,true),false);
+ assert.equal(p.isShown('future:Work',true),true);assert.equal(p.isShown('steps:'+sibling.path,true),true);
+ assert.deepEqual(new Map(app.vault.files),before);
+});
+for(const mask of [0,1,2,3,4,5,6,7])test(`Backlog project only has Ideas supplement, population=${mask}`,async()=>{
+ const p=await loadPlugin(new FakeApp());assert.deepEqual(p.categoryChoices({presentation:'backlog-project',focus:{count:mask&1?2:0},later:{count:mask&2?3:0},count:mask&4?4:0}),[{kind:'intents',n:mask&4?4:0}]);
+});
+for(const legacy of [null,'2000-01-01','2099-01-01'])test(`derived project date and Focus ignore legacy schedule=${legacy}`,async()=>{
+ const app=new FakeApp();areaNote(app,'Work');const file=projectNote(app,'Work','Build',legacy?{scheduled:legacy}:{}),p=await loadPlugin(app),original=app.vault.files.get(file.path);
+ const target={area:'Work',project:file.basename,projectFile:file,noDate:true};
+ const next=await p.createTask('First dated',target,'2099-01-01'),undated=await p.createTask('Second undated',target,null);
+ let area=(await p.collect(false,true)).find(a=>a.name==='Work'),b=area.projects[0];
+ assert.equal(area.rows.some(r=>r.kind==='project'),false);assert.equal(b.date,'2099-01-01');assert.equal(b.firstTask.uid,next.uid);
+ await p.seatTask(undated,next,{before:true});
+ area=(await p.collect(false,true)).find(a=>a.name==='Work');b=area.projects[0];
+ assert.equal(b.date,null);assert.equal(b.firstTask.uid,undated.uid);
+ await p.setDate(undated,moment().format('YYYY-MM-DD'));
+ b=(await p.collect(false,true)).find(a=>a.name==='Work').projects[0];assert.equal(b.date,moment().format('YYYY-MM-DD'));
+ assert.equal(await p.setProjectDate(file,'2001-01-01'),false);assert.equal(app.vault.files.get(file.path),original);
 });

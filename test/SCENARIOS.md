@@ -15,7 +15,7 @@ This is a bounded test plan, not a claim that every possible interaction has bee
 
 Checks: `model.mjs`, `supplements.mjs`, `intent-lists.mjs`, `intents-ui.mjs`, `supplements-ui.mjs`, `e2e.mjs`.
 
-Local Markdown views are located inside the active leaf and must have a real visible rectangle. Obsidian may keep a hidden editor copy of the same block; finding the first matching node does not prove that a control is reachable. Mobile header geometry includes the aggregate count button, so a count cannot cover the Plus button. A one-entry list never shows a zero extra-step counter. The warm Ideas marker does not change the checkbox column. Native touch checks also require the actual hit target. Category controls stay in the header flow and replace the counter, with no floating panel, frame or background.
+Local Markdown views are located inside the active leaf and must have a real visible rectangle. Obsidian may keep a hidden editor copy of the same block; finding the first matching node does not prove that a control is reachable. Mobile header geometry includes the aggregate count button, so a count cannot cover the Plus button. A one-entry idea list never shows a zero extra-step counter. The warm Ideas marker does not change the checkbox column. Native touch checks also require the actual hit target. Area category controls replace the counter in place; expanded project controls sit beside their direct counter. Neither uses a floating panel, frame or background.
 
 ## Visibility configurations
 
@@ -24,22 +24,19 @@ Run each of these on a Focus area, a Backlog-only area, a project, an empty proj
 | Configuration | Required result |
 | --- | --- |
 | Only Focus | Focus rows stay present; Backlog and Ideas stay closed. |
-| Focus + Backlog | One project header, no repeated task, independent category counts. |
+| Focus + Backlog | Focus stays unchanged; compact Backlog project previews appear below it, no repeated task or add button in filled categories. |
 | Focus + Ideas | Private entries stay private; canonical Focus rows remain. |
-| Focus + Backlog + Ideas | All three categories coexist without duplicate headers or rows. |
-| Backlog + Ideas, Focus hidden | Only the requested categories appear; no orphan folding arrow or empty steps block. |
-| Everything closed | Supported category controls remain reachable; no ghost task or empty expanded block. |
+| Focus + Backlog + Ideas | Independent overview buckets and private Ideas coexist; each task appears once. Explicit project categories share one local header. |
+| Legacy hidden Focus preference | Focus remains visible; there is no project Focus toggle. |
+| Backlog + Ideas closed | Focus remains visible; controls stay reachable without empty expanded bodies. |
 | Collapsed area, saved categories enabled | Dim controls mean not currently displayed. Clicking reveals the requested category. |
 | All on/off | The area view respects defaults and project overrides. All does not add a global Ideas button. |
 | Click Focus title | Focus areas unfold, All/Backlog close, Waiting/completed groups fold, scroll resets. |
-| Category with count zero | Every project offers Focus/Backlog/Ideas and creation in each empty category. Backlog-only area headers omit Focus. |
+| Category with count zero | Direct +N remains available; expanded projects offer Backlog/Ideas even at zero, or Ideas only when Backlog is primary. Empty displayed categories expose creation. Backlog-only area headers omit Focus. |
 
 Numbers count unique entries, not compact project headers. Pending Waiting is separate.
 Desktop hidden controls have zero layout size; there are no invisible placeholders or action tracks.
-Each area shows one aggregate count. Desktop hover/focus of that count and phone tap open the same inline controls in place of the count. Projects offer all three controls, including zero counts. Empty-category creation stays inside the selected project and uses today/no date/a bound idea list respectively. Past/today/future project dates remain unchanged and cannot override the new task's category. Completing the last Focus task keeps an explicitly opened project's area available. Replacing the count keeps the row height stable and does not leave a hidden counter gap.
-The clicked category retains its open state and keyboard focus through metadata redraw. Check outside click, Escape, scroll, and viewport changes.
-Desktop task/project actions float above the active row. Revealing them never changes title width, text coordinates or row height, and never covers that row's text. The strip remains reachable through redraw and keyboard focus.
-Project ideas have a warm side marker and a lightbulb beside each entry; ordinary steps retain their usual appearance.
+Each area shows one aggregate count. Desktop hover/focus and phone tap replace it with inline controls. Focus is read-only. Project +N responds to a direct click, opens only that project's tasks and shows Backlog and Ideas, including zero counts. A Backlog-primary project shows only Ideas. Collapse restores compact previews. Empty categories create tasks today/undated or ideas in a bound private list. Enter in populated Backlog continues its undated list without an add helper. Hover leaves the project caption stationary. Legacy project dates cannot create a Focus header. The displayed project date follows the first active task, respects manual order, and changes with that task; direct project and mixed-selection date actions preserve the project note.
 
 Checks: shared supplement UI matrix and row/mobile layout checks at multiple widths and 14/18/26 px text, with screenshots.
 
@@ -72,8 +69,8 @@ Checks: `idea-entities.mjs`, `list-completion.mjs`, `mixed-histories.mjs`, and n
 | No selected row, no editor | App shortcuts remain available. | App owns the key. | Cmd+1-9 switches tabs; Esc is not swallowed. |
 | One loose task selected | Changes only that task. | Copy above source, fresh UID, immediately editing. | Date shortcuts belong to Focus while its leaf is active. |
 | Several tasks selected | One group action and one Undo; an untouched mixed clock is preserved per task. | One copy per distinct task; no repeated source UID. | Shift range, Cmd toggle, arrows and Esc maintain selection. |
-| A compact project selected | Changes the project's own day, not the shown step or its clock. | Project is not copied as a task. | Enter edits the shown step; project identity remains distinct. |
-| Project and task selected | A project gets a day; the task gets the explicit hour. Other steps remain unchanged. | Only selected tasks are copied. | No action leaks to unrelated notes. |
+| A compact project selected | No independent project date; shortcuts preserve its note and stay in the Focus pane. | Project is not copied as a task. | Enter edits the shown step; project identity remains distinct. |
+| Project and task selected | Only the task gets the day/hour; project and other steps remain unchanged. | Only selected tasks are copied. | No action leaks to unrelated notes. |
 | Task and private idea selected | Same row actions; domain and owning list stay intact. | Copies remain in their original domain. | Ideas do not become canonical implicitly. |
 | Inline editor | Text and date save without overwriting other fields. | Save current text, copy above, transfer editor. | Enter saves/adds; Esc cancels or saves as specified; Cmd+Enter opens note. |
 | Date/Waiting card open | Invalid input and failed writes retain input and keep the card usable. | Card owns its input. | Calendar keys do not affect background rows. |
@@ -126,8 +123,8 @@ A refresh between pointerdown and click must retain the pressed target and deliv
 
 During partial Sync a private entry whose list is temporarily missing remains in its area default Ideas group. Its UID, raw list binding and bytes remain untouched; restoration of the list restores its place. Converted project note blocks remain scoped to their own idea list.
 
-- Category regressions: stable project captions at normal, 340px and 220px widths; stationary pressed targets through rapid Focus toggles and at the tail after a pause; one category tooltip and contiguous targets; Backlog-only project headers survive local closure; idea lamps survive Select All, replacement and saving with the same UID; loose ideas use the default Ideas row. Run on desktop and touch.
+- Category regressions: stable project captions at normal, 340px and 220px widths; a read-only area Focus indicator and stationary pressed targets through rapid Backlog toggles and at the tail after a pause; one category tooltip and contiguous targets; Backlog-only project headers survive local closure; idea lamps survive Select All, replacement and saving with the same UID; loose ideas use the default Ideas row. Run on desktop and touch.
 
 - The area default Ideas group follows the other lists while empty, including after its last idea is completed. Adding or reopening an idea restores its populated position. Check the ordering with real creation and completion controls on desktop and touch.
 
-- Project categories override their area defaults: click through all local combinations for all eight area combinations. Closing the last local Focus, Backlog or Ideas category retains the project header and its controls for reopening, without stray carets or task checkboxes. The area's Focus and Backlog preferences do not change. An area category choice clears this local header preference in its own area; renames preserve it and deleting a project clears it. Run on desktop and touch.
+- Project categories override their area defaults: click through local Backlog/Ideas combinations with Focus fixed, including all legacy area preference combinations. Closing the last local Backlog or Ideas category retains the project header and its controls for reopening, without stray carets or task checkboxes. The area's Focus and Backlog preferences do not change. An area category choice clears this local header preference in its own area; renames preserve it and deleting a project clears it. Run on desktop and touch.

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { checkAreaOverviewUI } from './area-overview-ui.mjs';
 // End-to-end test of Focus Tasks in a fresh vault, driven over the Chrome DevTools Protocol.
 //
 // Needs Obsidian running with a DevTools port (any vault open):
@@ -11,6 +12,7 @@
 import { checkCategoryRegressionsUI } from './category-regressions-ui.mjs';
 import { checkProjectCategoryCreateUI } from './project-category-create-ui.mjs';
 import { checkProjectDraftUI } from './project-draft-ui.mjs';
+import { clickUI } from './ui-actions.mjs';
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -412,20 +414,20 @@ step("the box completes a step: the row leaves the list; the day's closed block 
   await until(() => page.eval(`const r = __ft.task('Lace them'); return !!r && !r.closest('.ft-done-today') && !!r.closest('.ft-steps')`), "Lace them open again, among Marathon's steps");
 });
 
-step("a later step appears once under its existing project when the area backlog opens", async () => {
+step("area backlog keeps mixed projects compact below Focus until explicitly expanded", async () => {
   fs.writeFileSync(path.join(VAULT, taskPath("Book the hotel")),
     `---\nuid: ft-later-1\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${ymd(new Date(Date.now() + 30 * 864e5))}\nprojects:\n  - "[[Marathon]]"\n---\n`);
   await toPane();
   const wasAll = await plugin(`return p.everything()`);
   await plugin(`
     if (p.everything()) p.setEverything(false);
-    if (!p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true);
+    delete p.data.opened['backlog-steps:Tasks/Marathon.md']; // earlier Enter creation explicitly opened this category
+    await p.toggleSupplement('intents:💪Sport','backlog',{key:'future:💪Sport'},null,true);
     p.refresh(); return true;`);
-  await until(() => page.eval(`
-    const area = __ft.area('Sport')?.closest('.ft-area'), row = __ft.project('Marathon'), step = __ft.task('Book the hotel');
-    return !!row && !!step && step.hasClass('is-later') && !!step.closest('li.ft-later-steps.ft-future-block')
-      && __ft.all('li.ft-project-row', area).filter(e=>e.querySelector('.ft-link')?.textContent.trim()==='Marathon').length===1;`),
-    "one Marathon header, with its later step in the backlog underneath");
+  const backlog = `__ft.all('li.ft-project-row', __ft.area('Sport').closest('.ft-area')).find(e=>e.dataset.ftProjectBucket==='backlog'&&e.querySelector('.ft-link')?.textContent.trim()==='Marathon')`;
+  await until(() => page.eval(`return !!${backlog}&&!${backlog}.classList.contains('is-open')&&__ft.all('li.ft-project-row',__ft.area('Sport').closest('.ft-area')).filter(e=>e.querySelector('.ft-link')?.textContent.trim()==='Marathon').length===2`), "compact Marathon preview below its Focus row");
+  await click(`__ft.at(${backlog}.querySelector('.ft-steps-more'))`);
+  await until(() => page.eval(`const s=__ft.task('Book the hotel');return !!s&&s.hasClass('is-later')&&!!s.closest('.ft-future-block')`), "explicit expansion reveals the later step once");
   if (!(await page.eval(`return __ft.all('li.ft-task', __ft.view()).filter((r) => r.querySelector('.ft-text')?.textContent.trim() === 'Book the hotel').every((r) => r.closest('.ft-future-block'))`)))
     throw new Error("the later step is among today's rows");
   await plugin(`if (p.everything() !== ${wasAll}) p.setEverything(${wasAll}); return true;`);
@@ -442,8 +444,13 @@ step("the ⏳ on a project's row opens its own pile under the row; ⌘1 there br
     if (p.everything()) p.setEverything(false);
     if (p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true);
     p.refresh(); return true;`);
+  await plugin(`for(const k of ['project-header:','project-local-ahead:','later:','pagefold:'])delete p.data.opened[k+'Tasks/Marathon.md'];p.data.opened['steps:Tasks/Marathon.md']=false;p.refresh();return true;`);
   // Marathon's row among today's work carries a ⏳ (the area's pile is closed: the step is nowhere yet)
   const row = `__ft.all('li.ft-project-row', __ft.view()).find((e) => !e.closest('.ft-future-block') && e.querySelector('.ft-link')?.textContent.trim() === 'Marathon')`;
+  await until(()=>page.eval(`return !!${row}?.querySelector('.ft-steps-more');`),'Marathon compact +N');
+  await click(`__ft.at(${row}.querySelector('.ft-steps-more'))`);
+  await until(()=>page.eval(`return !!${row}?.querySelector('.ft-later-chip');`),'expanded Marathon controls');
+  await click(`__ft.at(${row}.querySelector('.ft-later-chip'))`); // +N opens both piles; close Backlog before testing its reveal.
   await until(() => page.eval(`return !!${row}?.querySelector('.ft-later-chip')`), "the ⏳ on Marathon's row");
   if (await page.eval(`return !!__ft.task('Book the hotel')`)) throw new Error("the later step is on screen before the ⏳ was opened");
   // the count is read once the new note is in the cache and on the chip (Marathon had later steps before)
@@ -513,6 +520,10 @@ step("the note renamed by another device: the box still completes the task", asy
 });
 
 step("drag a task onto an area header moves it out of its project", async () => {
+  const project=`__ft.project('Marathon')`;
+  if(!await page.eval(`return ${project}.classList.contains('is-open');`))await click(`__ft.at(${project}.querySelector('.ft-steps-more'))`);
+  if(!await page.eval(`return !!__ft.task('Plan route');`))await click(`__ft.at(${project}.querySelector('.ft-later-chip'))`);
+  await until(()=>page.eval(`return !!__ft.task('Plan route');`),'explicitly reveal undated Plan route for drag');
   const from = await pos(`__ft.grip(__ft.task('Plan route'))`, "grip of Plan route");
   const to = await pos(`__ft.at(__ft.area('Sport'))`, "Sport header");
   await page.drag(from, to);
@@ -1463,9 +1474,9 @@ step("a row selected in the ⏳ pile takes ⌘1: today's date, and it moves into
   await settle();
 });
 
-step("a project's row selected by its grip is the project: ⌘2 dates the project, not its step; open, it is selected too", async () => {
+step("project selection cannot assign an independent date and works in both fold states", async () => {
   await plugin(`
-    const sport = (await p.collect(true)).find((a) => a.name === '💪Sport');
+    const sport = (await p.collect(true)).find((a) => a.name === '💪Sport') || {name:'💪Sport',note:await p.createArea('💪Sport')};
     await p.createProject(sport, 'Dated project');
     await p.createTask('Dated step', { area: '💪Sport', project: 'Dated project' }, ${J(TODAY)});
     await p.createTask('Dated step 2', { area: '💪Sport', project: 'Dated project' }, ${J(TODAY)});
@@ -1477,15 +1488,13 @@ step("a project's row selected by its grip is the project: ⌘2 dates the projec
   await click(`__ft.grip(__ft.project('Dated project'))`);
   await until(() => page.eval(`return !!__ft.project('Dated project')?.classList.contains('is-selected')`), "the project's row is selected");
   await page.key("Meta+2");
-  await fileHas("Tasks/Dated project.md", `scheduled: ${TOMORROW}`, "the project's note got tomorrow");
-  await taskIs("Dated step", { scheduled: TODAY }, "the step's own day is untouched");
-  await until(() => page.eval(`const r=__ft.project('Dated project');return !!r&&!r.closest('.ft-future-block')&&r.querySelector('.ft-focus-chip .ft-supplement-count')?.textContent==='2'&&r.querySelector('.ft-later-chip .ft-supplement-count')?.textContent==='1';`), "the project day preserves both today's steps in Focus and the undated step in Backlog");
-  await until(() => page.eval(`return !!__ft.project('Dated project')?.querySelector('.ft-date.is-project')`), "the row shows the project's own day");
-  // the menu takes the day off: back by the steps' rule
+  await fileLacks("Tasks/Dated project.md", "scheduled:", "project shortcut cannot assign a separate date");
+  if(!await page.eval(`return !!__ft.view();`))throw Error("a project date shortcut switched the active tab");
+  await taskIs("Dated step", {scheduled:TODAY}, "project shortcut leaves its steps untouched");
   await menuOn(`__ft.at(__ft.name('Dated project'))`);
-  await menu("No project date");
-  await fileLacks("Tasks/Dated project.md", "scheduled:", "the day is gone from the note");
-  await until(() => page.eval(`const r = __ft.project('Dated project'); return !!r && !r.closest('.ft-future-block')`), "back in the focus by its step");
+  await until(()=>page.eval(`return !!document.querySelector(".menu");`),"project menu opened");
+  if(await page.eval(`return [...document.querySelectorAll('.menu-item-title')].some(e=>['Project date…','No project date'].includes(e.textContent));`))throw Error('project menu exposes independent scheduling');
+  await page.key("Escape");
   // open (steps unfolded), the row has no step: the grip still selects the project, not a menu
   await openSteps("Dated project");
   await until(() => page.eval(`return !!__ft.project('Dated project')?.classList.contains('is-open')`), "the steps are open");
@@ -1507,7 +1516,7 @@ step("task preview brightness follows its category and preserves the project dat
   const wasEverything = await plugin(`return p.everything();`);
   try {
     await plugin(`
-      const area = (await p.collect(true)).find(a => a.name === '💪Sport');
+      const area = (await p.collect(true)).find(a => a.name === '💪Sport') || {name:'💪Sport',note:await p.createArea('💪Sport')};
       await p.createTask('Brightness area anchor', {area: '💪Sport', project: null}, ${J(TODAY)});
       p.setEverything(false);
       await p.createProject(area, ${J(name)});
@@ -1516,13 +1525,13 @@ step("task preview brightness follows its category and preserves the project dat
     await toPane();
     await page.mouse('mouseMoved', 0, 0, 0); // Hover otherwise hides the dimming regression.
     for (const [projectDay, stepDay, future] of [
-      [TODAY, TOMORROW, false], [YESTERDAY, TOMORROW, false], [TODAY, null, false],
+      [TODAY, TOMORROW, true], [YESTERDAY, TOMORROW, true], [TODAY, null, true],
       [TOMORROW, TODAY, false], [null, TODAY, false], [null, TOMORROW, true],
     ]) {
       await until(() => plugin(`return p.tasks().some(t => t.text === ${J(task)});`), 'first step indexed');
       await plugin(`
         await p.setDate(p.tasks().find(t => t.text === ${J(task)}), ${J(stepDay)});
-        await p.setProjectDate(app.vault.getAbstractFileByPath(${J('Tasks/' + name + '.md')}), ${J(projectDay)});
+        await p.frontOwned(app.vault.getAbstractFileByPath(${J('Tasks/' + name + '.md')}),fm=>{if(${J(projectDay)})fm.scheduled=${J(projectDay)};else delete fm.scheduled;});
         return true;`);
       await taskIs(task, {scheduled: stepDay});
       await settle();
@@ -1531,11 +1540,11 @@ step("task preview brightness follows its category and preserves the project dat
       // together, so a transient redraw cannot turn a successful presence check into undefined.
       const state = await until(() => page.eval(`
         const r = __ft.project(${J(name)});
-        if (!r) return false;
+        if (!r || !!r.closest('.ft-future-block') !== ${future}) return false;
         return {future: !!r.closest('.ft-future-block'), dim: r.classList.contains('is-later'),
           opacity: Number(getComputedStyle(r).opacity), ownDate: !!r.querySelector('.ft-date.is-project')};`), 'project brightness row rendered');
       if (state.future !== future || state.dim !== future || state.opacity !== (future ? 0.7 : 1)
-          || state.ownDate !== !!projectDay) {
+          || state.ownDate !== false) {
         throw new Error('project=' + projectDay + ', step=' + stepDay + ': ' + J(state));
       }
       if (read(taskPath(task)) !== before) throw new Error('rendering changed the first step note');
@@ -1869,7 +1878,7 @@ step("the ⏳ of an area folds its upcoming work — in «All» too, where the f
     "both fixtures are in the model");
   const shown = () => page.eval(`
     const a = __ft.area('Sport')?.closest('.ft-area');
-    return !!a?.querySelector('.ft-future-block');`);
+    return !!a?.querySelector(':scope > .ft-future-block');`);
   for (const wide of [false, true]) {
     await plugin(`
       if (p.everything() !== ${wide}) p.setEverything(${wide});
@@ -1915,22 +1924,21 @@ step("a project has one header: its first step, a fold arrow and unified categor
     p.saveFolds(); p.refresh(); return true;`);
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
-    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && !row.querySelector('.ft-steps-more svg') && row.querySelector('.ft-steps-more').textContent.trim()==='+1' && [...row.querySelectorAll('.ft-supplement-count')].map(e=>e.textContent).join('|')==='2|1|0';`),
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && !row.querySelector('.ft-steps-more svg') && row.querySelector('.ft-steps-more').textContent.trim()==='+2' && !row.querySelector('[data-ft-category]');`),
     "one row: the project, first step, +1 and task-category counts");
   if (await page.eval(`return !!__ft.task('Flat two')`)) throw new Error("the second step is on screen while the row is folded");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-project')`)) throw new Error("a project header is still drawn somewhere");
   // +1 opens the steps under the row, and the row is then the name alone
   const countAt=await page.eval(`const r=__ft.project('Flatland').querySelector('.ft-steps-more').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);
   await page.mouse('mouseMoved',countAt.x,countAt.y,0);
-  await until(()=>page.eval(`return __ft.project('Flatland').querySelector('.ft-category-picker').classList.contains('is-open');`),'inline categories replace the expansion counter');
-  const plusAt = await pos(`__ft.at(__ft.project('Flatland').querySelector('.ft-category-expand'))`, "+1 companion");
-  await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-category-expand'))`, "+1 companion");
+  const plusAt = await pos(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "+1 companion");
+  await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "+1 companion");
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
     return !!row && row.hasClass('is-open') && !!row.nextElementSibling?.hasClass('ft-steps') && !!__ft.task('Flat two') && !row.querySelector('.ft-text');`),
     "both steps as rows of their own, the row without a step");
   // the «−» is under the pointer where the «+1» was: a second click folds the steps without a hunt
-  const minus = await page.eval(`const r = __ft.project('Flatland').querySelector('.ft-category-expand').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };`);
+  const minus = await page.eval(`const r = __ft.project('Flatland').querySelector('.ft-steps-more').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };`);
   if (plusAt.x < minus.left || plusAt.x > minus.right || plusAt.y < minus.top || plusAt.y > minus.bottom)
     throw new Error(`the «−» moved away from under the pointer: +1 was at ${J(plusAt)}, − is at ${J(minus)}`);
   await page.click(plusAt);
@@ -1953,17 +1961,17 @@ step("a project has one header: its first step, a fold arrow and unified categor
     const row = __ft.project('Flatland');
     return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat two' && !row.nextElementSibling?.classList.contains('ft-steps');`),
     "the next step took the row");
-  await plugin(`if (!p.isShown('future:💪Sport', true)) await p.toggleShown('future:💪Sport', true); p.refresh(); return true;`);
+  await plugin(`await p.toggleSupplement('intents:💪Sport','backlog',{key:'future:💪Sport'},null,true); p.refresh(); return true;`);
   await until(() => page.eval(`
     const row = __ft.task('Flat later');
-    return !!row && !!row.closest('.ft-later-steps.ft-future-block');`), "the later step is in its project's backlog");
+    return !!row && !!row.closest('.ft-future-block');`), "the later step is in the area backlog preview");
   await plugin(`p.setEverything(true); return true;`);
   await until(() => page.eval(`
     const rows = __ft.all('li.ft-project-row', __ft.view()).filter((e) => e.querySelector('.ft-link')?.textContent.trim() === 'Flatland' && !e.closest('.ft-done-today'));
     const later = __ft.task('Flat later');
-    return rows.length === 1 && rows[0].querySelector('.ft-text')?.textContent.trim()==='Flat two'
-      && !!later?.closest('.ft-later-steps.ft-future-block') && !__ft.view().querySelector('.ft-project');`),
-    "All keeps one project header and one copy of each category's tasks");
+    return rows.length === 2 && rows[0].querySelector('.ft-text')?.textContent.trim()==='Flat two'
+      && !!later?.closest('.ft-future-block') && !__ft.view().querySelector('.ft-project');`),
+    "All keeps compact previews and one copy of each category's tasks");
   await plugin(`
     const was = JSON.parse(${J(saved)});
     p.data.folded = was.folded; p.data.opened = was.opened;
@@ -2222,6 +2230,12 @@ step("local area rows are flat like the project page while the global focus keep
   const previousAll = await plugin('return p.everything();');
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];const file=p.notes().find(n=>!n.project&&n.area==='Audit Area').file;
     const leaf=app.workspace.getLeaf('tab');await leaf.setViewState({type:'markdown',state:{file:file.path,mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+  const areaProject=`[...document.querySelectorAll('.ft-area-page .ft-project-row[data-ft-project-bucket="focus"]')].find(e=>e.getClientRects().length&&e.querySelector('.ft-project-name')?.textContent.includes('Audit Project'))`;
+  await until(()=>page.eval(`return !!${areaProject};`),'local Audit Project');
+  // An area overview keeps the two buckets independent; direct +N explicitly opens all project tasks.
+  if(await page.eval(`return ${areaProject}.classList.contains('is-open');`))await clickUI(page,`(${areaProject}).querySelector('.ft-steps-more')`);
+  await until(()=>page.eval(`const r=${areaProject};return !!r&&!r.classList.contains('is-open');`),'compact Audit Project');
+  await clickUI(page,`(${areaProject}).querySelector('.ft-steps-more')`);
   await until(()=>page.eval(`const e=[...document.querySelectorAll('.ft-area-page')].find(e=>e.getClientRects().length);return e?.querySelectorAll('.ft-steps li.ft-task, .ft-later-steps li.ft-task').length===3;`),'expanded project steps on the area page');
   const measure = (selector) => page.eval(`const root=[...document.querySelectorAll(${J(selector)})].find(e=>e.getClientRects().length);
     const left=root.getBoundingClientRect().left;return [...root.querySelectorAll('li.ft-task')].map(e=>({text:e.textContent,offset:e.getBoundingClientRect().left-left}));`);
@@ -2510,9 +2524,10 @@ step("commands are registered", async () => {
 // --- run ------------------------------------------------------------------------------------
 
 step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
+step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,false); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,false); });
-step("all three project categories support empty-list creation with correct dates", async () => { await checkProjectCategoryCreateUI(page,false); });
+step("empty project categories create Focus, Backlog and Ideas with correct dates", async () => { await checkProjectCategoryCreateUI(page,false); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,false); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,false); });
 step("hover and keyboard tools never rewrap the task or cover its text", async () => { await checkHoverLayoutUI(page); });
@@ -2556,7 +2571,7 @@ const isTestWindow = (p) => p.title === `${NAME} - Obsidian` || p.title.includes
 
 step("calendar badges follow cloud receipts, project clocks and grouped rescheduling", async () => {
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];await p.setEverything(true);const area=(await p.collect(true,true)).find(a=>a.name==='Audit Area');
-    const project=await p.createProject(area,'Audit calendar project');await p.setProjectDate(project,${J(TOMORROW)});p.data.opened['steps:'+project.path]=false;await p.saveAll();
+    const project=await p.createProject(area,'Audit calendar project');await p.frontOwned(project,fm=>fm.scheduled=${J(TOMORROW)});p.data.opened['steps:'+project.path]=false;await p.saveAll();
     for(const [name,projectName] of [['Audit calendar standalone',null],['Audit calendar step','Audit calendar project']]) {
       const task=await p.createTask(name,{area:'Audit Area',project:projectName},${J(TODAY)});await p.setScheduled(task,${J(TODAY)},'16:30');
     }await p.setOpen('area:Audit Area',true);return true;`);

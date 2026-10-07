@@ -1846,7 +1846,7 @@ test("a note two projects share gets a block for each; a block naming a missing 
   eq(missing.missing, "Nope", "and named, so the block can say so instead of showing everything");
 });
 
-test("an explicit Focus step can precede its project day without rescheduling the project", async () => {
+test("Focus membership and project date are derived from active steps", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch", { scheduled: DAY(3) });
@@ -1870,15 +1870,15 @@ test("an explicit Focus step can precede its project day without rescheduling th
   // The project remains due, but its undated and future steps remain in Backlog.
   await plugin.setDate(plugin.tasks().find((x) => x.text === "Step today"), null);
   area = areaOf(await plugin.collect(false), "Work");
-  eq(names(launchRow(area).steps), [], "the due project does not promote undated steps into Focus");
+  eq(launchRow(area), undefined, "a saved project day cannot retain an empty Focus header");
   eq(names(area.ahead.find(r => r.kind === "project" && r.project.file.basename === "Launch").steps).sort(), ["Step later", "Step today"], "both steps remain available in Backlog");
   // the day off: back to the steps' rule
   await plugin.setProjectDate(app.vault.getAbstractFileByPath("Areas/Launch.md"), null);
-  eq("scheduled" in frontmatter(app, "Areas/Launch.md"), false, "the key is gone from the note");
+  eq(frontmatter(app, "Areas/Launch.md").scheduled, DAY(3), "obsolete project date commands preserve the stored note");
   area = areaOf(await plugin.collect(false), "Work");
   eq(focusProjects(area).length, 0, "no due step, no day of its own: out of the focus");
   await plugin.undo();
-  eq(frontmatter(app, "Areas/Launch.md").scheduled, TODAY, "⌘Z puts the day back");
+  eq(frontmatter(app, "Areas/Launch.md").scheduled, DAY(3), "Undo affects the last task mutation, preserving legacy project fields");
 });
 
 test("a drop into the pile takes today's day off; a drop among today's rows gives today", async () => {
@@ -2211,7 +2211,7 @@ test("grouping a project and task never writes a notification clock into the pro
   const area = areaOf(await plugin.collect(true), "Work"), project = projectOf(area, "Plan");
   const handle = { file: project.file, uid: "p:" + project.file.path, isProject: true, project, date: null, at: null, status: "open" };
   await plugin.setDates([handle, plugin.tasks()[0]], DAY(2), "16:30");
-  eq(frontmatter(app, project.file.path).scheduled, DAY(2));
+  eq(frontmatter(app, project.file.path).scheduled, undefined);
   eq(frontmatter(app, "Tasks/Call.md").scheduled, DAY(2) + "T16:30");
   await plugin.undo();
   eq(frontmatter(app, project.file.path).scheduled, undefined);

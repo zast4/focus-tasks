@@ -3,10 +3,13 @@ export async function checkProjectDraftUI(page,mobile=false){
  const root=`(window.__pdScoped?[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.focus-tasks-view')].find(e=>e.getBoundingClientRect().width):app.workspace.getLeavesOfType('focus-tasks-view')[0].view.containerEl)`;
  const row=`[...${root}.querySelectorAll('li.ft-project-row')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent===__pd.name)`;
  const click=async expr=>{
-  await page.front();const at=await page.eval(`const e=${expr},h=e.closest('li.ft-task,.ft-page-head')||e;h.scrollIntoView({block:'center',behavior:'instant'});const r=h.getBoundingClientRect();return {x:r.left+20,y:r.top+4};`);
+  await page.front();await page.eval(`if(!window.__pdScoped&&app.workspace.activeLeaf?.view.getViewType()!=='focus-tasks-view')await app.plugins.plugins['focus-tasks'].openView();return true;`);const at=await page.eval(`const e=${expr},h=e.closest('li.ft-task,.ft-page-head')||e;h.scrollIntoView({block:'center',behavior:'instant'});const r=h.getBoundingClientRect();return {x:r.left+20,y:r.top+4};`);
+  await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return ![...p.views].some(v=>v.containerEl===${root}&&v.busy)&&(typeof __ftLast==='undefined'||Date.now()-__ftLast>700);`),'draft placement view settled');
   if(!mobile)await page.mouse('mouseMoved',at.x,at.y,0);await sleep(150);
-  const point=await until(()=>page.eval(`const e=${expr},r=e?.getBoundingClientRect();if(!r?.width)return false;const p={x:r.left+r.width/2,y:r.top+r.height/2};return e.contains(document.elementFromPoint(p.x,p.y))?p:false;`),'draft placement control '+expr);
-  if(mobile)await page.tap(point);else await page.click(point);
+  const pointNow=()=>page.eval(`const e=${expr},r=e?.getBoundingClientRect();if(!r?.width)return false;const p={x:r.left+r.width/2,y:r.top+r.height/2},hit=document.elementFromPoint(p.x,p.y);if(!e.contains(hit))return false;return p;`);
+  let point=await until(pointNow,'draft placement control '+expr);
+  if(!mobile){await page.mouse('mouseMoved',point.x,point.y,0);await page.eval(`await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));return true;`);point=await until(pointNow,'draft control after real hover '+expr);}
+  if(mobile)await page.tap(point,60,false);else await page.click(point,0,false);
  };
  await page.eval(`if(app.vault.getName()!==${J(mobile?'focus-tasks-mobile':'focus-tasks-e2e')})throw Error('fixture guard');const p=app.plugins.plugins['focus-tasks'],area=await p.createArea('Draft placement UI');window.__pd={area:area.path};return true;`);
  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].notes().some(x=>x.area==='Draft placement UI');`),'draft area indexed');
