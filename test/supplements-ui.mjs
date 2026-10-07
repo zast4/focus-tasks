@@ -200,6 +200,25 @@ export async function checkSupplementsUI(page, mobile=false) {
     if(mask)await visibility(`(${project}).querySelector('.ft-supplement-switch')`,'project','project hover combination '+mask);
     if(mask===4&&!await page.eval(`return !(${project}).querySelector('.ft-fold,.ft-no-step,input.task-list-item-checkbox');`))throw Error('ideas-only project exposes empty fold/completion controls');
   }
+  // A project's explicit choice must reveal its tasks even when the matching
+  // area category is closed. Exercise each parent combination with real clicks.
+  await page.eval(`window.__supOverrideOpened={...app.plugins.plugins['focus-tasks'].data.opened};return true;`);
+  for(let parentMask=0;parentMask<8;parentMask++){
+    await page.eval(`const p=app.plugins.plugins['focus-tasks'],o=p.data.opened,path=__supPaths.project;o['focusoff:Supplements UI']=!${!!(parentMask&1)};o['future:Supplements UI']=${!!(parentMask&2)};o['intents:Supplements UI']=${!!(parentMask&4)};o['project-focuson:'+path]=true;delete o['project-focusoff:'+path];delete o['later:'+path];o['pagefold:'+path]=true;delete o['project-intents:'+path];await p.saveFolds();p.refresh();return true;`);
+    await until(()=>page.eval(`return !!(${project})&&(${project}).querySelector('.ft-focus-chip')?.getAttribute('aria-pressed')==='true';`),'local Focus overrides parent '+parentMask);
+    const verify=async(focus,backlog,ideas)=>until(()=>page.eval(`const a=${area},r=${project},text=[...a.querySelectorAll('.ft-text')].map(e=>e.textContent);return !!r&&text.includes('SUP Focus')===${focus}&&text.includes('SUP Project later')===${backlog}&&!!r.parentElement.querySelector('.ft-project-intents')===${ideas}&&a.querySelector(':scope > .ft-area-title .ft-focus-chip').getAttribute('aria-pressed')===${J(String(!!(parentMask&1)))}&&a.querySelector(':scope > .ft-area-title .ft-later-chip').getAttribute('aria-pressed')===${J(String(!!(parentMask&2)))};`),'project reveals its category independently of parent '+parentMask);
+    await verify(true,false,false);
+    await click(`(${project}).querySelector('.ft-later-chip')`);await verify(true,true,false);
+    await click(`(${project}).querySelector('.ft-later-chip')`);await verify(true,false,false);
+    await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(true,false,true);
+    await click(`(${project}).querySelector('.ft-focus-chip')`);await verify(false,false,true);
+    await click(`(${project}).querySelector('.ft-later-chip')`);await verify(false,true,true);
+    await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(false,true,false);
+    await click(`(${project}).querySelector('.ft-intents-chip')`);await verify(false,true,true);
+    await click(`(${project}).querySelector('.ft-focus-chip')`);await verify(true,true,true);
+  }
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'];p.data.opened=__supOverrideOpened;delete window.__supOverrideOpened;await p.saveFolds();p.refresh();return true;`);
+  await until(()=>page.eval(`return !!(${project});`),'project view restored after parent combinations');
   if(!mobile){
     const blank=await page.eval(`const r=${root}.getBoundingClientRect();return {x:r.left+2,y:r.top+2};`);await page.click(blank);
     const name=await page.eval(`const e=(${project}).querySelector('.ft-project-icon'),r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);await page.mouse('mouseMoved',name.x,name.y,0);await sleep(220);

@@ -129,3 +129,5 @@ During partial Sync a private entry whose list is temporarily missing remains in
 - Category regressions: stable project captions at normal, 340px and 220px widths; stationary pressed targets through rapid Focus toggles and at the tail after a pause; one category tooltip and contiguous targets; Backlog-only project headers survive local closure; idea lamps survive Select All, replacement and saving with the same UID; loose ideas use the default Ideas row. Run on desktop and touch.
 
 - The area default Ideas group follows the other lists while empty, including after its last idea is completed. Adding or reopening an idea restores its populated position. Check the ordering with real creation and completion controls on desktop and touch.
+
+- Project categories override their area defaults: click through every nonempty local combination for all eight area combinations. The project header and the requested local tasks remain available; the area's Focus and Backlog preferences do not change. Include a project showing only Backlog while both area task categories are closed. Run on desktop and touch.
