@@ -853,3 +853,5 @@ body:not(.is-mobile) .focus-tasks-view li.ft-project-row:has(.ft-category-picker
 body:not(.is-mobile) .focus-tasks-view li.ft-project-row:has(.ft-category-picker.is-open) > .ft-date { flex-shrink: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 
 body.is-mobile .focus-tasks-view .ft-category-picker.is-open > :is(.ft-category-total,.ft-steps-more) { min-width: 0; min-height: 0; }
+
+body:not(.is-mobile) .focus-tasks-view li.ft-project-row:not(:has(.ft-category-picker.is-open)) .ft-hover-tools > .ft-category-expand { display: none; }

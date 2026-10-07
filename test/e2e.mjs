@@ -1913,14 +1913,17 @@ step("a project has one header: its first step, a fold arrow and unified categor
   if (await page.eval(`return !!__ft.task('Flat two')`)) throw new Error("the second step is on screen while the row is folded");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-project')`)) throw new Error("a project header is still drawn somewhere");
   // +1 opens the steps under the row, and the row is then the name alone
-  const plusAt = await pos(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "+1");
-  await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-steps-more'))`, "+1");
+  const countAt=await page.eval(`const r=__ft.project('Flatland').querySelector('.ft-steps-more').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);
+  await page.mouse('mouseMoved',countAt.x,countAt.y,0);
+  await until(()=>page.eval(`return __ft.project('Flatland').querySelector('.ft-category-picker').classList.contains('is-open');`),'inline categories replace the expansion counter');
+  const plusAt = await pos(`__ft.at(__ft.project('Flatland').querySelector('.ft-category-expand'))`, "+1 companion");
+  await click(`__ft.at(__ft.project('Flatland').querySelector('.ft-category-expand'))`, "+1 companion");
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
     return !!row && row.hasClass('is-open') && !!row.nextElementSibling?.hasClass('ft-steps') && !!__ft.task('Flat two') && !row.querySelector('.ft-text');`),
     "both steps as rows of their own, the row without a step");
   // the «−» is under the pointer where the «+1» was: a second click folds the steps without a hunt
-  const minus = await page.eval(`const r = __ft.project('Flatland').querySelector('.ft-steps-more').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };`);
+  const minus = await page.eval(`const r = __ft.project('Flatland').querySelector('.ft-category-expand').getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };`);
   if (plusAt.x < minus.left || plusAt.x > minus.right || plusAt.y < minus.top || plusAt.y > minus.bottom)
     throw new Error(`the «−» moved away from under the pointer: +1 was at ${J(plusAt)}, − is at ${J(minus)}`);
   await page.click(plusAt);

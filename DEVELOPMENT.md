@@ -142,7 +142,7 @@ Backlog/Ideas available. `scopeTasks.hasFocus` includes actionable empty project
 completed-only projects; Other areas never offer an impossible Focus control. Hidden controls
 occupy no layout space. Inline categories replace the counter and remain clickable in
 narrow splits with the sidebar open. Keyboard focus and a pressed control survive redraw.
-Each category independently controls only its visibility; All is never changed.
+While project categories replace +N, its separate expand/collapse action stays in the hover toolbar (inside the controls on touch). Ordinary row hover never duplicates +N. Each category independently controls only its visibility; All is never changed.
 Adding another project step unfolds its existing step list before the editor is mounted.
 Plus and Enter use the same draft placement in the global, area and project views, including touch.
 An unsaved draft creates no note. A destination changed or closed by another writer refuses save

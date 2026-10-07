@@ -192,6 +192,11 @@ export async function checkSupplementsUI(page, mobile=false) {
     if(mask)await visibility(`(${project}).querySelector('.ft-supplement-switch')`,'project','project hover combination '+mask);
     if(mask===4&&!await page.eval(`return !(${project}).querySelector('.ft-fold,.ft-no-step,input.task-list-item-checkbox');`))throw Error('ideas-only project exposes empty fold/completion controls');
   }
+  if(!mobile){
+    const blank=await page.eval(`const r=${root}.getBoundingClientRect();return {x:r.left+2,y:r.top+2};`);await page.click(blank);
+    const name=await page.eval(`const e=(${project}).querySelector('.ft-project-icon'),r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);await page.mouse('mouseMoved',name.x,name.y,0);await sleep(220);
+    if(!await page.eval(`const r=${project},expand=r.querySelector('.ft-category-expand');return (!expand||!expand.getBoundingClientRect().width)&&r.querySelector('.ft-steps-more').getBoundingClientRect().width>0;`))throw Error('ordinary project hover duplicates the expansion count');
+  }
   // Return to the normal Focus-only combination before the interaction regression scenarios.
   for(const [kind,on] of [['focus',true],['later',false],['intents',false]]){
     const expr=`(${area}).querySelector(':scope > .ft-area-title .ft-${kind}-chip')`;

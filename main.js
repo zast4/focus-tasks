@@ -1289,8 +1289,9 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     const active = document.activeElement;
     const summaryKey=this.containerEl.contains(active)&&active?.matches?.(".ft-category-total,.ft-steps-more")?active.closest(".ft-category-picker")?.getAttribute("data-ft-category-key"):null;
-    const hoverKey = this.containerEl.contains(active) ? active?.getAttribute?.("data-ft-hover-key") : null;
-    const pointerFocus = hoverKey && active.getAttribute("data-ft-pointer-focus");
+    const hoverHost = this.containerEl.contains(active) ? active?.closest?.(".ft-hover-host") : null;
+    const hoverKey = hoverHost?.getAttribute("data-ft-hover-key");
+    const pointerFocus = hoverKey && hoverHost.getAttribute("data-ft-pointer-focus");
     const category = this.containerEl.contains(active) && active?.matches?.("button[data-ft-category]")
       ? { key: active.closest(".ft-supplement-switch")?.getAttribute("data-ft-category-key"), kind: active.getAttribute("data-ft-category") } : null;
     if (old) this.removeChild(old);
@@ -2330,8 +2331,9 @@ class FocusRenderer extends MarkdownRenderChild {
       this.closeCategoryPicker=()=>{picker.removeClass("is-open");host?.style.removeProperty("height");tightHost?.removeClass("ft-categories-tight");caption?.style.removeProperty("min-width");nameLink?.style.removeProperty("max-width");row?.style.removeProperty("--ft-category-width");line?.style.removeProperty("-webkit-line-clamp");line?.style.removeProperty("height");line?.style.removeProperty("overflow");summary.setAttr("aria-expanded","false");if(this.categoryOpen===key)this.categoryOpen=null;};
       place();
     };
+    const companion=()=>picker.closest("li.ft-project-row")?.querySelector(".ft-category-expand")?.matches(":hover,:focus");
     const leave=()=>{clearTimeout(this.categoryCloseTimer);this.categoryCloseTimer=setTimeout(()=>{
-      if(picker.isConnected&&!picker.contains(document.activeElement)&&this.categoryOpen===key)this.closeCategoryPicker?.();
+      if(picker.isConnected&&!picker.contains(document.activeElement)&&!companion()&&this.categoryOpen===key)this.closeCategoryPicker?.();
     },180);};
     summary.addEventListener("mouseenter",()=>{if(!Platform.isMobile)show();});
     picker.addEventListener("mouseleave",leave);group.addEventListener("mouseenter",()=>clearTimeout(this.categoryCloseTimer));
@@ -2345,10 +2347,10 @@ class FocusRenderer extends MarkdownRenderChild {
       else if(e.key==="ArrowDown"){e.preventDefault();e.stopPropagation();show();group.querySelector("button")?.focus();}
       else if(e.key==="Escape"){e.preventDefault();e.stopPropagation();this.closeCategoryPicker?.();}});
     picker.addEventListener("keydown",e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();summary.focus();this.closeCategoryPicker?.();}});
-    picker.addEventListener("focusout",()=>setTimeout(()=>{if(picker.isConnected&&!picker.contains(document.activeElement)&&!picker.matches(":hover")&&this.categoryOpen===key)this.closeCategoryPicker?.();},0));
+    picker.addEventListener("focusout",()=>setTimeout(()=>{if(picker.isConnected&&!picker.contains(document.activeElement)&&!picker.matches(":hover")&&!companion()&&this.categoryOpen===key)this.closeCategoryPicker?.();},0));
     if(!this.categoryPickerListeners){
       this.categoryPickerListeners=true;
-      this.registerDomEvent(document,"pointerdown",e=>{if(!e.target.closest?.(".ft-category-picker"))this.closeCategoryPicker?.();},true);
+      this.registerDomEvent(document,"pointerdown",e=>{if(!e.target.closest?.(".ft-category-picker,.ft-category-expand"))this.closeCategoryPicker?.();},true);
       this.registerDomEvent(window,"resize",()=>this.closeCategoryPicker?.());
       this.registerDomEvent(this.scroller||this.containerEl,"scroll",()=>{const picker=[...this.containerEl.querySelectorAll(".ft-category-picker")].find(x=>x.getAttribute("data-ft-category-key")===this.categoryOpen);picker?.ftPlace();});
     }
@@ -2365,7 +2367,7 @@ class FocusRenderer extends MarkdownRenderChild {
         const on=await p.toggleSupplement(key,kind,later,focus,!expanded);if(onChoose)onChoose(kind,on);if(on&&unfold)await unfold();p.refresh();};
     }
     if(expandSteps){const target=Platform.isMobile?group:(picker.closest("li.ft-project-row")||group);const more=target.createEl("button",{cls:"ft-category-expand",text:(expandSteps.open?"−":"+")+expandSteps.count,attr:{"aria-label":expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count),title:expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count)}});
-      more.onclick=e=>{e.stopPropagation();this.closeCategoryPicker?.();expandSteps.run();};}
+      more.onclick=e=>{e.stopPropagation();expandSteps.run();};}
     picker.ftShow=show;picker.ftPlace=place;
     if(!options.length){summary.setAttr("aria-disabled","true");summary.removeAttribute("aria-haspopup");}
     return group;
@@ -3502,6 +3504,7 @@ class FocusRenderer extends MarkdownRenderChild {
     li.setAttr("tabindex","0");li.addClass("ft-hover-host");
     const item=this.items?.get(li)||this.fresh?.get(li);
     li.setAttr("data-ft-hover-key",item?.type==="project"?item.project.file.path:item?.task?.uid||"");
+    controls.sort((a,b)=>Number(a.matches(".ft-category-expand"))-Number(b.matches(".ft-category-expand")));
     const tools=li.createSpan({cls:"ft-hover-tools"});for(const control of controls)tools.appendChild(control);
     tools.addEventListener("mouseenter",()=>{if(!this.editing&&!this.held){li.setAttr("data-ft-pointer-focus","1");li.focus({preventScroll:true});}});
     li.addEventListener("mouseleave",()=>{if(li.hasAttribute("data-ft-pointer-focus")){li.removeAttribute("data-ft-pointer-focus");if(document.activeElement===li)li.blur();}});
