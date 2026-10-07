@@ -328,3 +328,5 @@ The GitHub Action publishes a release with `main.js`, `manifest.json`, `styles.c
 BRAT users get it on their next update check. Commits use the GitHub noreply email.
 
 Categories replace one aggregate count (project `+N`) in the header flow on hover/focus or phone tap. Native matrices check replacement position, row height, hidden controls, tap/keyboard entry, zero category filtering and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.
+
+Category switches pin the pressed control through redraws; a short list reserves enough scroll room to keep the control beneath the pointer until manual scrolling or another pinned change. Pins release on replacement, closed pickers and hidden or detached targets. Local category closure hides project contents while its parent category is visible; area closure hides the corresponding projects. Category accessible names use labelled-by references; title supplies the only visible tooltip. Idea lamps remain outside the editable text, and area-level loose ideas are added through the default Ideas row.

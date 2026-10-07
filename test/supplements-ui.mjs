@@ -6,6 +6,14 @@ export async function checkSupplementsUI(page, mobile=false) {
   const project=`[...${root}.querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.getBoundingClientRect().width>0&&e.querySelector('.ft-project-name .ft-link')?.textContent==='SUP Project')`;
   const hover=async expr=>{
     await page.front();
+    // Use native scrolling when leaving a pressed category. scrollIntoView alone
+    // does not emit the input that releases the pointer anchor.
+    if(!await page.eval(`return !!(${expr})?.closest('.ft-category-picker');`)){
+      const box=await page.eval(`const e=${expr};let s=e;while(s&&s.scrollHeight<=s.clientHeight)s=s.parentElement;const r=(s||${root}).getBoundingClientRect(),top=Math.max(0,r.top),bottom=Math.min(innerHeight,r.bottom);return {x:r.left+4,y:(top+bottom)/2};`);
+      if(mobile)await page.swipe(box,{x:box.x,y:box.y-60},4);else await page.send('Input.dispatchMouseEvent',{type:'mouseWheel',x:box.x,y:box.y,deltaX:0,deltaY:1});
+      await sleep(200);
+      await until(async()=>{await page.eval(`const e=${expr};(e?.closest('.ft-category-host')||e)?.scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(100);return page.eval(`const e=${expr},r=(e?.closest('.ft-category-host')||e)?.getBoundingClientRect();return r&&r.top>=0&&r.bottom<=innerHeight;`);},'unrelated supplement target visible');
+    }
     if(mobile&&await page.eval(`const picker=(${expr})?.closest('.ft-category-picker');return !!picker&&!picker.classList.contains('is-open')&&!!document.querySelector('.ft-category-picker.is-open');`)){await page.tap({x:8,y:400});await sleep(100);}
     const at=await page.eval(`if(!window.__supScoped)await app.plugins.plugins['focus-tasks'].openView();const e=${expr},h=e?.closest('.ft-category-host')||e;h?.scrollIntoView({block:'center',behavior:'instant'});const picker=e?.closest('.ft-category-picker'),summary=picker?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more');const target=picker?.classList.contains("is-open")?picker.querySelector(":scope > .ft-supplement-switch"):(summary||(e?.getBoundingClientRect().width?e:h));const r=target?.getBoundingClientRect();return r&&{x:r.left+r.width/2,y:r.top+r.height/2,needsTap:!!summary&&!picker.classList.contains('is-open')};`);
     if(mobile&&at?.needsTap)await page.tap(at);else if(!mobile&&at)await page.mouse('mouseMoved',at.x,at.y,0);
@@ -21,7 +29,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     }
     await hover(expr);
     const locate=()=>page.eval(`const e=${expr};if(!e)return false;const r=e.getBoundingClientRect(),at={x:r.left+r.width/2,y:r.top+r.height/2},hit=document.elementFromPoint(at.x,at.y);return r.width&&r.height&&hit&&e.contains(hit)?at:false;`);
-    let at=await until(locate,'supplement control: '+expr);
+    let at=await until(locate,'supplement control: '+expr).catch(async error=>{const detail=await page.eval(`const e=${expr},r=e?.getBoundingClientRect(),at=r&&{x:r.left+r.width/2,y:r.top+r.height/2};const ancestors=[];for(let n=e;n;n=n.parentElement)if(n.scrollHeight>n.clientHeight)ancestors.push({cls:n.className,top:n.scrollTop,sh:n.scrollHeight,ch:n.clientHeight});return {host:e?.closest('.ft-category-host')?.className,ancestors,rect:r?.toJSON(),hit:at&&document.elementFromPoint(at.x,at.y)?.outerHTML.slice(0,200),active:document.activeElement?.outerHTML.slice(0,120),root:${root}.getBoundingClientRect().toJSON(),leaf:app.workspace.activeLeaf.view.file?.path,screen:[innerWidth,innerHeight]};`);throw Error(error.message+' '+J(detail));});
     if(!mobile){
       // Moving from the header to its controls can wrap a narrow header. Hit the
       // settled button, as a real pointer does, rather than its previous rectangle.
@@ -175,7 +183,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     if(!await page.eval(`const a=${area},g=a.querySelector(':scope > .ft-area-title .ft-supplement-switch'),buttons=[...g.querySelectorAll("button[data-ft-category]")];return JSON.stringify(buttons.map(e=>Number(e.querySelector('.ft-supplement-count').textContent)))==='[2,2,2]'&&buttons.every(e=>{const c=getComputedStyle(e);return !!e.querySelector('svg')&&c.backgroundColor==='rgba(0, 0, 0, 0)'&&c.borderTopWidth==='0px'&&!c.textDecorationLine.includes('underline');})&&!a.querySelector('.ft-intents-head');`))throw Error('category numbers, plain icons/style or visibility changed');
   }
   // Exercise the project's own controls through real clicks. Restoring the area's Focus
-  // restores its hidden projects; a project with all categories off leaves no empty header.
+  // restores its hidden projects; a local project toggle keeps its header available to reopen its categories.
   for(let mask=0;mask<8;mask++){
     for(const kind of ['focus','later','intents']){
       const b=`(${area}).querySelector(':scope > .ft-area-title .ft-${kind}-chip')`;
@@ -187,7 +195,7 @@ export async function checkSupplementsUI(page, mobile=false) {
       const b=`(${project}).querySelector('.ft-${kind}-chip')`;
       if(await page.eval(`return (${b}).getAttribute('aria-pressed')==='true';`)!==on)await click(b);
     }
-    await until(()=>page.eval(`const a=${area},text=[...a.querySelectorAll('.ft-text')].map(e=>e.textContent);return !!(${project})===${!!mask}&&text.includes('SUP Focus')===${!!(mask&1)}&&text.includes('SUP Project later')===${!!(mask&2)}&&!!a.querySelector('.ft-project-intents')===${!!(mask&4)};`),'project category combination '+mask);
+    await until(()=>page.eval(`const a=${area},text=[...a.querySelectorAll('.ft-text')].map(e=>e.textContent);return !!(${project})&&text.includes('SUP Focus')===${!!(mask&1)}&&text.includes('SUP Project later')===${!!(mask&2)}&&!!a.querySelector('.ft-project-intents')===${!!(mask&4)};`),'project category combination '+mask);
     await cleanRows('project category combination '+mask);
     if(mask)await visibility(`(${project}).querySelector('.ft-supplement-switch')`,'project','project hover combination '+mask);
     if(mask===4&&!await page.eval(`return !(${project}).querySelector('.ft-fold,.ft-no-step,input.task-list-item-checkbox');`))throw Error('ideas-only project exposes empty fold/completion controls');
@@ -273,7 +281,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     }
   }
   for(const [path,selector] of [['project','.ft-page'],['area','.ft-area-page']]){
-    await page.eval(`window.__supScoped=true;const f=app.vault.getAbstractFileByPath(__supPaths[${J(path)}]);if(!f)throw Error('missing scoped note '+${J(path)});const leaf=app.workspace.getLeaf('tab');await leaf.openFile(f,{state:{mode:'preview'}});return true;`);
+    await page.eval(`window.__supScoped=true;const p=app.plugins.plugins['focus-tasks'];delete p.data.opened[(${J(path)}==='area'?'waiting:area:':'waiting:')+__supPaths[${J(path)}]];p.saveFolds();const f=app.vault.getAbstractFileByPath(__supPaths[${J(path)}]);if(!f)throw Error('missing scoped note '+${J(path)});const leaf=app.workspace.getLeaf('tab');await leaf.openFile(f,{state:{mode:'preview'}});return true;`);
     await until(()=>page.eval(`return !!${root}.querySelector(${J(selector+' .ft-supplement-switch')});`),'scoped supplement component');
     const n=await page.eval(`return ${root}.querySelector(${J(selector+' .ft-supplement-switch')}).children.length;`);
     if(n!==3)throw Error('wrong scoped segment count');
@@ -296,6 +304,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     }
     if(await page.eval(`return [...${root}.querySelectorAll('${selector} .ft-text')].some(e=>e.textContent==='SUP Pending');`))throw Error('pending Waiting leaked into a category');
     const waiting=`[...${root}.querySelectorAll('${selector} .ft-page-waiting')].find(e=>e.getBoundingClientRect().width>0)`;
+    if(!await page.eval(`return !!(${waiting});`)){const detail=await page.eval(`return {leaf:app.workspace.activeLeaf?.view?.file?.path,expected:__supPaths[${J(path)}],pending:app.plugins.plugins['focus-tasks'].allTasks().filter(t=>t.text==='SUP Pending').map(t=>({status:t.status,area:t.area})),widgets:[...document.querySelectorAll(${J(selector)})].map(e=>({w:e.getBoundingClientRect().width,waiting:e.querySelector('.ft-page-waiting')?.textContent}))};`);throw Error('scoped Waiting unavailable: '+JSON.stringify(detail));}
     await click(waiting);
     await until(()=>page.eval(`return [...${root}.querySelectorAll('${selector} .ft-waiting .ft-text')].some(e=>e.textContent==='SUP Pending');`),'Waiting has its own scoped shelf');
     const f=`[...${root}.querySelectorAll('${selector} .ft-focus-chip')].find(e=>e.closest('.ft-category-host')?.getBoundingClientRect().width>0)`;

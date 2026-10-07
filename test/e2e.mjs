@@ -8,6 +8,7 @@
 // checks the files on disk. The window is closed and the vault forgotten at the end (--keep keeps them).
 //
 //   node test/e2e.mjs            (--keep leaves the vault and its window open)
+import { checkCategoryRegressionsUI } from './category-regressions-ui.mjs';
 import { checkProjectDraftUI } from './project-draft-ui.mjs';
 import fs from "node:fs";
 import path from "node:path";
@@ -448,7 +449,7 @@ step("the ⏳ on a project's row opens its own pile under the row; ⌘1 there br
   await until(() => page.eval(`const p = app.plugins.plugins['focus-tasks']; p.forgetScan(); return p.tasks().some((x) => x.uid === 'ft-later-2')`), "the new step in the cache");
   await plugin(`p.refresh(); return true;`);
   await settle();
-  const behind = Number(await page.eval(`return ${row}.querySelector('.ft-later-chip').getAttr('aria-label').match(/· (\\d+)/)[1]`));
+  const behind = Number(await page.eval(`return ${row}.querySelector('.ft-later-chip .ft-supplement-count').textContent`));
   await click(`__ft.at(${row}.querySelector('.ft-later-chip'))`, "the ⏳ of Marathon");
   await until(() => page.eval(`
     const s = __ft.task('Book the hotel');
@@ -464,7 +465,7 @@ step("the ⏳ on a project's row opens its own pile under the row; ⌘1 there br
   await taskIs("Book the hotel", { scheduled: TODAY });
   await until(() => page.eval(`const s = __ft.task('Book the hotel'); return !!s && !s.closest('li.ft-later-steps') && !s.hasClass('is-later')`), "the step among today's steps of Marathon");
   // the ⏳ counts one less (Plan route, left with no date earlier, is still behind it) — or goes
-  await until(() => page.eval(`const n = ${row}?.querySelector('.ft-later-chip')?.getAttr('aria-label').match(/· (\\d+)/)?.[1]; return n === undefined || Number(n) === ${behind} - 1`),
+  await until(() => page.eval(`const n = ${row}?.querySelector('.ft-later-chip .ft-supplement-count')?.textContent; return n === undefined || Number(n) === ${behind} - 1`),
     `the ⏳ says ${behind - 1} behind the row`);
   await page.key("Escape");
   await idle();
@@ -2504,6 +2505,7 @@ step("commands are registered", async () => {
 
 step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
+step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,false); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,false); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,false); });
 step("hover and keyboard tools never rewrap the task or cover its text", async () => { await checkHoverLayoutUI(page); });

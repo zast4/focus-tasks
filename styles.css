@@ -668,7 +668,7 @@ body.is-mobile .focus-tasks-view .ft-mobile-project-caption > :is(.ft-plus, .ft-
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more.is-late { color: var(--text-error); }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more.is-open { color: var(--interactive-accent); }
 body.is-mobile .focus-tasks-view .ft-mobile-project-header > .ft-mobile-project-caption {
-  grid-column: var(--ft-mobile-box) / -1; font-size: 1em;
+  grid-column: var(--ft-mobile-box) / -1;
 }
 /* The −N control folds an open project. A second caret would displace its folder and name. */
 body.is-mobile .focus-tasks-view .ft-mobile-project-header > .ft-box { display: none; }
@@ -832,7 +832,12 @@ body.is-mobile .focus-tasks-view .ft-area-caption > :first-child { min-width:0; 
 body.is-mobile .focus-tasks-view .ft-area-caption > .ft-category-picker { margin:0; align-self:flex-start; }
 
 /* Inline category controls must fit before the compact step preview. */
-.focus-tasks-view .ft-line:has(.ft-category-picker.is-open) > .ft-project-name > .ft-link { display: inline-block; max-width: 30%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+.focus-tasks-view .ft-line > .ft-project-name { display: inline-flex; align-items: baseline; vertical-align: top; max-width: 70%; }
+.focus-tasks-view .ft-line > .ft-project-name > .ft-project-icon { flex: none; }
+.focus-tasks-view .ft-line > .ft-project-name > .ft-link { display: block; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-tasks-view .ft-line > .ft-project-name > .ft-link.is-editing { overflow: visible; white-space: pre-wrap; }
+.focus-tasks-view .ft-accessible-label { display: none; }
+.focus-tasks-view .ft-idea-editor { display: inline; }
 
 .focus-tasks-view .ft-category-expand { min-width: 25px; min-height: 24px; padding: 0 0.2em; }
 body.is-mobile .focus-tasks-view .ft-category-expand { min-width: 44px; height: 44px; }
@@ -843,7 +848,7 @@ body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-category-pic
 
 .focus-tasks-view :is(.ft-area-title.ft-categories-tight,.ft-area-title.ft-category-measure) > :is(.ft-plus,.ft-more) { display: none !important; }
 
-body:not(.is-mobile) .focus-tasks-view .ft-category-picker .ft-supplement-switch > button.ft-chip { min-width: 25px; padding: 0 1px; gap: 2px; }
+body:not(.is-mobile) .focus-tasks-view .ft-category-picker .ft-supplement-switch > button.ft-chip { min-width: 25px; padding: 0 3px; gap: 2px; }
 body:not(.is-mobile) .focus-tasks-view .ft-category-picker .ft-chip-icon { width: 14px; }
 body:not(.is-mobile) .focus-tasks-view .ft-category-picker .ft-chip-icon svg { width: 14px; height: 14px; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-category-picker.is-open) > .ft-plus { display: none; }
@@ -855,3 +860,10 @@ body:not(.is-mobile) .focus-tasks-view li.ft-project-row:has(.ft-category-picker
 body.is-mobile .focus-tasks-view .ft-category-picker.is-open > :is(.ft-category-total,.ft-steps-more) { min-width: 0; min-height: 0; }
 
 body:not(.is-mobile) .focus-tasks-view li.ft-project-row:not(:has(.ft-category-picker.is-open)) .ft-hover-tools > .ft-category-expand { display: none; }
+
+.focus-tasks-view .ft-idea-editor.is-editing { outline: none; background: var(--background-modifier-hover); border-radius: 4px; box-shadow: 0 0 0 3px var(--background-modifier-hover); white-space: pre-wrap; }
+.focus-tasks-view .ft-idea-task:has(.ft-idea-editor.is-editing) > .ft-text { display: block; overflow: visible; -webkit-line-clamp: none; }
+
+.focus-tasks-view .ft-category-picker > .ft-supplement-switch { gap: 0; }
+
+body.is-mobile .focus-tasks-view .ft-category-picker { height: 44px; }

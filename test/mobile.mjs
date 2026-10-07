@@ -6,6 +6,7 @@
 // Needs Obsidian running with a DevTools port (any vault open):
 //   open -a Obsidian --args --remote-debugging-port=9222
 //   node test/mobile.mjs            (--keep leaves the vault and its window open)
+import { checkCategoryRegressionsUI } from './category-regressions-ui.mjs';
 import { checkProjectDraftUI } from './project-draft-ui.mjs';
 import fs from "node:fs";
 import path from "node:path";
@@ -762,6 +763,7 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
+step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,true); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });
 step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,true); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,true); });

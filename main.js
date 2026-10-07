@@ -1287,7 +1287,7 @@ class FocusRenderer extends MarkdownRenderChild {
       this.again = true;
       return;
     }
-    const active = document.activeElement;
+    const active = this.containerEl.getBoundingClientRect().width ? document.activeElement : null;
     const summaryKey=this.containerEl.contains(active)&&active?.matches?.(".ft-category-total,.ft-steps-more")?active.closest(".ft-category-picker")?.getAttribute("data-ft-category-key"):null;
     const hoverHost = this.containerEl.contains(active) ? active?.closest?.(".ft-hover-host") : null;
     const hoverKey = hoverHost?.getAttribute("data-ft-hover-key");
@@ -1318,7 +1318,7 @@ class FocusRenderer extends MarkdownRenderChild {
       const host=[...this.containerEl.querySelectorAll(".ft-hover-host")].find(x=>x.getAttribute("data-ft-hover-key")===hoverKey);
       if(pointerFocus)host?.setAttribute("data-ft-pointer-focus","1");host?.focus({preventScroll:true});
     }
-    if(this.categoryOpen){const picker=[...this.containerEl.querySelectorAll(".ft-category-picker")].find(x=>x.getAttribute("data-ft-category-key")===this.categoryOpen);
+    if(this.categoryOpen && this.containerEl.getBoundingClientRect().width){const picker=[...this.containerEl.querySelectorAll(".ft-category-picker")].find(x=>x.getAttribute("data-ft-category-key")===this.categoryOpen);
       if(picker)picker.ftShow();else this.categoryOpen=null;}
     this.paint();
     this.hold();
@@ -1854,26 +1854,51 @@ class FocusRenderer extends MarkdownRenderChild {
   // Obsidian may move the scroll a moment after a re-render; a pinned spot is held for a second,
   // unless you scroll yourself.
   hold() {
+    this.releasePin?.();
     if (!this.pin) return;
     const { selector, y } = this.pin;
     this.pin = null;
+    this.clearScrollReserve();
     const target = this.containerEl.querySelector(selector);
     const scroller = this.scroller;
-    if (!target || !scroller) return;
+    if (!target || !scroller || !this.containerEl.getBoundingClientRect().width) return;
     const fix = () => {
+      if(!target.isConnected||!target.getBoundingClientRect().width){release();return;}
       const drift = target.getBoundingClientRect().top - y;
-      if (Math.abs(drift) > 1) scroller.scrollTop += drift;
+      if (Math.abs(drift) > 1) {
+        const desired=scroller.scrollTop+drift,missing=desired-(scroller.scrollHeight-scroller.clientHeight);
+        if(missing>1)this.reserveScroll(Math.ceil(missing)+1);
+        scroller.scrollTop=desired;
+      }
     };
     const release = () => {
       scroller.removeEventListener("scroll", fix);
       scroller.removeEventListener("wheel", release);
       scroller.removeEventListener("touchstart", release);
     };
+    this.releasePin=release;
     fix();
     scroller.addEventListener("scroll", fix);
     scroller.addEventListener("wheel", release, { passive: true });
     scroller.addEventListener("touchstart", release, { passive: true });
     setTimeout(release, 1200);
+  }
+
+  clearScrollReserve() {
+    if(!this.scrollReserve)return;
+    this.containerEl.style.paddingBottom=this.scrollReserve.original;
+    this.scrollReserve=null;
+  }
+
+  reserveScroll(extra) {
+    const root=this.containerEl;
+    if(!this.scrollReserve)this.scrollReserve={original:root.style.paddingBottom};
+    root.style.paddingBottom=((parseFloat(getComputedStyle(root).paddingBottom)||0)+extra)+"px";
+    if(!this.scrollReserveListeners){
+      this.scrollReserveListeners=true;
+      for(const event of ["wheel","touchmove"])this.registerDomEvent(this.scroller,event,()=>this.clearScrollReserve(),{passive:true});
+      this.register(()=>this.clearScrollReserve());
+    }
   }
 
   // `all`: an area of «Other areas» (every task, folded until opened); `wide`: «All» is on, so the
@@ -1979,8 +2004,6 @@ class FocusRenderer extends MarkdownRenderChild {
       }
     }
     await this.completedIntentLists(block, closed, "intent-lists-done:" + area);
-    const addLoose = block.createDiv({ cls: "ft-empty ft-empty-add ft-intents-add ft-loose-idea-add", text: "+ " + t("addIntent") });
-    addLoose.onclick = () => this.draft(addLoose, { area, project: null, intentLoose: true, noDate: true });
     const add = block.createDiv({ cls: "ft-empty ft-empty-add ft-intents-add", text: "+ " + t("newIntentList") });
     add.onclick = () => p.newIntentList({ name: area });
   }
@@ -2237,7 +2260,7 @@ class FocusRenderer extends MarkdownRenderChild {
       const path = row.project.file.path, counts = this.scopeFor(area.name, path);
       const focusShown = this.plugin.categoryShown({ key: "project-focusoff:" + path, onKey: "project-focuson:" + path, defaultOpen: focus });
       const backlogShown = this.plugin.categoryShown({ key: "later:" + path, projectPath: path, defaultOpen: backlog });
-      return (!ahead && focusShown) || (backlogShown && (counts.backlog.length > 0 || (ahead && !counts.focus.length)))
+      return (!ahead && (focus || focusShown)) || ((backlog || backlogShown) && (counts.backlog.length > 0 || (ahead && !counts.focus.length)))
         || this.plugin.isShown("project-intents:" + path, true);
     };
     const rows = scope.rows.filter(r => r.kind === "project" ? projectVisible(r) : focus);
@@ -2301,10 +2324,11 @@ class FocusRenderer extends MarkdownRenderChild {
     if(trigger)picker.appendChild(trigger);
     if(totalText !== null || !trigger)summary.setText(totalText ?? (presentation === "project" ? "+" + total : String(total)));
     summary.setAttr("tabindex","0");summary.setAttr("role","button");
-    summary.setAttr("aria-label",t("extraViews") + " · " + total);
+    const accessibleName=(element,label)=>{element.removeAttribute("aria-label");const id="ft-category-name-"+Math.random().toString(36).slice(2,11);picker.createSpan({cls:"ft-accessible-label",text:label,attr:{id}});element.setAttr("aria-labelledby",id);};
+    accessibleName(summary,t("extraViews") + " · " + total);
     summary.setAttr("aria-expanded","false");
     const group=picker.createSpan({cls:"ft-supplement-switch ft-supplement-"+presentation,
-      attr:{role:"group","aria-label":t("extraViews"),"data-ft-category-key":key}});
+      attr:{role:"group","data-ft-category-key":key}});
     let line = null, lines = null, host = null, caption = null, size = null, nameLink = null, row = null, tightHost = null;
     const place=()=>{
       // Categories replace the counter in the header's own flow.
@@ -2320,7 +2344,7 @@ class FocusRenderer extends MarkdownRenderChild {
       }
     };
     const show=()=>{
-      if(!picker.isConnected || this.editing || this.held || !options.length)return;
+      if(!picker.isConnected || !picker.getBoundingClientRect().width || this.editing || this.held || !options.length)return;
       this.closeCategoryPicker?.();clearTimeout(this.categoryCloseTimer);
       if(!picker.hasClass("is-open")){
         host=picker.closest("li.ft-task,.ft-mobile-project-caption,.ft-area-title")||head;head.addClass("ft-category-measure");const style=getComputedStyle(host),signature=[host.getBoundingClientRect().width,style.fontSize].join(":");if(!size||size.signature!==signature)size={signature,height:host.getBoundingClientRect().height};const padding=style.boxSizing==="border-box"?0:[style.paddingTop,style.paddingBottom,style.borderTopWidth,style.borderBottomWidth].reduce((n,x)=>n+(parseFloat(x)||0),0);host.style.height=Math.max(0,size.height-padding)+"px";
@@ -2328,7 +2352,7 @@ class FocusRenderer extends MarkdownRenderChild {
         if(line){const r=line.getBoundingClientRect(),h=parseFloat(getComputedStyle(line).lineHeight);lines=Math.max(1,Math.round(r.height/h));line.style.height=r.height+"px";line.style.overflow="hidden";}
       }
       picker.addClass("is-open");summary.setAttr("aria-expanded","true");this.categoryOpen=key;
-      this.closeCategoryPicker=()=>{picker.removeClass("is-open");host?.style.removeProperty("height");tightHost?.removeClass("ft-categories-tight");caption?.style.removeProperty("min-width");nameLink?.style.removeProperty("max-width");row?.style.removeProperty("--ft-category-width");line?.style.removeProperty("-webkit-line-clamp");line?.style.removeProperty("height");line?.style.removeProperty("overflow");summary.setAttr("aria-expanded","false");if(this.categoryOpen===key)this.categoryOpen=null;};
+      this.closeCategoryPicker=()=>{this.releasePin?.();picker.removeClass("is-open");host?.style.removeProperty("height");tightHost?.removeClass("ft-categories-tight");caption?.style.removeProperty("min-width");nameLink?.style.removeProperty("max-width");row?.style.removeProperty("--ft-category-width");line?.style.removeProperty("-webkit-line-clamp");line?.style.removeProperty("height");line?.style.removeProperty("overflow");summary.setAttr("aria-expanded","false");if(this.categoryOpen===key)this.categoryOpen=null;};
       place();
     };
     const companion=()=>picker.closest("li.ft-project-row")?.querySelector(".ft-category-expand")?.matches(":hover,:focus");
@@ -2358,15 +2382,19 @@ class FocusRenderer extends MarkdownRenderChild {
       const enabled=kind==="intents"?ideas:p.categoryShown(kind==="focus"?focus:later),active=expanded&&enabled;
       const label=kind==="intents"?t("intents"):kind==="focus"?t("focusTitle"):t("backlog");
       const button=group.createEl("button",{cls:"ft-chip "+(kind==="intents"?"ft-intents-chip":kind==="focus"?"ft-focus-chip":"ft-later-chip"),
-        attr:{"aria-label":label+" · "+n,"aria-pressed":String(!!active),title:label+" · "+n,"data-ft-category":kind}});
+        attr:{"aria-pressed":String(!!active),title:label+" · "+n,"data-ft-category":kind}});
+      accessibleName(button,label+" · "+n);
       button.toggleClass("is-on",!!active);button.toggleClass("is-off",!active);
       setIcon(button.createSpan({cls:"ft-chip-icon"}),kind==="intents"?"lightbulb":kind==="focus"?"crosshair":"clock");
       button.createSpan({cls:"ft-supplement-count",text:String(n)});
       button.addEventListener("pointerdown",()=>{clearTimeout(this.controlReleaseTimer);this.controlPress=button;});
       button.onclick=async e=>{e.stopPropagation();if(this.editing||this.held)return;this.clearSelection();
+        this.pin={selector:'.ft-category-picker[data-ft-category-key="'+CSS.escape(key)+'"] button[data-ft-category="'+kind+'"]',y:button.getBoundingClientRect().top};
         const on=await p.toggleSupplement(key,kind,later,focus,!expanded);if(onChoose)onChoose(kind,on);if(on&&unfold)await unfold();p.refresh();};
     }
     if(expandSteps){const target=Platform.isMobile?group:(picker.closest("li.ft-project-row")||group);const more=target.createEl("button",{cls:"ft-category-expand",text:(expandSteps.open?"−":"+")+expandSteps.count,attr:{"aria-label":expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count),title:expandSteps.open?t("hideSteps"):t("moreSteps",expandSteps.count)}});
+      // Keep category buttons at the caption edge when the fold control disappears.
+      if(Platform.isMobile)group.prepend(more);
       more.onclick=e=>{e.stopPropagation();expandSteps.run();};}
     picker.ftShow=show;picker.ftPlace=place;
     if(!options.length){summary.setAttr("aria-disabled","true");summary.removeAttribute("aria-haspopup");}
@@ -2867,7 +2895,10 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     const shown = el.textContent;
     if (offset !== null && shown !== task.text) offset = Math.round((offset * task.text.length) / Math.max(1, shown.length));
-    el.textContent = task.text;
+    const marker=el.querySelector(":scope > .ft-idea-mark");
+    let editTarget=el;
+    if(marker){el.replaceChildren(marker);editTarget=el.createSpan({cls:"ft-idea-editor",text:task.text});}
+    else el.textContent = task.text;
     // Wiped and left — a click elsewhere, Enter, ⌘⌫ then away — the task is deleted, with the same
     // «Undo» a delete from the menu gets. Esc brings the text back untouched and selects the row.
     const saveText = async (value) => {
@@ -2899,7 +2930,7 @@ class FocusRenderer extends MarkdownRenderChild {
       if (task2 && text2) this.editInline(task2, text2, null);
     };
     const day = (n) => moment().add(n, "days").format("YYYY-MM-DD");
-    this.editor(el, Math.min(offset ?? task.text.length, task.text.length), saveText, {
+    this.editor(editTarget, Math.min(offset ?? task.text.length, task.text.length), saveText, {
       1: (close) => redate(day(0), close),
       2: (close) => redate(day(1), close),
       4: (close) => redate(null, close),
