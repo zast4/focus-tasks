@@ -52,7 +52,7 @@ What you can do in the view:
 | See what is ahead in a project | hover the project's count/`+N`; the inline clock opens its upcoming and undated steps right under the row, where ⌘1 or a drag brings one into today; the area's ⏳ shows the same steps among everything else that is not today |
 | Hand a task off | «Waiting…» in the row's menu, with the day and hour to look at it again: the task leaves the focus for the **▷ Waiting · N** shelf at the bottom (by area, soonest first, never in the pile of what is not today). On its day it comes back among the rows that are due, marked ▷, and that ▷ takes it back |
 | A robot's mark | the list shows no priorities; the one dot it draws is `priority: low`, what a script or a bot leaves on a task it added and you have not looked at — a click on the dot (or «Take the robot's mark off» in the menu) removes it |
-| A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note, not to its step. Set, it alone decides whether the project is in the focus (due) or in the area's ⏳ pile with all of its steps; the steps keep their days |
+| A project's own date | select the project's row (its grip) and press **⌘/Ctrl+1…4**, or «Project date…» in its menu: the date goes to the project's note. A due project remains in Focus; each step keeps its own category and date. A step scheduled today can enter Focus before the project's date; undated steps remain in Backlog |
 | Finish a project's current steps | check off its last step: within a visible area the empty project row remains for the day, marked «done N», and its «+» adds the next step. This does not automatically close the project |
 | Edit a task | click its text: edit in place, **Enter** saves and opens a new row below, **Esc** saves and leaves the row selected (a wiped row keeps its text) |
 | Date while editing | **⌘/Ctrl+1** today, **⌘/Ctrl+2** tomorrow, **⌘/Ctrl+3** date picker, **⌘/Ctrl+4** no date, **⌘/Ctrl+5** «Waiting…» (the card asks when to look again), **⌘/Ctrl+Enter** saves and opens the task as a note, **⌘/Ctrl+⌫** deletes the task (Undo in the notice) and moves the editor to the row above; a day that takes the row out of its list sends it off at once and moves the editor to the next row |
@@ -108,14 +108,17 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
 inline category controls in place of the count; on a phone, tap it. Project counts sit next to the project name, reusing
-`+N` to expand additional steps. Their controls omit empty categories. The first project idea can be
-added from its context menu. The inline controls keep the row height stable.
+`+N` to expand additional steps. Every project offers all three categories, including empty ones.
+Opening an empty category exposes its add action: Focus schedules the new task today, Backlog leaves
+it undated, and Ideas links the new idea to the project. The project's own date is preserved.
+The inline controls keep the row height stable.
 Each independently shows/hides its tasks. Several categories can be open together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
 When an area is folded, all available controls are dimmed. Clicking one unfolds the area and shows
 that category, preserving the other saved switches. Expanding with the caret restores them all.
-Hiding Focus also hides its projects, unless their Backlog tasks or Ideas are visible. Fold arrows
-appear only for actual steps; hidden categories leave no empty project headers or steps blocks.
+Hiding an area's Focus also hides its projects unless another category is visible. A project whose
+own controls were used keeps its header available, including after its last Focus task is completed.
+Fold arrows appear only for actual steps; an open empty category offers creation without a dead fold arrow.
 Counters include hidden task steps, exclude pending Waiting/completed/cancelled records, and stay
 unchanged when folded. Pending Waiting keeps its own shelf; on its return date/time it counts in Focus.
 Adding a task opens its destination category so the new row stays visible. Category switches clear
@@ -314,9 +317,9 @@ passes (`--keep` leaves it).
 в меню) убирает её.
 
 У проекта может быть своя дата: выдели его строку ручкой и нажми ⌘1-4, или «Дата проекта…» в его
-меню. Она пишется в заметку проекта, шаги свои дни не меняют. Пока она есть, она одна решает, в
-фокусе ли проект: наступила - проект в фокусе с тем, что у него есть; впереди - ждёт в ⏳ отложке
-области со всеми шагами.
+меню. Она пишется в заметку проекта, шаги свои дни не меняют. Наступившая дата удерживает проект
+в фокусе, но у задач категории определяются по их собственным датам: задача на сегодня может
+попасть в фокус раньше даты проекта, а задача без даты остаётся в отложке.
 
 В видимой области проект, в котором сегодня закрыли последнюю задачу, до конца дня стоит
 на своём месте с зелёным «сделано N», а «+» рядом заводит следующий шаг.
@@ -365,14 +368,18 @@ Shift+клик выделяет все задачи от последней кл
 
 У области видно одно общее число задач фокуса, отложки и замыслов. Наведение или фокус клавиатуры
 заменяют число иконками категорий прямо в строке; на телефоне это происходит касанием. У проекта
-иконки заменяют счётчик возле имени (`+N` также раскрывает шаги). Пустые категории проекта скрыты.
-Первый замысел проекта можно добавить через его контекстное меню. Замена счётчика сохраняет высоту строки.
+иконки заменяют счётчик возле имени (`+N` также раскрывает шаги). У каждого проекта доступны все
+три категории, даже пустые. В пустой категории есть добавление: фокус создаёт задачу на сегодня,
+отложка без даты, замыслы с привязкой к проекту. Дата самого проекта сохраняется.
+Замена счётчика сохраняет высоту строки.
 Каждый независимо показывает и скрывает свои задачи. Можно открыть несколько категорий одновременно.
 Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.
 У свёрнутой области все доступные иконки приглушены. Нажатие раскрывает область и выбранную категорию,
 сохраняя остальные переключатели. Раскрытие стрелкой возвращает сохранённое сочетание.
-Скрытие фокуса скрывает и проекты, кроме тех, у которых показана отложка или замыслы.
-Стрелки сворачивания появляются только у настоящих шагов, пустые строки проектов не остаются.
+Скрытие фокуса области скрывает и проекты, кроме тех, у которых показана другая категория.
+После использования переключателей проекта его заголовок остаётся доступным, в том числе после
+выполнения последней задачи фокуса. Стрелки сворачивания появляются только у настоящих шагов;
+открытая пустая категория позволяет добавить задачу.
 Считаются задачи, включая скрытые шаги, без выполненных и отменённых; свёртка не меняет числа.
 «Жду» до срока остаётся отдельно, после возврата задача учитывается в фокусе.
 Добавление открывает нужную категорию, чтобы новая задача оставалась видна. Переключение снимает

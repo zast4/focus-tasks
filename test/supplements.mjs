@@ -262,7 +262,7 @@ test('scope counts follow effective project-date membership and avoid duplicate 
   await p.createTask('Undated', { area:'Work', project:file.basename, projectFile:file }, null);
   await p.setProjectDate(file,'2099-01-01');
   let scope = (await p.collect(false,true)).find(a=>a.name==='Work');
-  assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[0,2]);
+  assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[1,1]);
   await p.setProjectDate(file,'2000-01-01');
   scope = (await p.collect(false,true)).find(a=>a.name==='Work');
   assert.deepEqual([p.scopeTasks(scope).focus.length,p.scopeTasks(scope).backlog.length],[1,1]);

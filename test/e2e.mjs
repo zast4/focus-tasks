@@ -9,6 +9,7 @@
 //
 //   node test/e2e.mjs            (--keep leaves the vault and its window open)
 import { checkCategoryRegressionsUI } from './category-regressions-ui.mjs';
+import { checkProjectCategoryCreateUI } from './project-category-create-ui.mjs';
 import { checkProjectDraftUI } from './project-draft-ui.mjs';
 import fs from "node:fs";
 import path from "node:path";
@@ -1478,7 +1479,7 @@ step("a project's row selected by its grip is the project: ⌘2 dates the projec
   await page.key("Meta+2");
   await fileHas("Tasks/Dated project.md", `scheduled: ${TOMORROW}`, "the project's note got tomorrow");
   await taskIs("Dated step", { scheduled: TODAY }, "the step's own day is untouched");
-  await until(() => page.eval(`return !!__ft.project('Dated project')?.closest('.ft-future-block')`), "dated ahead, the project waits in the pile — whatever its step says");
+  await until(() => page.eval(`const r=__ft.project('Dated project');return !!r&&!r.closest('.ft-future-block')&&r.querySelector('.ft-focus-chip .ft-supplement-count')?.textContent==='2'&&r.querySelector('.ft-later-chip .ft-supplement-count')?.textContent==='1';`), "the project day preserves both today's steps in Focus and the undated step in Backlog");
   await until(() => page.eval(`return !!__ft.project('Dated project')?.querySelector('.ft-date.is-project')`), "the row shows the project's own day");
   // the menu takes the day off: back by the steps' rule
   await menuOn(`__ft.at(__ft.name('Dated project'))`);
@@ -1500,12 +1501,15 @@ step("a project's row selected by its grip is the project: ⌘2 dates the projec
   await settle();
 });
 
-step("project brightness uses the same date as focus membership and its displayed date", async () => {
+step("task preview brightness follows its category and preserves the project date", async () => {
   const name = 'Brightness project', task = 'Brightness first step', key = 'future:💪Sport';
   const wasOpen = await plugin(`return p.data.opened[${J(key)}] ?? null;`);
+  const wasEverything = await plugin(`return p.everything();`);
   try {
     await plugin(`
       const area = (await p.collect(true)).find(a => a.name === '💪Sport');
+      await p.createTask('Brightness area anchor', {area: '💪Sport', project: null}, ${J(TODAY)});
+      p.setEverything(false);
       await p.createProject(area, ${J(name)});
       await p.createTask(${J(task)}, {area: '💪Sport', project: ${J(name)}}, ${J(TOMORROW)});
       p.data.opened[${J(key)}] = true; p.refresh(); return true;`);
@@ -1513,7 +1517,7 @@ step("project brightness uses the same date as focus membership and its displaye
     await page.mouse('mouseMoved', 0, 0, 0); // Hover otherwise hides the dimming regression.
     for (const [projectDay, stepDay, future] of [
       [TODAY, TOMORROW, false], [YESTERDAY, TOMORROW, false], [TODAY, null, false],
-      [TOMORROW, TODAY, true], [null, TODAY, false], [null, TOMORROW, true],
+      [TOMORROW, TODAY, false], [null, TODAY, false], [null, TOMORROW, true],
     ]) {
       await until(() => plugin(`return p.tasks().some(t => t.text === ${J(task)});`), 'first step indexed');
       await plugin(`
@@ -1539,9 +1543,10 @@ step("project brightness uses the same date as focus membership and its displaye
   } finally {
     await plugin(`
       const task = p.tasks().find(t => t.text === ${J(task)}); if (task) await p.trash(task.file);
+      const anchor = p.tasks().find(t => t.text === 'Brightness area anchor'); if (anchor) await p.trash(anchor.file);
       const file = app.vault.getAbstractFileByPath(${J('Tasks/' + name + '.md')}); if (file) await p.trash(file);
       if (${J(wasOpen)} === null) delete p.data.opened[${J(key)}]; else p.data.opened[${J(key)}] = ${J(wasOpen)};
-      p.refresh(); return true;`);
+      p.setEverything(${J(wasEverything)});p.refresh(); return true;`);
     await settle();
   }
 });
@@ -1894,6 +1899,7 @@ step("the ⏳ of an area folds its upcoming work — in «All» too, where the f
 
 step("a project has one header: its first step, a fold arrow and unified category counters", async () => {
   const saved = await plugin(`return JSON.stringify({ all: p.everything(), folded: { ...p.data.folded }, opened: { ...p.data.opened } });`);
+  fs.mkdirSync(path.dirname(path.join(VAULT, taskPath("Flat one"))), { recursive: true });
   fs.writeFileSync(path.join(VAULT, "Tasks/Flatland.md"), '---\nparents:\n  - "[[Sport]]"\narea: "💪Sport"\ntype: project\n---\n');
   const step = (name, uid, day) => fs.writeFileSync(path.join(VAULT, taskPath(name)),
     `---\nuid: ${uid}\ntype: задача\nstatus: open\narea: "💪Sport"\nscheduled: ${day}\nprojects:\n  - "[[Flatland]]"\n---\n`);
@@ -1909,7 +1915,7 @@ step("a project has one header: its first step, a fold arrow and unified categor
     p.saveFolds(); p.refresh(); return true;`);
   await until(() => page.eval(`
     const row = __ft.project('Flatland');
-    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && !row.querySelector('.ft-steps-more svg') && row.querySelector('.ft-steps-more').textContent.trim()==='+1' && [...row.querySelectorAll('.ft-supplement-count')].map(e=>e.textContent).join('|')==='2|1';`),
+    return !!row && row.querySelector('.ft-text')?.textContent.trim() === 'Flat one' && !row.querySelector('.ft-steps-more svg') && row.querySelector('.ft-steps-more').textContent.trim()==='+1' && [...row.querySelectorAll('.ft-supplement-count')].map(e=>e.textContent).join('|')==='2|1|0';`),
     "one row: the project, first step, +1 and task-category counts");
   if (await page.eval(`return !!__ft.task('Flat two')`)) throw new Error("the second step is on screen while the row is folded");
   if (await page.eval(`return !!__ft.view().querySelector('.ft-project')`)) throw new Error("a project header is still drawn somewhere");
@@ -2506,6 +2512,7 @@ step("commands are registered", async () => {
 step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,false); });
+step("all three project categories support empty-list creation with correct dates", async () => { await checkProjectCategoryCreateUI(page,false); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,false); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,false); });
 step("hover and keyboard tools never rewrap the task or cover its text", async () => { await checkHoverLayoutUI(page); });

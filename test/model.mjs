@@ -1846,7 +1846,7 @@ test("a note two projects share gets a block for each; a block naming a missing 
   eq(missing.missing, "Nope", "and named, so the block can say so instead of showing everything");
 });
 
-test("a project with a day of its own goes by that day, its steps keep theirs", async () => {
+test("an explicit Focus step can precede its project day without rescheduling the project", async () => {
   const { app, plugin } = await stand((a) => {
     areaNote(a, "Work");
     projectNote(a, "Work", "Launch", { scheduled: DAY(3) });
@@ -1856,20 +1856,22 @@ test("a project with a day of its own goes by that day, its steps keep theirs", 
   });
   const launchRow = (a) => a.rows.find((r) => r.kind === "project" && r.project.file.basename === "Launch");
   let area = areaOf(await plugin.collect(false), "Work");
-  eq(focusProjects(area).map((b) => b.file.basename), [], "a project dated ahead is not in the focus, whatever its steps say");
+  eq(focusProjects(area).map((b) => b.file.basename), ["Launch"], "an explicitly due step remains accessible in Focus");
+  eq(names(launchRow(area).steps), ["Step today"], "only the explicitly due step is in Focus");
   const ahead = aheadProjects(area).find((r) => r.file.basename === "Launch");
-  eq(names(ahead.tasks).sort(), ["Step later", "Step today"], "it waits in the pile with all of its steps");
+  eq(names(ahead.tasks), ["Step later"], "the other step stays in Backlog");
+  eq(frontmatter(app, "Areas/Launch.md").scheduled, DAY(3), "opening a Focus step preserves the project day");
   eq(plugin.tasks().find((x) => x.text === "Step today").date, TODAY, "the step's own day is untouched");
   // its day comes: in the focus, with its steps
   await plugin.setProjectDate(app.vault.getAbstractFileByPath("Areas/Launch.md"), TODAY);
   area = areaOf(await plugin.collect(false), "Work");
   eq(focusProjects(area).map((b) => b.file.basename), ["Launch"], "due, it is in the focus");
   eq(names(launchRow(area).steps), ["Step today"], "showing today's steps");
-  // dated today with nothing due today: still in the focus, with what it has
+  // The project remains due, but its undated and future steps remain in Backlog.
   await plugin.setDate(plugin.tasks().find((x) => x.text === "Step today"), null);
   area = areaOf(await plugin.collect(false), "Work");
-  eq(names(launchRow(area).steps).sort(), ["Step later", "Step today"], "a due project with no due step shows its pile");
-  eq(aheadProjects(area).some((r) => r.file.basename === "Launch"), false, "and is not doubled in the pile");
+  eq(names(launchRow(area).steps), [], "the due project does not promote undated steps into Focus");
+  eq(names(area.ahead.find(r => r.kind === "project" && r.project.file.basename === "Launch").steps).sort(), ["Step later", "Step today"], "both steps remain available in Backlog");
   // the day off: back to the steps' rule
   await plugin.setProjectDate(app.vault.getAbstractFileByPath("Areas/Launch.md"), null);
   eq("scheduled" in frontmatter(app, "Areas/Launch.md"), false, "the key is gone from the note");

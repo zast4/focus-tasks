@@ -136,8 +136,13 @@ intent entries. Changing an entry's date never promotes it. Explicit promotion p
 sets canonical task fields and clears owned intent fields. Group promotion is one Undo operation.
 
 Area headers show one aggregate count; project headers reuse their count/`+N` beside the name.
-Hover/focus opens inline category controls in place of the count; touch opens it by tapping. Project controls omit
-empty categories, and empty projects have no dead count button. Area controls keep supported empty
+Hover/focus opens inline category controls in place of the count; touch opens it by tapping. Project controls offer
+all three categories, even at zero. Empty Focus/Backlog/Ideas expose category-specific creation.
+`projectCategoryTarget` schedules Focus today and Backlog undated without persisting its UI-only
+`projectCategory` flag. Task dates determine their categories independently of the project's own day;
+the project day can keep its header in Focus but never promotes its undated tasks.
+Explicitly opened project headers also retain their area after completion of its last Focus task.
+Area controls keep supported empty
 Backlog/Ideas available. `scopeTasks.hasFocus` includes actionable empty projects and ignores
 completed-only projects; Other areas never offer an impossible Focus control. Hidden controls
 occupy no layout space. Inline categories replace the counter and remain clickable in
@@ -327,6 +332,6 @@ git push && git push origin 0.2.0
 The GitHub Action publishes a release with `main.js`, `manifest.json`, `styles.css` and a zip;
 BRAT users get it on their next update check. Commits use the GitHub noreply email.
 
-Categories replace one aggregate count (project `+N`) in the header flow on hover/focus or phone tap. Native matrices check replacement position, row height, hidden controls, tap/keyboard entry, zero category filtering and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.
+Categories replace one aggregate count (project `+N`) in the header flow on hover/focus or phone tap. Native matrices check replacement position, row height, hidden controls, tap/keyboard entry, empty-category creation and redraw during press. Own `focus-tasks` fences inside rendered descriptions are suppressed by the Markdown processor to prevent recursive views; source Markdown is preserved.
 
 Category switches pin the pressed control through redraws; a short list reserves enough scroll room to keep the control beneath the pointer until manual scrolling or another pinned change. Pins release on replacement, closed pickers and hidden or detached targets. Local category closure hides project contents while its parent category is visible; area closure hides the corresponding projects. Category accessible names use labelled-by references; title supplies the only visible tooltip. Idea lamps remain outside the editable text, and area-level loose ideas are added through the default Ideas row.

@@ -32,11 +32,11 @@ Run each of these on a Focus area, a Backlog-only area, a project, an empty proj
 | Collapsed area, saved categories enabled | Dim controls mean not currently displayed. Clicking reveals the requested category. |
 | All on/off | The area view respects defaults and project overrides. All does not add a global Ideas button. |
 | Click Focus title | Focus areas unfold, All/Backlog close, Waiting/completed groups fold, scroll resets. |
-| Category with count zero | Supported creation remains reachable; no unsupported Focus control on a Backlog-only scope. |
+| Category with count zero | Every project offers Focus/Backlog/Ideas and creation in each empty category. Backlog-only area headers omit Focus. |
 
 Numbers count unique entries, not compact project headers. Pending Waiting is separate.
 Desktop hidden controls have zero layout size; there are no invisible placeholders or action tracks.
-Each area shows one aggregate count. Desktop hover/focus of that count and phone tap open the same inline controls in place of the count. Project controls omit zero categories; the first idea remains creatable from the context menu. Replacing the count keeps the row height stable and does not leave a hidden counter gap.
+Each area shows one aggregate count. Desktop hover/focus of that count and phone tap open the same inline controls in place of the count. Projects offer all three controls, including zero counts. Empty-category creation stays inside the selected project and uses today/no date/a bound idea list respectively. Past/today/future project dates remain unchanged and cannot override the new task's category. Completing the last Focus task keeps an explicitly opened project's area available. Replacing the count keeps the row height stable and does not leave a hidden counter gap.
 The clicked category retains its open state and keyboard focus through metadata redraw. Check outside click, Escape, scroll, and viewport changes.
 Desktop task/project actions float above the active row. Revealing them never changes title width, text coordinates or row height, and never covers that row's text. The strip remains reachable through redraw and keyboard focus.
 Project ideas have a warm side marker and a lightbulb beside each entry; ordinary steps retain their usual appearance.

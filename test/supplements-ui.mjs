@@ -48,19 +48,19 @@ export async function checkSupplementsUI(page, mobile=false) {
     const active=await page.eval(`return {type:app.workspace.activeLeaf.view.getViewType(),scoped:!!window.__supScoped};`);if(active.type!=='focus-tasks-view'&&!active.scoped)throw Error('supplement click switched away from Focus: '+expr+' -> '+active.type);
   };
   const cleanRows=async label=>{
-    const issues=await page.eval(`const root=${root},issues=[];for(const body of root.querySelectorAll('li.ft-steps')){if(body.getBoundingClientRect().width&&!body.querySelector('li.ft-task'))issues.push('empty expanded steps');}
+    const issues=await page.eval(`const root=${root},issues=[];for(const body of root.querySelectorAll('li.ft-steps')){if(body.getBoundingClientRect().width&&!body.querySelector('li.ft-task,.ft-project-category-add'))issues.push('empty expanded steps');}
       for(const row of root.querySelectorAll('li.ft-project-row')){if(!row.getBoundingClientRect().width)continue;const body=row.nextElementSibling?.matches('.ft-steps')?row.nextElementSibling:null;if(row.querySelector(':scope > .ft-fold')&&!body?.querySelector('li.ft-task'))issues.push('fold arrow without steps');const more=row.querySelector('.ft-steps-more');if(more?.hasAttribute('data-ft-fold')&&!row.querySelector('.ft-text:not(.ft-no-step)')&&!body?.querySelector('li.ft-task'))issues.push('extra step control without content');if(more?.hasAttribute('data-ft-fold')&&(more.querySelector('svg')||!/^[-−+][1-9][0-9]*$/.test(more.textContent)))issues.push('project expansion must show +N or minus N');}return issues;`);
     if(issues.length)throw Error(label+': '+issues.join('; '));
   };
   const visibility=async(expr,role,label,hasFocus=true)=>{
     await page.front();
-    await page.eval(`const g=${expr};(g.closest('.ft-category-host')||g).scrollIntoView({block:'center',behavior:'instant'});document.activeElement?.blur();return true;`);
+    await page.eval(`const g=${expr};(g.closest('.ft-category-picker')||g.closest('.ft-category-host')||g).scrollIntoView({block:'center',behavior:'instant'});document.activeElement?.blur();return true;`);
     const inspect=async(revealed)=>{
       const issues=await page.eval(`const g=${expr},picker=g.closest('.ft-category-picker'),issues=[];
         if(!g.classList.contains('ft-supplement-${role}'))issues.push('wrong scope role');
         const buttons=[...g.querySelectorAll('button[data-ft-category]')];
         if(${role==='backlog-area'}&&g.querySelector('.ft-focus-chip'))issues.push('impossible Focus control');
-        if(${role==='project'}&&buttons.some(b=>b.querySelector('.ft-supplement-count').textContent==='0'))issues.push('empty project category');
+        if(${role==='project'}&&buttons.length!==3)issues.push('missing project category');
         for(const b of buttons){const r=b.getBoundingClientRect(),expected=b.getAttribute('aria-pressed')==='true'?1:0.45;
           if(${revealed}?(r.width<=0||r.height<=0||Number(getComputedStyle(b).opacity)!==expected):(r.width||r.height))issues.push('inline visibility '+b.className+' revealed='+${revealed}+' rect='+r.width+'x'+r.height+' opacity='+getComputedStyle(b).opacity+' open='+picker.className);}
         if(${revealed})for(const b of buttons){const r=b.getBoundingClientRect(),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);if(!hit||!b.contains(hit))issues.push('category clipped or covered '+b.className);}
@@ -142,7 +142,7 @@ export async function checkSupplementsUI(page, mobile=false) {
   await until(()=>page.eval(`return !!(${zero}).querySelector(':scope > .ft-intents')&&(${zero}).querySelector('.ft-later-chip').getAttribute('aria-pressed')==='true';`),'empty ideas reveal keeps the inherited backlog');
   await page.eval(`const p=app.plugins.plugins['focus-tasks'],a=(await p.collect(true)).find(a=>a.name==='SUP Zero'),f=await p.createProject(a,'SUP Later project');window.__supQueuePaths={area:a.note.path,project:f.path};await p.setProjectDate(f,'2099-01-01');await p.createTask('SUP Queue step',{area:a.name,project:f.basename,projectFile:f},'2099-01-01');const list=await p.ensureProjectIntentList(f);await p.createTask('SUP Queue idea',{area:a.name,projectFile:list.file,project:list.file.basename,intentList:true,listUid:list.uid},null);return true;`);
   const queuedProject=`[...(${zero}).querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].find(e=>e.querySelector('.ft-project-name .ft-link')?.textContent==='SUP Later project')`;
-  await until(()=>page.eval(`return !!(${queuedProject})&&!(${zero}).querySelector('.ft-focus-chip');`),'queue-only project exposes no impossible Focus category');
+  await until(()=>page.eval(`return !!(${queuedProject})&&!(${zero}).querySelector(':scope > .ft-area-title .ft-focus-chip')&&(${queuedProject}).querySelectorAll('button[data-ft-category]').length===3;`),'queue-only area omits Focus while its project offers all three categories');
   await visibility(`(${queuedProject}).querySelector('.ft-supplement-switch')`,'project','queue-only project hover',false);
   for(let mask=0;mask<4;mask++){
     for(const [kind,on] of [['later',!!(mask&1)],['intents',!!(mask&2)]]){
@@ -153,11 +153,11 @@ export async function checkSupplementsUI(page, mobile=false) {
     await visibility(`(${zero}).querySelector(':scope > .ft-area-title .ft-supplement-switch')`,'backlog-area','queue area combination '+mask);
     await cleanRows('queue area combination '+mask);
   }
-  // Queue-only scopes never expose a Focus button, including the note embeds.
+  // Queue-only area headers omit Focus; projects keep all three creation categories.
   for(const [slot,selector,role] of [['area','.ft-area-page','backlog-area'],['project','.ft-page','project']]){
     await page.eval(`window.__supScoped=true;const leaf=app.workspace.getLeaf('tab');await leaf.openFile(app.vault.getAbstractFileByPath(__supQueuePaths[${J(slot)}]),{state:{mode:'preview'}});return true;`);
     const group=`[...${root}.querySelectorAll('${selector} > .ft-area-title .ft-supplement-switch')].find(e=>e.parentElement.getBoundingClientRect().width>0)`;
-    await until(()=>page.eval(`return !!(${group})&&!(${group}).querySelector('.ft-focus-chip');`),'queue-only '+slot+' note has no Focus control');
+    await until(()=>page.eval(`return !!(${group})&&!!(${group}).querySelector('.ft-focus-chip')===${slot==='project'};`),'queue-only '+slot+' note has supported Focus control');
     for(let mask=0;mask<4;mask++){
       for(const [kind,on] of [['later',!!(mask&1)],['intents',!!(mask&2)]]){
         const b=`(${group}).querySelector('.ft-${kind}-chip')`;
@@ -276,7 +276,8 @@ export async function checkSupplementsUI(page, mobile=false) {
   await until(()=>page.eval(`return !!(${emptyProject});`),'empty project visible');
   await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return !!p.classify(app.vault.getAbstractFileByPath(__supPaths.empty))?.project&&![...p.views].some(v=>v.busy);`),'empty project metadata settled');
   await sleep(450);
-  if(!await page.eval(`return !(${emptyProject}).querySelector('.ft-category-picker');`))throw Error('empty project exposes a dead count popup');
+  if(!await page.eval(`const r=${emptyProject};return r.querySelectorAll('button[data-ft-category]').length===3&&[...r.querySelectorAll('.ft-supplement-count')].map(e=>e.textContent).join(',')==='0,0,0'&&!r.querySelector('.ft-fold');`))throw Error('empty project lacks creation categories or shows a dead fold');
+  await visibility(`(${emptyProject}).querySelector('.ft-supplement-switch')`,'project','empty project controls',false);
   await page.eval(`(${emptyProject}).querySelector('.ft-project-name').scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(150);
   const emptyAt=await page.eval(`const e=(${emptyProject}).querySelector('.ft-project-name'),r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);
   if(mobile){await page.touch('touchStart',[emptyAt]);await sleep(750);await page.touch('touchEnd',[]);}else await page.rightClick(emptyAt);

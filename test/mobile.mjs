@@ -7,6 +7,7 @@
 //   open -a Obsidian --args --remote-debugging-port=9222
 //   node test/mobile.mjs            (--keep leaves the vault and its window open)
 import { checkCategoryRegressionsUI } from './category-regressions-ui.mjs';
+import { checkProjectCategoryCreateUI } from './project-category-create-ui.mjs';
 import { checkProjectDraftUI } from './project-draft-ui.mjs';
 import fs from "node:fs";
 import path from "node:path";
@@ -136,7 +137,7 @@ step("nothing runs off the side of a phone screen", async () => {
   if (over.wide.length) throw new Error("these stick out: " + J(over.wide));
 });
 
-step("mobile project brightness follows its own focus date before the first step's date", async () => {
+step("mobile task preview follows its own category and preserves the project date", async () => {
   const name = 'Проверка яркости проекта', task = 'Будущий первый шаг';
   const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1);
   const nextDay = ymd(tomorrow), key = 'future:🏡Дом';
@@ -174,7 +175,7 @@ step("mobile project brightness follows its own focus date before the first step
     };
     await check(TODAY, nextDay, false);
     await check(TODAY, null, false);
-    await check(nextDay, TODAY, true);
+    await check(nextDay, TODAY, false);
     await check(null, TODAY, false);
     await check(null, nextDay, true);
   } finally {
@@ -764,6 +765,7 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,true); });
+step("all three project categories support empty-list creation with correct dates", async () => { await checkProjectCategoryCreateUI(page,true); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });
 step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,true); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,true); });

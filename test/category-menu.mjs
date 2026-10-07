@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {FakeApp,loadPlugin,areaNote,projectNote,writeNote} from './harness.mjs';
+import {FakeApp,loadPlugin,areaNote,projectNote,writeNote,frontmatter} from './harness.mjs';
+import moment from 'moment';
 
 for(const kind of ['focus','backlog','intents'])test(`closing the last project ${kind} retains its header without affecting siblings`,async()=>{
  const app=new FakeApp();areaNote(app,'Work');const file=projectNote(app,'Work','Project'),other=projectNote(app,'Work','Other'),p=await loadPlugin(app),path=file.path;
@@ -35,10 +36,28 @@ test('a retained project header follows a rename and is cleared when the project
 });
 for(const presentation of ['focus-area','backlog-area','project']) for(let mask=0;mask<8;mask++) test(`${presentation} menu has only supported categories for population ${mask}`,async()=>{
  const p=await loadPlugin(new FakeApp());const focus={count:mask&1?3:0},later={count:mask&2?4:0},count=mask&4?5:0;
- const actual=p.categoryChoices({presentation,focus,later,count});const expected=[['focus',focus.count],['backlog',later.count],['intents',count]].filter(([kind,n])=>(kind!=='focus'||presentation!=='backlog-area')&&(presentation!=='project'||n>0)).map(([kind,n])=>({kind,n}));
+ const actual=p.categoryChoices({presentation,focus,later,count});const expected=[['focus',focus.count],['backlog',later.count],['intents',count]].filter(([kind])=>kind!=='focus'||presentation!=='backlog-area').map(([kind,n])=>({kind,n}));
  assert.deepEqual(actual,expected);assert.equal(new Set(actual.map(x=>x.kind)).size,actual.length);
 });
-test('project menu never offers a Focus excluded by the area/project day',async()=>{const p=await loadPlugin(new FakeApp());assert.deepEqual(p.categoryChoices({focus:{count:9,available:false},later:{count:3},count:2}),[{kind:'backlog',n:3},{kind:'intents',n:2}]);});
+test('every project offers all three categories even when its Focus is empty or its day is future',async()=>{const p=await loadPlugin(new FakeApp());assert.deepEqual(p.categoryChoices({focus:{count:0,available:false},later:{count:3},count:0}),[{kind:'focus',n:0},{kind:'backlog',n:3},{kind:'intents',n:0}]);});
+
+for(const all of [false,true])for(const offset of [null,-1,0,3])test(`explicit project creation targets preserve their categories and project day=${offset} in All=${all}`,async()=>{
+ const app=new FakeApp();areaNote(app,'Work');const file=projectNote(app,'Work','Project'),p=await loadPlugin(app);p.setEverything(all);
+ const projectDay=offset===null?null:moment().add(offset,'days').format('YYYY-MM-DD');
+ if(projectDay)await p.setProjectDate(file,projectDay);
+ for(const category of ['backlog','focus']){
+  const target=p.projectCategoryTarget({file},'Work',category),task=await p.createTask('Created '+category,target,target.day),fm=frontmatter(app,task.file.path);
+  assert.equal(fm.type,'задача');assert.equal(task.area,'Work');assert.equal(p.projectFile(task)?.path,file.path);
+  assert.equal(task.date,category==='focus'?moment().format('YYYY-MM-DD'):null);
+  assert.equal(Object.hasOwn(fm,'projectCategory'),false);assert.equal(!!task.intent,false);
+  const area=(await p.collect(false,true)).find(a=>a.name==='Work'),scope=p.scopeTasks(area,file.path);
+  assert.equal(scope.backlog.length,1);assert.equal(scope.focus.length,category==='focus'?1:0);
+  assert.equal(frontmatter(app,file.path).scheduled||null,projectDay);
+ }
+ const area=(await p.collect(false,true)).find(a=>a.name==='Work'),scope=p.scopeTasks(area,file.path);
+ assert.equal(scope.focus.length,1);assert.equal(scope.backlog.length,1);
+ assert.throws(()=>p.projectCategoryTarget({file},'Work','intents'),/invalid project category/);
+});
 test('category population ignores current visibility and keeps simultaneous Backlog and Ideas',async()=>{
  const p=await loadPlugin(new FakeApp()),focus={key:'f',count:1},later={key:'b',count:2},args={focus,later,count:3};const before=p.categoryChoices(args);
  for(const kind of ['focus','backlog','intents'])await p.toggleSupplement('intents:Work',kind,later,focus);
