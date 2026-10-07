@@ -506,7 +506,7 @@ body:not(.is-mobile) .focus-tasks-view .ft-area-title > .ft-more { margin-left: 
   font-size: 0.8em; border-radius: 4px; color: var(--text-muted); cursor: pointer; font-variant-numeric: tabular-nums; }
 .focus-tasks-view .ft-line > .ft-steps-more:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
 .focus-tasks-view .ft-line > .ft-steps-more.is-late { color: var(--text-error); }
-.focus-tasks-view .ft-line > .ft-steps-more.is-open { color: var(--interactive-accent); }
+.focus-tasks-view .ft-line > .ft-steps-more.is-open { color: var(--text-normal); }
 .focus-tasks-view .ft-line > .ft-sep { margin: 0 0.35em; color: var(--text-faint); }
 .focus-tasks-view .ft-line > .ft-text { display: inline; }
 .focus-tasks-view .ft-line > .ft-text > p { display: inline; margin: 0; }

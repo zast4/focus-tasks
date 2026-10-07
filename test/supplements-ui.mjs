@@ -11,7 +11,7 @@ export async function checkSupplementsUI(page, mobile=false) {
     if(mobile&&at?.needsTap)await page.tap(at);else if(!mobile&&at)await page.mouse('mouseMoved',at.x,at.y,0);
     await sleep(180);
     if(await page.eval(`return !!(${expr})?.closest('.ft-category-picker');`))await until(async()=>{
-      const live=await page.eval(`const p=(${expr})?.closest('.ft-category-picker');if(p?.classList.contains('is-open')&&(${mobile}||p.matches(':hover')))return {open:true};const summary=p?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more'),r=summary?.getBoundingClientRect();return r?.width?{x:r.left+r.width/2,y:r.top+r.height/2,reenter:summary.matches(':hover')}:false;`);
+      const live=await page.eval(`const p=(${expr})?.closest('.ft-category-picker');if(p?.classList.contains('is-open')&&(${mobile}||p.matches(':hover')))return {open:true};const summary=p?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more');summary?.scrollIntoView({block:'center',behavior:'instant'});const r=summary?.getBoundingClientRect();return r?.width&&r.top>=0&&r.bottom<=innerHeight?{x:r.left+r.width/2,y:r.top+r.height/2,reenter:summary.matches(':hover')}:false;`);
       if(live?.open)return true;if(live){if(mobile)await page.tap(live);else {if(live.reenter)await page.mouse('mouseMoved',1,1,0);await page.mouse('mouseMoved',live.x,live.y,0);}await sleep(80);}return false;
     },'real pointer opens count popup '+expr);
   };

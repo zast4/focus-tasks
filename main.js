@@ -290,8 +290,8 @@ const STRINGS = {
 };
 
 let LANG = "en";
-Object.assign(STRINGS.en, { newIntentList: "New list", deleteIntentList: "Delete list", deleteIntentListDesc: "Delete this list and all its items? You can undo this.", intentToFocus: "Move to Focus today", intentToBacklog: "Move to backlog", intentToList: "Move to a list", intentEmpty: "Add an item", intentListPlace: "Move list to an area" });
-Object.assign(STRINGS.ru, { newIntentList: "Новый список", deleteIntentList: "Удалить список", deleteIntentListDesc: "Удалить список со всеми пунктами? Можно отменить.", intentToFocus: "Перенести в фокус сегодня", intentToBacklog: "Перенести в отложку", intentToList: "Перенести в список", intentEmpty: "Добавить пункт", intentListPlace: "Перенести список в область" });
+Object.assign(STRINGS.en, { listExpand: "Expand list", listCollapse: "Collapse list", newIntentList: "New list", deleteIntentList: "Delete list", deleteIntentListDesc: "Delete this list and all its items? You can undo this.", intentToFocus: "Move to Focus today", intentToBacklog: "Move to backlog", intentToList: "Move to a list", intentEmpty: "Add an item", intentListPlace: "Move list to an area" });
+Object.assign(STRINGS.ru, { listExpand: "Развернуть список", listCollapse: "Свернуть список", newIntentList: "Новый список", deleteIntentList: "Удалить список", deleteIntentListDesc: "Удалить список со всеми пунктами? Можно отменить.", intentToFocus: "Перенести в фокус сегодня", intentToBacklog: "Перенести в отложку", intentToList: "Перенести в список", intentEmpty: "Добавить пункт", intentListPlace: "Перенести список в область" });
 Object.assign(STRINGS.en, { projectToIntent: "Make an idea list", taskToIntent: "Make an idea" });
 Object.assign(STRINGS.ru, { projectToIntent: "Сделать замыслом", taskToIntent: "Сделать замыслом" });
 Object.assign(STRINGS.en, { extraViews: "Focus, backlog and ideas", backlog: "Backlog", addProjectIdea: "Add an idea", bindIntentProject: "Link to a project", unbindIntentProject: "Keep as an area list", intentProjectTaken: "This project already has an idea list", deleteProjectIdeas: "Its {0} ideas will also be deleted. You can undo this." });
@@ -3605,14 +3605,15 @@ class FocusRenderer extends MarkdownRenderChild {
     // it does not move when the row opens. The quiet controls — the ⏳ of the project's pile and the
     // «+» for a step, both under the pointer only — sit after the step, before the date, where their
     // hidden width is whitespace anyway.
-    if (steps.length > 1) {
+    if (steps.length > 1 || (isList && steps.length > 0)) {
       const hidden = steps.slice(1);
+      const extra = hidden.length || 1;
       const more = line.createSpan({ cls: "ft-steps-more",attr:{"data-ft-fold":"true"} });
-      more.setText((open ? "−" : "+") + hidden.length);
+      more.setText((open ? "−" : "+") + extra);
       more.toggleClass("is-open", open);
       // late steps behind the row must not hide behind it: the number turns red
       if (!open && hidden.some((x) => x.date && x.date < today() && !waitingBack(x))) more.addClass("is-late");
-      more.setAttr("aria-label", open ? t("hideSteps") : t("moreSteps", hidden.length));
+      more.setAttr("aria-label", isList ? t(open ? "listCollapse" : "listExpand") : open ? t("hideSteps") : t("moreSteps", hidden.length));
       more.onclick = async (e) => { e.stopPropagation(); await p.toggleShown(key, foldMode); p.refresh(); };
     }
     let text = null;
