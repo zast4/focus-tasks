@@ -127,3 +127,5 @@ A refresh between pointerdown and click must retain the pressed target and deliv
 During partial Sync a private entry whose list is temporarily missing remains in its area default Ideas group. Its UID, raw list binding and bytes remain untouched; restoration of the list restores its place. Converted project note blocks remain scoped to their own idea list.
 
 - Category regressions: stable project captions at normal, 340px and 220px widths; stationary pressed targets through rapid Focus toggles and at the tail after a pause; one category tooltip and contiguous targets; Backlog-only project headers survive local closure; idea lamps survive Select All, replacement and saving with the same UID; loose ideas use the default Ideas row. Run on desktop and touch.
+
+- The area default Ideas group follows the other lists while empty, including after its last idea is completed. Adding or reopening an idea restores its populated position. Check the ordering with real creation and completion controls on desktop and touch.

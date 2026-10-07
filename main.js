@@ -1961,7 +1961,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const loose = p.read().intentTasks.filter(x => x.area === area && (p.unboundIntent(x) || defaultUids.has(x.listUid)));
     const activeLoose = loose.filter(x => ![STATUS_DONE, STATUS_CANCELLED, STATUS_SOMEDAY].includes(x.status)).sort(p.rowOrder());
     this.shown.tasks["intent:area:" + area] = activeLoose.map(x => x.uid);
-    {
+    const renderLoose = async () => {
       const note=p.notes().find(n=>!n.project&&n.area===area)?.file;
       if(note) {
         const ul=block.createEl("ul",{cls:"contains-task-list ft-list"});
@@ -1969,9 +1969,10 @@ class FocusRenderer extends MarkdownRenderChild {
         const body=ul.querySelector("li.ft-steps")||(!activeLoose.length?block:null);
         if(body)for(const list of defaults){const description=splitNote(await p.app.vault.cachedRead(list.file))[1];if(description.trim()){const context=body.createDiv({cls:"ft-intent-description"});await MarkdownRenderer.render(p.app,description,context,list.file.path,this.inner);this.bindMarkdownLinks(context,list.file.path);}}
       }
-    }
-    const looseDone = loose.filter(x => x.status === STATUS_DONE);
-    if (looseDone.length) await this.completed(block.createDiv({ cls: "ft-done-today" }), looseDone);
+      const looseDone = loose.filter(x => x.status === STATUS_DONE);
+      if (looseDone.length) await this.completed(block.createDiv({ cls: "ft-done-today" }), looseDone);
+    };
+    if (activeLoose.length) await renderLoose();
     const scoped = this.intentNotes.filter(x => x.area === area), closed = scoped.filter(x => p.closedIntentList(x));
     const lists = scoped.filter(x => !defaultUids.has(x.uid) && !p.closedIntentList(x)), order = p.data.order.tasks["intent-lists:" + area] || [];
     lists.sort((a, b) => { const ai=order.indexOf(a.uid), bi=order.indexOf(b.uid); return (ai<0?1e9:ai)-(bi<0?1e9:bi) || collator()(a.title,b.title); });
@@ -2004,6 +2005,7 @@ class FocusRenderer extends MarkdownRenderChild {
       }
     }
     await this.completedIntentLists(block, closed, "intent-lists-done:" + area);
+    if (!activeLoose.length) await renderLoose();
     const add = block.createDiv({ cls: "ft-empty ft-empty-add ft-intents-add", text: "+ " + t("newIntentList") });
     add.onclick = () => p.newIntentList({ name: area });
   }
