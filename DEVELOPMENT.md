@@ -155,6 +155,7 @@ future keys keep the All inversion. Project backlog shares explicit later/pagefo
 row/note views; numbers do not depend on control visibility. `scopeTasks` counts effective `collect(false,true)`
 row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
 change numbers. Area Focus stays visible; its category icon is a read-only count, and stale hide preferences are ignored.
+An Other-area Empty creation prompt requires no Focus/Backlog tasks, no active Ideas and no visible Backlog project rows; category folding does not change emptiness.
 Project rows and project-page headings have no add toolbar button. Enter creates the next task; empty categories retain their inline creation prompts.
 Area Backlog opens a separate overview below Focus, with compact project previews. A mixed project
 may have one preview per bucket, but each task appears once. Focus and Backlog expansion preferences

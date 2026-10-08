@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { checkAreaOverviewUI } from './area-overview-ui.mjs';
+import { checkAreaEmptyUI } from './area-empty-ui.mjs';
 // The phone suite: the same plugin in Obsidian's own mobile emulation, driven with touch events on a
 // phone-sized screen. It checks what a finger can reach and what a narrow screen does to the layout —
 // the things the desktop suite cannot see.
@@ -769,6 +770,7 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,true); });
+step("Other areas show Empty only when their tasks and ideas are absent", async () => { await checkAreaEmptyUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
 step("project caption taps survive refresh and long presses open its categories", async () => { await checkProjectCaptionUI(page); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,true); });

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { checkAreaOverviewUI } from './area-overview-ui.mjs';
+import { checkAreaEmptyUI } from './area-empty-ui.mjs';
 // End-to-end test of Focus Tasks in a fresh vault, driven over the Chrome DevTools Protocol.
 //
 // Needs Obsidian running with a DevTools port (any vault open):
@@ -2526,6 +2527,7 @@ step("commands are registered", async () => {
 
 step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
 step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,false); });
+step("Other areas show Empty only when their tasks and ideas are absent", async () => { await checkAreaEmptyUI(page,false); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,false); });
 step("empty project categories create Focus, Backlog and Ideas with correct dates", async () => { await checkProjectCategoryCreateUI(page,false); });

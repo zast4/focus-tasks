@@ -1920,7 +1920,8 @@ class FocusRenderer extends MarkdownRenderChild {
     const intentKey = "intents:" + area.name;
     const focusShown = true, futureShown = p.categoryShown(later);
     const visible = this.scopeRows(area, focusShown, futureShown);
-    this.supplements(title, { key: intentKey, count: this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name), area.name),
+    const ideaCount = this.ideaCount(p.read().intents.filter(x => x.isList && x.area === area.name), area.name);
+    this.supplements(title, { key: intentKey, count: ideaCount,
       focus, later, presentation: all ? "backlog-area" : "focus-area", expanded: open, unfold: async () => { if (!open) await p.toggleShown(key, all); } });
     this.plus(title, t("addToArea"), async () => this.creationView({ area: area.name, project: null, noDate: all }, intentKey, focus, later),
       () => [...box.querySelectorAll(":scope > ul.ft-list")].pop() || title);
@@ -1928,8 +1929,9 @@ class FocusRenderer extends MarkdownRenderChild {
     this.grip(title, { type: "area", area });
     if (!open) return;
     if (visible.rows.length) await this.list(box, visible.rows, { area, all, pile: "focus" });
-    else if (all) {
-      // «Empty» is the first row's placeholder: a click turns it into a new task being typed
+    else if (all && !counts.focus.length && !counts.backlog.length && !ideaCount && !visible.ahead.length) {
+      // A folded or future-only category does not make an area empty.
+      // A truly empty area's prompt creates its first undated task inline.
       const empty = box.createDiv({ cls: "ft-empty ft-empty-add", text: t("empty"), attr: { "aria-label": t("addTask") } });
       empty.onclick = async () => {
         const draft = await this.draft(empty, { area: area.name, project: null, noDate: true });

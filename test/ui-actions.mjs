@@ -6,8 +6,12 @@ export async function guardFixture(page,mobile=false){
 }
 export async function clickUI(page,expr,mobile=false){
  await page.front();
- await page.eval(`const e=${expr};if(!e)throw Error('missing control: '+${J(expr)});e.scrollIntoView({block:'center',behavior:'instant'});return true;`);
- const summary=await page.eval(`const e=(${expr}).closest('.ft-category-picker')?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more'),r=e?.getBoundingClientRect();return r?.width?{x:r.left+r.width/2,y:r.top+r.height/2}:null;`);
+ // Category buttons are hidden until their visible counter is hovered or tapped.
+ // Scroll their picker, rather than the hidden button, before opening it.
+ await page.eval(`const e=${expr};if(!e)throw Error('missing control: '+${J(expr)});(e.closest('.ft-category-picker')||e).scrollIntoView({block:'center',behavior:'instant'});return true;`);
+ // On a phone, tap only a visible counter: its retained rectangle can overlap
+ // a category button after expansion, causing that button to be tapped twice.
+ const summary=await page.eval(`const e=(${expr}).closest('.ft-category-picker')?.querySelector(':scope > .ft-category-total,:scope > .ft-steps-more'),r=e?.getBoundingClientRect(),p=r?.width?{x:r.left+r.width/2,y:r.top+r.height/2}:null;return p&&(!${mobile}||e.contains(document.elementFromPoint(p.x,p.y)))?p:null;`);
  if(summary){if(mobile)await page.tap(summary);else await page.mouse('mouseMoved',summary.x,summary.y,0);await sleep(120);}
  const xy=await until(()=>page.eval(`const e=${expr},r=e?.getBoundingClientRect(),p=r&&{x:r.left+r.width/2,y:r.top+r.height/2};return p&&r.width&&r.height&&e.contains(document.elementFromPoint(p.x,p.y))?p:false;`),'reachable control '+expr);
  if(mobile)await page.tap(xy,60,false);else await page.click(xy,0,false);
