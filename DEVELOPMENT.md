@@ -125,6 +125,8 @@ model: a task is no longer a checkbox line.
 
 ### Intent lists share task rows, not the actionable queue
 
+New idea lists are created from the area context menu, including its touch menu. The Ideas block has no New list footer.
+
 A container is a note with `type: список замыслов`, immutable `uid`, `title`, `intentArea`,
 area `parents` and `intentListVersion: 1`. Its body is list-level context. An entry uses
 `type: замысел`, its own immutable `uid`, `intentList` (full wikilink), `intentListUid`,

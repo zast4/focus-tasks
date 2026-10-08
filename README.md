@@ -109,6 +109,8 @@ An event notification and a native Apple Reminders checkbox are different integr
 An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
 inline category controls in place of the count; on a phone, tap it. Project counts sit next to the project name, reusing
 `+N` is a direct expand button: it opens this project's Focus and Backlog tasks and shows Backlog and Ideas controls. A Backlog-only project shows only Ideas; its Backlog tasks are already visible. Backlog and Ideas controls include zero counts, so those empty categories can be filled. Give a task today's date to bring it into Focus; there is no Add to Focus prompt. Focus is always visible and new Focus tasks receive today's date; Backlog tasks are undated. Ideas use the project's private idea list. Collapse restores the compact preview. Hovering +N does not move the caption. Project headers have no add button; press Enter while editing the last task to create the next one. Empty projects keep an inline first-task prompt. An area shows Empty only when it has no Focus, Backlog or Ideas content; folding categories does not make it empty. Empty and single-step projects, and single-entry idea lists, show no numeric badge. A project's row menu still opens its categories; right-click its caption on desktop or hold it on a phone.
+Create an idea list from the area menu: right-click its heading, or use the heading menu on a phone. Ideas have no separate New list footer.
+
 Focus stays visible. Backlog and Ideas can be opened independently and together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
 When an area is folded, all available controls are dimmed. Clicking one unfolds the area and shows
@@ -390,6 +392,8 @@ Shift+клик выделяет все задачи от последней кл
 выделение задач, а ссылка по UID раскрывает скрытую задачу. В заметках областей и проектов тот же
 компонент. При выборе категорий самого проекта они открываются под одним его заголовком. В заполненной отложке нет кнопки добавления: Enter у последней задачи создаёт следующую без даты. Кнопка «Все» сохраняет прежнее поведение, отдельного общего входа в замыслы нет.
 В области видны самостоятельные списки и подборки её проектов с названиями проектов.
+Новый список замыслов создаётся через меню области: правый клик по заголовку, на телефоне - меню у заголовка. Отдельной кнопки «Новый список» под замыслами нет.
+
 В проекте замыслы показаны обычными строками. Общего заголовка «Замыслы» над списками нет.
 Пустой раздел можно открыть без создания заметок. Подборка проекта создаётся при первом добавлении.
 Существующий список можно привязать к проекту или оставить самостоятельным списком области.

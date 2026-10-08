@@ -290,8 +290,8 @@ const STRINGS = {
 };
 
 let LANG = "en";
-Object.assign(STRINGS.en, { listExpand: "Expand list", listCollapse: "Collapse list", newIntentList: "New list", deleteIntentList: "Delete list", deleteIntentListDesc: "Delete this list and all its items? You can undo this.", intentToFocus: "Move to Focus today", intentToBacklog: "Move to backlog", intentToList: "Move to a list", intentEmpty: "Add an item", intentListPlace: "Move list to an area" });
-Object.assign(STRINGS.ru, { listExpand: "Развернуть список", listCollapse: "Свернуть список", newIntentList: "Новый список", deleteIntentList: "Удалить список", deleteIntentListDesc: "Удалить список со всеми пунктами? Можно отменить.", intentToFocus: "Перенести в фокус сегодня", intentToBacklog: "Перенести в отложку", intentToList: "Перенести в список", intentEmpty: "Добавить пункт", intentListPlace: "Перенести список в область" });
+Object.assign(STRINGS.en, { listExpand: "Expand list", listCollapse: "Collapse list", newIntentList: "New idea list", deleteIntentList: "Delete list", deleteIntentListDesc: "Delete this list and all its items? You can undo this.", intentToFocus: "Move to Focus today", intentToBacklog: "Move to backlog", intentToList: "Move to a list", intentEmpty: "Add an item", intentListPlace: "Move list to an area" });
+Object.assign(STRINGS.ru, { listExpand: "Развернуть список", listCollapse: "Свернуть список", newIntentList: "Новый список замыслов", deleteIntentList: "Удалить список", deleteIntentListDesc: "Удалить список со всеми пунктами? Можно отменить.", intentToFocus: "Перенести в фокус сегодня", intentToBacklog: "Перенести в отложку", intentToList: "Перенести в список", intentEmpty: "Добавить пункт", intentListPlace: "Перенести список в область" });
 Object.assign(STRINGS.en, { projectToIntent: "Make an idea list", taskToIntent: "Make an idea" });
 Object.assign(STRINGS.ru, { projectToIntent: "Сделать замыслом", taskToIntent: "Сделать замыслом" });
 Object.assign(STRINGS.en, { addBacklogTask: "Add to Backlog" });
@@ -2004,8 +2004,6 @@ class FocusRenderer extends MarkdownRenderChild {
     }
     await this.completedIntentLists(block, closed, "intent-lists-done:" + area);
     if (!activeLoose.length) await renderLoose();
-    const add = block.createDiv({ cls: "ft-empty ft-empty-add ft-intents-add", text: "+ " + t("newIntentList") });
-    add.onclick = () => p.newIntentList({ name: area });
   }
 
   async projectIntentsBlock(el, area, project) {
@@ -3339,6 +3337,7 @@ class FocusRenderer extends MarkdownRenderChild {
     }));
     menu.addItem((i) => i.setTitle(t("addToArea")).setIcon("plus").onClick(() => p.addTask(null, { area: area.name, project: null })));
     menu.addItem((i) => i.setTitle(t("newProject")).setIcon("folder-plus").onClick(() => p.newProject(area)));
+    menu.addItem((i) => i.setTitle(t("newIntentList")).setIcon("notebook-pen").onClick(() => p.newIntentList(area)));
     menu.addItem((i) => i.setTitle(t("projectFromNote")).setIcon("file-plus").onClick(() => p.projectFromNote(area)));
     menu.addSeparator();
     this.noteItems(menu, area.note, async () => area.note || await p.createArea(area.name));
@@ -4928,6 +4927,8 @@ module.exports = class FocusTasks extends Plugin {
   newIntentList(area) {
     new NameModal(this.app, t("newIntentList"), t("intentTitle"), async title => {
       await this.createIntentList(title, area.name);
+      delete this.data.folded["area:" + area.name];
+      this.data.opened["area:" + area.name] = true;
       await this.setOpen("intents:" + area.name, true); this.refresh();
     }).open();
   }

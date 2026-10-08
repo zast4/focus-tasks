@@ -30,17 +30,24 @@ export async function checkIntentsUI(page, mobile=false) {
   const area=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='Ideas UI')`;
   const list=`[...${root}.querySelectorAll('.ft-intent-list-row')].find(e=>e.querySelector('.ft-link')?.textContent==='UI List')`;
   const row=title=>`[...${root}.querySelectorAll('li.ft-task')].find(e=>e.querySelector(':scope > .ft-text')?.textContent===${J(title)})`;
-  const words={'📔 Ideas':['📔 Ideas','📔 Замыслы'],'Move to backlog':['Move to backlog','Перенести в отложку'],'Delete list':['Delete list','Удалить список'],'Delete area':['Delete area','Удалить область'],'Reorder':['Reorder','Переставить']};
+  const words={'New idea list':['New idea list','Новый список замыслов'],'📔 Ideas':['📔 Ideas','📔 Замыслы'],'Move to backlog':['Move to backlog','Перенести в отложку'],'Delete list':['Delete list','Удалить список'],'Delete area':['Delete area','Удалить область'],'Reorder':['Reorder','Переставить']};
   const menu=title=>`[...document.querySelectorAll('.menu-item')].find(e=>${J(words[title]||[title])}.some(t=>e.textContent.includes(t)))`;
   await page.eval(`if(!['focus-tasks-e2e','focus-tasks-mobile'].includes(app.vault.getName()))throw Error('test vault guard');const p=app.plugins.plugins['focus-tasks'];window.__intentUITaskCount=p.tasks().length;delete p.data.opened['intents:Ideas UI'];p.saveFolds();await p.createArea('Ideas UI');await app.commands.executeCommandById('focus-tasks:open');p.app.saveLocalStorage('focus-tasks-all','1');p.data.opened['area:Ideas UI']=true;p.saveFolds();p.refresh();return true;`);
   await until(()=>page.eval(`return !!(${area});`),'idea area visible');
   if(await page.eval(`return !!${root}.querySelector('.ft-intents-toggle,.ft-intent-card');`))throw Error('old card interface remains');
   if(await page.eval(`return !!(${area}).querySelector('.ft-intents');`))throw Error('ideas opened without area command');
-  if(mobile)await click(`(${area}).querySelector(':scope > .ft-area-title .ft-more')`);
-  else {const at=await page.eval(`const e=(${area}).querySelector(':scope > .ft-area-title');e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);await page.rightClick(at);}
-  await until(()=>page.eval(`return !!(${menu('📔 Ideas')});`),'area ideas menu');
+  const openAreaMenu=async()=>{
+    if(mobile)await click(`(${area}).querySelector(':scope > .ft-area-title .ft-more')`);
+    else {const at=await page.eval(`const e=(${area}).querySelector(':scope > .ft-area-title');e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);await page.rightClick(at);}
+    await until(()=>page.eval(`return !!(${menu('📔 Ideas')})&&!!(${menu('New idea list')});`),'area ideas and creation menu');
+  };
+  await openAreaMenu();
   await click(menu('📔 Ideas'));await until(()=>page.eval(`return !!(${area}).querySelector('.ft-intents');`),'ideas opened per area');
-  await click(`(${area}).querySelector('.ft-intents-add:not(.ft-loose-idea-add)')`);
+  if(await page.eval(`return !!(${area}).querySelector('.ft-intents > .ft-intents-add');`))throw Error('New list footer remains in the Ideas block');
+  await click(`(${area}).querySelector(':scope > .ft-area-title .ft-caret')`);
+  await until(()=>page.eval(`return !(${area}).querySelector('.ft-intents');`),'area folded before creating an idea list');
+  await openAreaMenu();
+  await click(menu('New idea list'));
   await until(()=>page.eval(`return !!document.querySelector('.modal input.ft-input');`),'new list editor');await sleep(mobile?400:100);
   await click(`document.querySelector('.modal input.ft-input')`);await page.type('UI List');await click(`document.querySelector('.modal button.mod-cta')`);
   await until(()=>page.eval(`return !!(${list});`),'list created');
