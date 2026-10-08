@@ -13,11 +13,12 @@ export async function checkProjectDraftUI(page,mobile=false){
  };
  await page.eval(`if(app.vault.getName()!==${J(mobile?'focus-tasks-mobile':'focus-tasks-e2e')})throw Error('fixture guard');const p=app.plugins.plugins['focus-tasks'],area=await p.createArea('Draft placement UI');window.__pd={area:area.path};return true;`);
  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].notes().some(x=>x.area==='Draft placement UI');`),'draft area indexed');
- for(const context of ['pane','area','project','backlog'])for(const action of ['plus','enter','empty']){
+ for(const context of ['pane','area','project','backlog'])for(const action of ['enter','empty']){
   await page.eval(`const p=app.plugins.plugins['focus-tasks'];__pd.name=${J('DP '+context+' '+action)};const f=await p.createProject({name:'Draft placement UI',note:app.vault.getAbstractFileByPath(__pd.area)},__pd.name);__pd.project=f.path;const t=${action==='empty'?'null':`await p.createTask(__pd.name+' first',{area:'Draft placement UI',project:f.basename,projectFile:f},${context==='backlog'?'null':"moment().format('YYYY-MM-DD')"})`};__pd.uid=t?.uid;delete p.data.folded['area:Draft placement UI'];p.data.opened['steps:'+f.path]=false;p.data.opened['future:Draft placement UI']=true;await p.saveFolds();p.setEverything(${context==='backlog'});window.__pdScoped=${['area','project'].includes(context)};if(__pdScoped){const leaf=app.workspace.getLeaf('tab');await leaf.openFile(app.vault.getAbstractFileByPath(${context==='project'?'__pd.project':'__pd.area'}),{state:{mode:'preview'}});}else{const leaf=await p.openView();await leaf.view.renderer.rerendered();}return true;`);
   await until(()=>page.eval(`return !!${root}&&(${context==='project'?`${root}.querySelector('.ft-page')`:row});`),'single-step '+context);
   const text=context==='project'?`${root}.querySelector('li.ft-task .ft-text')`:`(${row}).querySelector('.ft-line > .ft-text')`;
-  if(action==='plus'||action==='empty')await click(context==='project'?`${root}.querySelector('.ft-page-head .ft-plus')`:`(${row}).querySelector('.ft-plus')`);
+  if(await page.eval(`return !!(${context==='project'?root+'.querySelector(".ft-page-head")':row}).querySelector('.ft-plus');`))throw Error('project header still has an add button in '+context);
+  if(action==='empty')await click(context==='project'?`${root}.querySelector('.ft-project-category-add')`:`(${row}).querySelector('.ft-no-step')`);
   else{await click(text);await until(()=>page.eval(`return !!${root}.querySelector('.is-editing');`),'first-step editor');await page.key('Enter');}
   if(action==='empty'){await until(()=>page.eval(`return !!${root}.querySelector('.is-editing');`),'first empty-project draft');await page.type('DP '+context+' '+action+' first');await page.key('Enter');}
   await until(()=>page.eval(`return !!${root}.querySelector('.ft-draft-row .is-editing');`),'new draft in '+context+'/'+action);

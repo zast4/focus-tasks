@@ -45,7 +45,8 @@ export async function checkIntentsUI(page, mobile=false) {
   await click(`document.querySelector('.modal input.ft-input')`);await page.type('UI List');await click(`document.querySelector('.modal button.mod-cta')`);
   await until(()=>page.eval(`return !!(${list});`),'list created');
   if(!await page.eval(`return (${list}).querySelector('.ft-project-icon')?.textContent==='📔';`))throw Error('wrong list emoji');
-  await click(`(${list}).querySelector('.ft-plus')`);
+  if(await page.eval(`return !!(${list}).querySelector('.ft-plus');`))throw Error('idea list still has a hover add button');
+  await click(`(${list}).querySelector('.ft-no-step')`);
   await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'ordinary inline entry');
   await page.type('UI First action');await page.key('Enter');
   await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.some(x=>x.text==='UI First action');`),'inline entry persisted');

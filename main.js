@@ -1448,7 +1448,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const target = { area: area.name, project: b.file.basename, projectFile: b.file, projectUid: b.uid, noDate: true };
     const lastRow = () => [...box.querySelectorAll(":scope > ul.ft-list > li.ft-task, :scope > .ft-future-block ul.ft-list > li.ft-task")].pop();
     // The block's own heading, so the steps stand apart from the note above: the project's row as
-    // it is in the list — 📁 name, the ⏳ that folds its pile (open here by default), the «+».
+    // it is in the list — 📁 name and the ⏳ that folds its pile (open here by default).
     const head = box.createDiv({ cls: "ft-area-title ft-page-head" });
     head.createSpan({ cls: "ft-project-icon", text: "📁" });
     head.createSpan({ cls: "ft-page-name", text: b.file.basename });
@@ -1459,7 +1459,6 @@ class FocusRenderer extends MarkdownRenderChild {
     const ideasShown = p.isShown(intentKey, true);
     const pileShown = p.categoryShown(later);
     this.projectSupplements(head, { key: intentKey, focus, later, count: this.ideaCount(p.projectIntentLists(b)), backlogPrimary:false });
-    this.plus(head, t("addStep"), async () => this.creationView(target, intentKey, focus, later), () => lastRow() || head);
     if (p.categoryShown(focus)) {
       if (counts.focus.length) await this.list(box, counts.focus.map((task) => ({ kind: "task", task })), { area, pile: "focus" });
       else this.projectEmptyTaskAdd(box.createDiv({ cls: "ft-project-empty-focus" }), area.name, b, "focus");
@@ -3688,10 +3687,8 @@ class FocusRenderer extends MarkdownRenderChild {
       const body = li.nextElementSibling?.hasClass("ft-steps") ? li.nextElementSibling : null;
       return body?.querySelector(":scope > ul.ft-list > li:last-child") || li;
     };
-    // «+N» (or «−» when the steps are open) sits by the name: it is part of what the row says, and
-    // it does not move when the row opens. The quiet controls — the ⏳ of the project's pile and the
-    // «+» for a step, both under the pointer only — sit after the step, before the date, where their
-    // hidden width is whitespace anyway.
+    // «+N» (or «−» when the steps are open) sits by the name and keeps its position.
+    // Further tasks are created with Enter; empty projects retain their inline prompt.
     const stepCount = isList ? steps.length : counts.focus.length + counts.backlog.length;
     li.toggleClass("ft-no-steps-counter", stepCount <= 1);
     if (stepCount > 1) {
@@ -3736,8 +3733,6 @@ class FocusRenderer extends MarkdownRenderChild {
     const ideasShown = !isList && open && p.isShown(intentKey, true);
     if (!isList && open) this.projectSupplements(line, {key:intentKey, instanceKey:opts.pile === "ahead" ? intentKey + "::backlog" : intentKey,
       focus, later, count:this.ideaCount(p.projectIntentLists(project)), backlogPrimary:inBacklog});
-    // «+» adds a step and opens the pile, so the new row is not swallowed by +N the moment it is saved
-    this.plus(li, t("addStep"), async () => this.creationView(target(), intentKey, focus, later), anchor);
     if (step) {
       {
         const date = li.createSpan();

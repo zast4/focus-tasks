@@ -51,7 +51,7 @@ export async function checkRowAlignment(page, today, tomorrow, shots) {
           `);
           if(Math.abs(report.actualFont-font)>0.2||Math.abs(report.actualWidth-width)>0.2)throw Error('layout matrix dimensions were not applied');
           if(!report.controls.some(x=>x.selector==='.ft-calendar-status svg'))throw Error('missing calendar fixture '+context);
-          if(report.project&&!report.controls.some(x=>x.selector==='.ft-plus svg'))throw Error('missing hovered project add button '+context);
+          if(report.project&&report.controls.some(x=>x.selector==='.ft-plus svg'))throw Error('unexpected hovered project add button '+context);
           if(name===names[1]&&!report.controls.some(x=>x.selector==='.ft-running svg'))throw Error('missing Waiting control fixture');
           for(const item of report.controls) {
             if(item.w<4||item.h<4)throw Error('zero-size control '+item.selector);

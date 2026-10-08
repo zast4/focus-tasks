@@ -269,8 +269,9 @@ step("the grip opens the area menu; New project uses the area's view without a P
   await until(() => page.eval(`return !!__ft.project('Marathon')`), "Marathon on screen");
 });
 
-step("+ on a project makes steps that point at it, and ⌘1–4 date them while they are typed", async () => {
-  await click(`__ft.at(__ft.project('Marathon').querySelector('.ft-plus'))`);
+step("an empty project creates its first step inline, and ⌘1–4 date further steps typed with Enter", async () => {
+  if(await page.eval(`return !!__ft.project('Marathon').querySelector('.ft-plus');`))throw Error('project still has a hover add button');
+  await click(`__ft.at(__ft.project('Marathon').querySelector('.ft-no-step'))`);
   await editing();
   await page.type("Buy shoes");
   await page.key("Enter");
@@ -876,7 +877,7 @@ step("the last step of a project checked off: the project stays as an empty row,
   await until(() => page.eval(`const r = __ft.project('Cleanup'); return !!r && r.hasClass('is-empty') && !!r.querySelector('.ft-no-step');`),
     "the project kept its row, empty");
   // …and the next step goes straight into it
-  await click(`__ft.at(__ft.project('Cleanup').querySelector('.ft-plus'))`);
+  await click(`__ft.at(__ft.project('Cleanup').querySelector('.ft-no-step'))`);
   await editing();
   await page.type("Order new ones");
   await page.key("Enter");
@@ -2063,7 +2064,7 @@ step("a project's note is its page: the block at the bottom shows its steps, tak
     throw new Error("another project's rows are on the page");
   // the block has a heading of its own — the project's row: 📁 name, and a ⏳ that folds its pile
   const head = await page.eval(`const h = (${block}).querySelector('.ft-page-head'); return h && { name: h.querySelector('.ft-page-name')?.textContent, chip: !!h.querySelector('.ft-later-chip'), plus: !!h.querySelector('.ft-plus') };`);
-  if (!head || head.name !== "Page project" || !head.chip || !head.plus) throw new Error("no heading with the name, the ⏳ and the + over the steps: " + J(head));
+  if (!head || head.name !== "Page project" || !head.chip || head.plus) throw new Error("project heading must keep its name and backlog control without an add button: " + J(head));
   await clickLocal(`__ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`);
   await until(() => page.eval(`return !(${row("Page later")}) && !!(${row("Page today")})`), "the ⏳ folded the pile, today's step stays");
   await clickLocal(`__ft.at((${block}).querySelector('.ft-page-head .ft-later-chip'))`);
