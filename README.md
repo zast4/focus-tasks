@@ -108,7 +108,7 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
 inline category controls in place of the count; on a phone, tap it. Project counts sit next to the project name, reusing
-`+N` is a direct expand button: it opens this project's Focus and Backlog tasks and shows Backlog and Ideas controls. A Backlog-only project shows only Ideas; its Backlog tasks are already visible. The controls include zero counts, so empty categories can still be created. Focus is always visible and new Focus tasks receive today's date; Backlog tasks are undated. Ideas use the project's private idea list. Collapse restores the compact preview. Hovering +N does not move the caption.
+`+N` is a direct expand button: it opens this project's Focus and Backlog tasks and shows Backlog and Ideas controls. A Backlog-only project shows only Ideas; its Backlog tasks are already visible. The controls include zero counts, so empty categories can still be created. Focus is always visible and new Focus tasks receive today's date; Backlog tasks are undated. Ideas use the project's private idea list. Collapse restores the compact preview. Hovering +N does not move the caption. Empty and single-step projects, and single-entry idea lists, show no numeric badge. A project's row menu still opens its categories; right-click its caption on desktop or hold it on a phone.
 Focus stays visible. Backlog and Ideas can be opened independently and together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
 When an area is folded, all available controls are dimmed. Clicking one unfolds the area and shows
@@ -368,6 +368,9 @@ Shift+клик выделяет все задачи от последней кл
 Иконки доступны и при нулевых счётчиках: пустой список можно наполнить. В фокусе новая задача
 получает сегодняшнюю дату, в отложке остаётся без даты, замысел привязывается к проекту.
 Повторное нажатие на счётчик возвращает компактную строку. Наведение на +N не двигает название.
+У пустых проектов и проектов или списков замыслов с одним пунктом числового счётчика нет.
+Категории такого проекта можно раскрыть через его меню: правый клик по названию на компьютере
+или долгое нажатие на название на телефоне.
 
 Фокус остаётся видимым. Отложку и замыслы можно открывать независимо и одновременно.
 Открытые категории обычной яркости, закрытые приглушены. Рамки, фон и подчёркивание отсутствуют.

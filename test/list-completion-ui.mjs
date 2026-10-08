@@ -1,4 +1,5 @@
 import {J,sleep,until} from './cdp.mjs';
+import {toggleProjectUI} from './ui-actions.mjs';
 export async function checkListCompletionUI(page,mobile=false){
  const root=`(window.__lcScoped?[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.focus-tasks-view')].find(x=>x.getBoundingClientRect().width):app.workspace.getLeavesOfType('focus-tasks-view')[0].view.containerEl)`;
  const row=key=>`[...${root}.querySelectorAll('.ft-intent-list-row')].find(e=>e.getAttribute('data-intent-id')===__lc[${J(key)}].uid&&e.getBoundingClientRect().width)`;
@@ -40,8 +41,9 @@ export async function checkListCompletionUI(page,mobile=false){
  // The same empty-list checkbox is present under a project's Ideas and in its own note.
  await page.eval(`const p=app.plugins.plugins['focus-tasks'];delete p.data.opened['intents:List completion UI'];await p.saveFolds();p.refresh();await app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.rerendered();return true;`);
  const boundProject=`${root}.querySelector('li[data-ft-project-path="'+__lc.project+'"]')`;
- await until(()=>page.eval(`return !!(${boundProject})?.querySelector('.ft-steps-more');`),'bound project direct +N');
- if(!await page.eval(`return (${boundProject}).classList.contains('is-open');`))await click(`(${boundProject}).querySelector('.ft-steps-more')`);
+ await until(()=>page.eval(`return !!(${boundProject});`),'bound empty project');
+ if(await page.eval(`return !!(${boundProject}).querySelector('.ft-steps-more');`))throw Error('empty project displays a zero counter');
+ if(!await page.eval(`return (${boundProject}).classList.contains('is-open');`))await toggleProjectUI(page,boundProject,mobile);
  await click(`(${boundProject}).querySelector('.ft-intents-chip')`);
  await until(()=>page.eval(`return !!(${row('bound')})?.querySelector('input[type=checkbox]');`),'bound empty list checkbox');
  await click(`(${row('bound')}).querySelector('input[type=checkbox]')`);await until(()=>status('bound'),'bound list completed');

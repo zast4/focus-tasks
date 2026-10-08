@@ -1,4 +1,5 @@
 import { J, sleep, until } from './cdp.mjs';
+import {toggleProjectUI} from './ui-actions.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -47,12 +48,15 @@ export async function checkIntentsUI(page, mobile=false) {
   await click(`(${list}).querySelector('.ft-plus')`);
   await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'ordinary inline entry');
   await page.type('UI First action');await page.key('Enter');
-  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.some(x=>x.text==='UI First action');`),'inline entry persisted');await page.key('Escape');
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.some(x=>x.text==='UI First action');`),'inline entry persisted');
+  await until(()=>page.eval(`const e=${root}.querySelector('.is-editing');return !!e&&!e.textContent.trim();`),'next idea editor opens after Enter');
+  await page.key('Escape');await until(()=>page.eval(`return !${root}.querySelector('.is-editing');`),'next idea editor cancelled');
   await until(()=>page.eval(`return !!(${row('UI First action')});`),'ordinary idea row');
   if(!await page.eval(`const e=${row('UI First action')};return !!e.querySelector('input[type=checkbox]')&&!!e.querySelector('.ft-date');`))throw Error('idea is not an ordinary task row');
   if(!await page.eval(`return app.plugins.plugins['focus-tasks'].tasks().length===__intentUITaskCount;`))throw Error('inline entry leaked into normal tasks');
   // The shared editor and date shortcut keep the row in its list.
-  if(mobile){await click(`(${list}).querySelector('.ft-steps-more')`);await until(()=>page.eval(`return !(${list}).classList.contains('is-open');`),'single-entry list folded');await click(`(${list}).querySelector('.ft-steps-more')`);await until(()=>page.eval(`return (${list}).classList.contains('is-open');`),'single-entry list reopened');}
+  if(await page.eval(`return !!(${list}).querySelector('.ft-steps-more');`))throw Error('single-entry idea list displays a redundant counter');
+  if(mobile){await toggleProjectUI(page,list,mobile);await until(()=>page.eval(`return !(${list}).classList.contains('is-open');`),'single-entry list folded');await toggleProjectUI(page,list,mobile);await until(()=>page.eval(`return (${list}).classList.contains('is-open');`),'single-entry list reopened');}
   await click(`(${row('UI First action')}).querySelector('.ft-text')`);await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'editing entry');
   await page.key('Meta+1');
   if(!await page.eval(`return !!${root}.querySelector('[contenteditable=true]')&&app.plugins.plugins['focus-tasks'].tasks().length===__intentUITaskCount;`))throw Error('date shortcut promoted or displaced the idea');

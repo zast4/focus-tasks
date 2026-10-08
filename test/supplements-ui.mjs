@@ -1,5 +1,5 @@
 import {J,sleep,until} from './cdp.mjs';
-import {focusRoot as root,guardFixture,clickUI} from './ui-actions.mjs';
+import {focusRoot as root,guardFixture,clickUI,toggleProjectUI} from './ui-actions.mjs';
 export async function checkSupplementsUI(page,mobile=false){
  await guardFixture(page,mobile);
  const area=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='Supplements UI')`;
@@ -18,10 +18,14 @@ export async function checkSupplementsUI(page,mobile=false){
   if(!await page.eval(`return [...(${area}).querySelectorAll('li.ft-project-row:not(.ft-intent-list-row)')].every(r=>!r.classList.contains('is-open'))&&(${area}).querySelector(':scope > .ft-area-title .ft-focus-chip').tagName==='SPAN';`))throw Error('area choice expands projects or exposes a Focus toggle');
  }
  const nameBox=()=>page.eval(`const r=(${row}).querySelector('.ft-project-name').getBoundingClientRect();return {left:r.left,top:r.top};`);
+ const aligned=async()=>{if(mobile)return;const result=await page.eval(`const row=${row},old=row.style.fontSize;try{for(const size of [old,'32px']){row.style.fontSize=size;const n=row.querySelector('.ft-project-name').getBoundingClientRect(),c=row.querySelector('.ft-steps-more').getBoundingClientRect();if(Math.abs(n.top+n.height/2-c.top-c.height/2)>1)return {size,name:n.toJSON(),counter:c.toJSON()};}return null;}finally{row.style.fontSize=old;}`);if(result)throw Error('project counter is off the caption centre: '+JSON.stringify(result));};
+ await aligned();
  const before=await nameBox();
  if(!mobile){const pos=await page.eval(`const r=(${row}).querySelector('.ft-steps-more').getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);await page.mouse('mouseMoved',pos.x,pos.y,0);await sleep(180);const after=await nameBox();if(Math.abs(before.left-after.left)>1||Math.abs(before.top-after.top)>1)throw Error('hovering +N shifts the project caption');}
  if(!mobile){await page.eval(`(${row}).querySelector('.ft-steps-more').focus();return true;`);await page.key('Enter');}else await click(`(${row}).querySelector('.ft-steps-more')`);
  await until(()=>page.eval(`return (${row})?.classList.contains('is-open')&&!!(${area}).querySelector('.ft-later-steps');`),'direct +N expands Focus and Backlog');
+ await aligned();
+ if(!mobile){const after=await nameBox();if(Math.abs(before.left-after.left)>1||Math.abs(before.top-after.top)>1)throw Error('expanding the project shifts its caption');}
  if(!await page.eval(`const a=${area},r=${row};return r.querySelectorAll('button[data-ft-category]').length===2&&!r.querySelector('.ft-focus-chip')&&[...a.querySelectorAll('.ft-text')].filter(e=>e.textContent==='SUP Backlog').length===1&&!a.querySelector('.ft-later-steps .ft-project-category-add');`))throw Error('project has redundant buttons, duplicated tasks or filled Backlog helper');
  for(let i=0;i<2;i++)await click(`(${row}).querySelector('.ft-later-chip')`);
  if(!mobile){await page.eval(`(${row}).querySelector('.ft-intents-chip').focus();app.plugins.plugins['focus-tasks'].refresh();return true;`);await until(()=>page.eval(`return document.activeElement===(${row}).querySelector('.ft-intents-chip');`),'project category restores keyboard focus through redraw');}
@@ -41,7 +45,9 @@ export async function checkSupplementsUI(page,mobile=false){
  // A Backlog-only area has just the Ideas supplement after expanding a project.
  await page.eval(`const p=app.plugins.plugins['focus-tasks'],note=await p.createArea('SUP Queue');__sup.queueArea='SUP Queue';const f=await p.createProject({name:__sup.queueArea,note},'SUP Queue project');__sup.queue=f.path;await p.createTask('SUP Queue task',{area:__sup.queueArea,project:f.basename,projectFile:f,noDate:true},null);p.data.opened['backlog-steps:'+f.path]=false;p.setEverything(true);await p.saveFolds();p.refresh();return true;`);
  const queue=`${root}.querySelector('li[data-ft-project-path="'+__sup.queue+'"]')`;
- await until(()=>page.eval(`return !!(${queue})?.querySelector('.ft-steps-more');`),'Backlog-only project');await click(`(${queue}).querySelector('.ft-steps-more')`);
+ await until(()=>page.eval(`return !!(${queue})?.querySelector('.ft-text');`),'Backlog-only project');
+ if(await page.eval(`return !!(${queue}).querySelector('.ft-steps-more');`))throw Error('single Backlog task displays a redundant counter');
+ await toggleProjectUI(page,queue,mobile);
  if(!await until(()=>page.eval(`const r=${queue};return r?.classList.contains('is-open')&&r.querySelectorAll('button[data-ft-category]').length===1&&!!r.querySelector('.ft-intents-chip')&&!r.querySelector('.ft-focus-chip,.ft-later-chip');`),'Backlog project only offers Ideas'))throw Error('Backlog project has redundant controls');
  await page.eval(`const p=app.plugins.plugins['focus-tasks'];for(const name of [__sup.area,__sup.queueArea]){const a=(await p.collect(true)).find(a=>a.name===name);if(a)await p.removeArea(a);}delete window.__sup;p.setEverything(false);p.refresh();return true;`);
 }

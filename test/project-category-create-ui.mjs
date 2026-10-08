@@ -1,4 +1,5 @@
 import {J,sleep,until} from './cdp.mjs';
+import {toggleProjectUI} from './ui-actions.mjs';
 
 export async function checkProjectCategoryCreateUI(page,mobile=false){
  const expected=mobile?'focus-tasks-mobile':'focus-tasks-e2e';
@@ -24,8 +25,9 @@ export async function checkProjectCategoryCreateUI(page,mobile=false){
   await page.type(title);await page.key('Enter');await page.key('Escape');
   await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],t=[...p.tasks(),...p.read().intentTasks].find(t=>t.text===${J(title)});if(!t||t.area!==__ecc.area)return false;return ${J(kind)}==='intents'?!!t.intent&&p.projectIntentLists(app.vault.getAbstractFileByPath(__ecc.path)).some(l=>p.intentEntries(l).some(x=>x.uid===t.uid)):!t.intent&&p.projectFile(t)?.path===__ecc.path&&t.date===(${J(kind)}==='focus'?__ecc.day:null);`),'correct category note '+title);
  };
- await until(()=>page.eval(`return !!(${header()})?.querySelector('.ft-steps-more');`),'compact Focus-only project');
- await click(`(${header()}).querySelector('.ft-steps-more')`);
+ await until(()=>page.eval(`return !!(${header()})?.querySelector('.ft-text');`),'compact Focus-only project');
+ if(await page.eval(`return !!(${header()}).querySelector('.ft-steps-more');`))throw Error('single-step project displays a redundant counter');
+ await toggleProjectUI(page,header(),mobile);
  await until(()=>page.eval(`const r=${header()};return !!r&&r.querySelectorAll('button[data-ft-category]').length===2&&!r.querySelector('.ft-focus-chip')&&r.querySelector('.ft-later-chip .ft-supplement-count').textContent==='0'&&r.querySelector('.ft-intents-chip .ft-supplement-count').textContent==='0';`),'all three categories on Focus-only project');
  await ensure('backlog',true);
  await create(`(${area()}).querySelector('.ft-later-steps [data-ft-project-category=backlog]')`,'ECC Backlog','backlog');

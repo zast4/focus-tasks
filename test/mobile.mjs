@@ -19,6 +19,7 @@ import { layoutFixture, checkLayoutMatrix, checkCurrentLayout, openLayoutContext
 import { checkIntentsUI } from "./intents-ui.mjs";
 import { checkSupplementsUI } from "./supplements-ui.mjs";
 import { checkListCompletionUI } from "./list-completion-ui.mjs";
+import { checkProjectCaptionUI } from "./project-caption-ui.mjs";
 import { checkIdeaEntitiesUI } from "./idea-entities-ui.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -768,6 +769,7 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
+step("project caption taps survive refresh and long presses open its categories", async () => { await checkProjectCaptionUI(page); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,true); });
 step("empty project categories create Focus, Backlog and Ideas with correct dates", async () => { await checkProjectCategoryCreateUI(page,true); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });

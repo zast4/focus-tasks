@@ -2505,14 +2505,15 @@ class FocusRenderer extends MarkdownRenderChild {
       this.mobileSuppressClick = null;
       // Empty creation prompts are controls. Index refreshes must not cancel
       // their taps through the task text's long-press suppression.
+      const projectCaption = e.target.closest(".ft-project-name")?.closest("li.ft-project-row");
       if (e.pointerType !== "touch" || !e.isPrimary || this.editing ||
-          e.target.closest("a, button, input, textarea, [contenteditable=true], .ft-box, .ft-grip, .ft-date, .ft-running, .ft-priority, .ft-plus, .ft-more, .ft-chip, .ft-steps-more, .ft-category-picker, .ft-project-tag, .ft-place, .ft-no-step")) return;
+          (e.target.closest("a, button, input, textarea, [contenteditable=true], .ft-box, .ft-grip, .ft-date, .ft-running, .ft-priority, .ft-plus, .ft-more, .ft-chip, .ft-steps-more, .ft-category-picker, .ft-project-tag, .ft-place, .ft-no-step") && !projectCaption)) return;
       const row = e.target.closest("li.ft-task[data-ft], .ft-area-title[data-ft]");
       let item = row && this.items?.get(row);
       if (!item) return;
       if (item.type === "area-title") item = { ...item, type: "area" };
       if (item.type === "project" && item.task && e.target.closest(".ft-text")) item = { type: "task", task: item.task };
-      const press = { row, pointerId: e.pointerId, x: e.clientX, y: e.clientY, fired: false };
+      const press = { row, pointerId: e.pointerId, x: e.clientX, y: e.clientY, fired: false, caption: !!projectCaption };
       const fire = () => {
         if (press.fired || !row.isConnected || this.editing) return;
         press.fired = true;
@@ -2524,7 +2525,9 @@ class FocusRenderer extends MarkdownRenderChild {
       const end = ev => { if (ev.pointerId === press.pointerId) cancel(false); };
       const cancel = (suppress = true) => {
         // Refresh/navigation can replace the row before release; ignore that gesture's click too.
-        if (suppress && !press.fired) this.mobileSuppressClick = { row, until: Infinity, cancelled: true };
+        // A caption is also a navigation link. Queued redraws keep its pressed
+        // node alive, so cancelling the hold must preserve its ordinary tap.
+        if (suppress && !press.fired && !press.caption) this.mobileSuppressClick = { row, until: Infinity, cancelled: true };
         clearTimeout(timer);
         window.removeEventListener("pointermove", move, true);
         window.removeEventListener("pointerup", end, true);
@@ -3351,6 +3354,16 @@ class FocusRenderer extends MarkdownRenderChild {
 
   projectMenu(menu, area, project, head) {
     const p = this.plugin;
+    // A lone preview needs no numeric badge. Its categories remain reachable
+    // through the same menu on desktop and touch devices.
+    if (head?.hasClass("ft-project-row") && !head.querySelector(".ft-steps-more") && (!project.intentList || head.querySelector(".ft-text"))) {
+      const key = head.getAttribute("data-ft-steps-key"), open = head.hasClass("is-open");
+      menu.addItem(i => i.setTitle(t(open ? "listCollapse" : "listExpand")).setIcon(open ? "chevrons-up" : "chevrons-down").onClick(async () => {
+        if (project.intentList) await p.toggleShown(key, !!project.looseIdeas);
+        else await p.toggleProjectExpansion(project.file.path, key, head.getAttribute("data-ft-project-bucket") === "backlog" ? "ahead" : undefined, open);
+        p.refresh();
+      }));
+    }
     if (project.looseIdeas) {
       menu.addItem(i=>i.setTitle(t("addIntent")).setIcon("plus").onClick(()=>p.addTask(null,{area:area.name,intentLoose:true,noDate:true})));
       return;
@@ -3613,7 +3626,8 @@ class FocusRenderer extends MarkdownRenderChild {
     const open = (isList ? steps.length > 0 : true) && p.isShown(key, foldMode);
     const step = open ? null : steps[0] || null;
     const li = ul.createEl("li", { cls: "task-list-item ft-task ft-project-row" });
-    if (!isList) { li.setAttr("data-ft-project-path", project.file.path); li.setAttr("data-ft-project-bucket", opts.pile === "ahead" ? "backlog" : "focus"); li.setAttr("data-ft-steps-key", key); }
+    li.setAttr("data-ft-steps-key", key);
+    if (!isList) { li.setAttr("data-ft-project-path", project.file.path); li.setAttr("data-ft-project-bucket", opts.pile === "ahead" ? "backlog" : "focus"); }
     if (isList) { li.addClass("ft-intent-list-row"); li.setAttr("data-intent-id", project.uid); }
     if(project.looseIdeas)li.addClass("ft-loose-ideas-row");
     if (opts.level) li.style.setProperty("--ft-level", String(opts.level));
@@ -3630,7 +3644,7 @@ class FocusRenderer extends MarkdownRenderChild {
       setIcon(fold, open ? "chevron-down" : "chevron-right");
       fold.onclick = async (e) => {
         e.stopPropagation(); if (this.editing || this.held) return;
-        if (!isList) this.pin = { selector: 'li[data-ft-project-path="' + CSS.escape(project.file.path) + '"][data-ft-project-bucket="' + (opts.pile === "ahead" ? "backlog" : "focus") + '"] .ft-steps-more', y: fold.getBoundingClientRect().top };
+        if (!isList) { const selector = li.hasClass("ft-no-steps-counter") ? ".ft-project-name" : ".ft-steps-more"; this.pin = { selector: 'li[data-ft-project-path="' + CSS.escape(project.file.path) + '"][data-ft-project-bucket="' + (opts.pile === "ahead" ? "backlog" : "focus") + '"] ' + selector, y: li.querySelector(selector).getBoundingClientRect().top }; }
         if (isList) await p.toggleShown(key, foldMode);
         else await p.toggleProjectExpansion(project.file.path, key, opts.pile, open);
         p.refresh();
@@ -3678,9 +3692,11 @@ class FocusRenderer extends MarkdownRenderChild {
     // it does not move when the row opens. The quiet controls — the ⏳ of the project's pile and the
     // «+» for a step, both under the pointer only — sit after the step, before the date, where their
     // hidden width is whitespace anyway.
-    if (!isList || steps.length > 0) {
+    const stepCount = isList ? steps.length : counts.focus.length + counts.backlog.length;
+    li.toggleClass("ft-no-steps-counter", stepCount <= 1);
+    if (stepCount > 1) {
       const hidden = steps.slice(1);
-      const extra = isList ? hidden.length || 1 : Math.max(0, counts.focus.length + counts.backlog.length - (open ? 0 : steps.length ? 1 : 0));
+      const extra = Math.max(0, stepCount - (open ? 0 : steps.length ? 1 : 0));
       const more = line.createSpan({ cls: "ft-steps-more",attr:{"data-ft-fold":"true","data-ft-steps-control":key,tabindex:"0",role:"button"} });
       more.setText((open ? "−" : "+") + extra);
       more.toggleClass("is-open", open);
@@ -3768,6 +3784,7 @@ class FocusRenderer extends MarkdownRenderChild {
       li.addClass(open || headerOnly ? "ft-mobile-project-header" : "ft-mobile-project");
       const caption = li.createSpan({ cls: "ft-mobile-project-caption" });
       caption.appendChild(name);
+      if (open && stepCount <= 1) caption.appendChild(li.querySelector(":scope > .ft-fold"));
       // The counter and its supplements are siblings. Keep both in the mobile
       // caption before removing an expanded header's task line.
       for (const control of line.querySelectorAll(":scope > .ft-steps-more, :scope > .ft-category-picker")) caption.appendChild(control);

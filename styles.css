@@ -805,7 +805,8 @@ body:not(.is-mobile) .focus-tasks-view .ft-category-host:focus-within > .ft-date
 }
 
 /* A fold arrow carries no second numeric badge beside the category counters. */
-.focus-tasks-view .ft-line > .ft-steps-more { display: inline-flex; align-items: center; justify-content: center; min-width: 1.4rem; }
+.focus-tasks-view .ft-line > .ft-steps-more { display: inline-flex; align-items: center; justify-content: center; min-width: 1.4rem;
+  vertical-align: top; height: calc(var(--ft-line) * 1em / 0.8); line-height: 1; }
 .focus-tasks-view .ft-steps-more svg { width: 1rem; height: 1rem; }
 
 /* Hover tools belong to a floating strip above the active row. They consume
@@ -873,5 +874,10 @@ body.is-mobile .focus-tasks-view .ft-category-picker { height: 44px; }
 /* Expanded projects keep +N and their two supplemental controls in the caption. */
 .focus-tasks-view .ft-project-categories { flex: 0 0 auto; margin-left: 0.4em; }
 .focus-tasks-view .ft-project-categories > .ft-supplement-switch { position: static; display: inline-flex; opacity: 1; pointer-events: auto; }
+body:not(.is-mobile) .focus-tasks-view .ft-line > .ft-project-categories { vertical-align: top; height: calc(var(--ft-line) * 1em); }
+body:not(.is-mobile) .focus-tasks-view .ft-line > .ft-project-categories > .ft-supplement-switch,
+body:not(.is-mobile) .focus-tasks-view .ft-line > .ft-project-categories > .ft-supplement-switch > .ft-chip { height: 100%; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-fold { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; cursor: pointer; color: var(--text-muted); }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-fold svg { width: 1rem; height: 1rem; }
 .focus-tasks-view .ft-date.is-project[role="img"] { cursor: default; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-project-categories) > .ft-plus { display: inline-flex; }

@@ -159,7 +159,7 @@ Area Backlog opens a separate overview below Focus, with compact project preview
 may have one preview per bucket, but each task appears once. Focus and Backlog expansion preferences
 are separate (`steps:` / `backlog-steps:`), so an expanded Focus project does not expand its Backlog.
 Direct +N expansion keeps one local header at the clicked preview (`project-local-ahead:`) and opens its Focus and Backlog tasks. Expanded projects offer Backlog and Ideas controls, including empty counts; a Backlog-primary project only offers Ideas. Focus has no project toggle. Collapse restores the overview.
-Empty projects retain a +0 expansion entry and a creation placeholder; no empty steps block is rendered. Ideas-only headers
+Empty and single-step projects omit the numeric badge; their row menu can expand the categories. Single-entry idea lists also omit the badge. Empty projects retain a creation placeholder; no empty steps block is rendered. Ideas-only headers
 reserve the checkbox column without offering project completion or a false "no step" placeholder.
 Area category switches reset matching local overrides without opening every project. Filled project Backlog has no add helper; Enter continues its undated list. Empty categories retain their creation entry. `creationView` opens the
 new task's effective destination without changing the task's date. Switching categories clears

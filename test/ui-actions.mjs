@@ -13,3 +13,16 @@ export async function clickUI(page,expr,mobile=false){
  if(mobile)await page.tap(xy,60,false);else await page.click(xy,0,false);
  await sleep(150);
 }
+export async function toggleProjectUI(page,expr,mobile=false){
+ await guardFixture(page,mobile);
+ const control=await page.eval(`const r=${expr};return r?.querySelector('.ft-steps-more')?'counter':r?.classList.contains('is-open')?'arrow':'menu';`);
+ if(control!=='menu')return clickUI(page,`(${expr}).querySelector(${J(control==='counter'?'.ft-steps-more':'.ft-fold')})`,mobile);
+ await page.front();await page.eval(`(${expr}).scrollIntoView({block:'center',behavior:'instant'});return true;`);
+ await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'];return ![...p.views].some(v=>v.busy)&&(typeof __ftLast==='undefined'||Date.now()-__ftLast>700);`),'project menu view settled');
+ if(mobile){await page.eval(`window.__ftProjectMenuReady=null;return true;`);await until(()=>page.eval(`const row=${expr},now=performance.now();if(!row?.isConnected)return false;if(window.__ftProjectMenuReady?.row!==row)window.__ftProjectMenuReady={row,at:now};return now-window.__ftProjectMenuReady.at>=650;`),'project row stable before long press');}
+ const xy=await until(()=>page.eval(`const name=(${expr})?.querySelector('.ft-project-name'),n=name?.getBoundingClientRect(),p=n&&{x:n.left+n.width/2,y:n.top+n.height/2};return p&&name.contains(document.elementFromPoint(p.x,p.y))?p:false;`),'project menu target');
+ if(mobile)await page.tap(xy,650,false);else await page.rightClick(xy,false);
+ const menu="[...document.querySelectorAll('.menu-item')].find(e=>/^(Expand|Collapse) list$|^(Развернуть|Свернуть) список$/.test(e.textContent.trim()))";
+ await until(()=>page.eval(`return !!(${menu});`),'project expansion menu');
+ await clickUI(page,menu,mobile);
+}
