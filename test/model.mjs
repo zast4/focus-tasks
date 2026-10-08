@@ -141,6 +141,76 @@ test("the shelf lists every area's waiting, soonest to look at first", async () 
   eq(names(shelf[1].tasks), ["Elsewhere"], "one whose day came is back among the rows, not on the shelf");
 });
 
+test("a project's first active Waiting step moves its whole hierarchy without a fresh Focus placeholder", async () => {
+  const { app, plugin } = await stand(a => {
+    areaNote(a, "Work"); projectNote(a, "Work", "Launch", { scheduled: TODAY });
+    taskNote(a, "First", { area: "Work", project: "Launch", scheduled: DAY(4) + "T10:30", status: "waiting" });
+    taskNote(a, "Next", { area: "Work", project: "Launch", scheduled: TODAY });
+  });
+  const lead = plugin.tasks().find(t => t.text === "First"), next = plugin.tasks().find(t => t.text === "Next");
+  plugin.data.order.tasks["project:Launch"] = [lead.uid, next.uid];
+  plugin.data.opened["fresh:Areas/Launch.md"] = TODAY;
+  const before = bodyOf(app, "Areas/Launch.md"), scopes = await plugin.collect(false, true), area = scopes[0], project = area.projects[0];
+  eq(project.firstTask.uid, lead.uid); eq(project.date, DAY(4)); eq(project.waitingProject, true);
+  eq(area.rows.length, 0); eq(area.ahead.length, 0); eq(area.focus, 0); eq(area.later, 0);
+  eq((await plugin.collect(false)).length, 0, "waiting work does not keep an empty area in Focus");
+  const shelf = plugin.waitingAll(scopes);
+  eq(shelf[0].rows[0].kind, "project"); eq(names(shelf[0].rows[0].steps), ["First", "Next"]);
+  eq(bodyOf(app, "Areas/Launch.md"), before, "the project note's old fields are untouched");
+  await plugin.setWaiting(lead, false);
+  const returned = (await plugin.collect(false))[0].rows[0];
+  eq(returned.project.waitingProject, false); eq(names(returned.steps), ["First", "Next"]);
+});
+
+test("a project's returning Waiting step keeps its explicit first position", async () => {
+  const { plugin } = await stand(a => {
+    areaNote(a, "Work"); projectNote(a, "Work", "Launch");
+    taskNote(a, "First", { area: "Work", project: "Launch", scheduled: DAY(-1), status: "waiting" });
+    taskNote(a, "Next", { area: "Work", project: "Launch", scheduled: TODAY });
+  });
+  plugin.data.order.tasks["project:Launch"] = ["First", "Next"].map(name => plugin.tasks().find(t => t.text === name).uid);
+  const project = (await plugin.collect(false))[0].projects[0];
+  eq(project.firstTask.text, "First"); eq(names(project.tasks), ["First", "Next"]); eq(project.date, DAY(-1));
+});
+
+test("a Waiting task with an unresolved project link remains on its area's shelf", async () => {
+  const { plugin } = await stand(a => {
+    areaNote(a, "Work");
+    taskNote(a, "Reply", { area: "Work", project: "Missing", scheduled: DAY(3), status: "waiting" });
+  });
+  const scopes = await plugin.collect(false, true), row = plugin.waitingAll(scopes)[0].rows[0];
+  eq(row.kind, "task"); eq(row.task.text, "Reply");
+});
+
+test("a secondary Waiting step has a project row without moving its active first step", async () => {
+  const { plugin } = await stand(a => {
+    areaNote(a, "Work"); projectNote(a, "Work", "Launch");
+    taskNote(a, "First", { area: "Work", project: "Launch", scheduled: TODAY });
+    taskNote(a, "Sent off", { area: "Work", project: "Launch", scheduled: DAY(3), status: "waiting" });
+  });
+  const scopes = await plugin.collect(false, true), area = scopes[0];
+  eq(area.projects[0].waitingProject, false); eq(names(area.rows[0].steps), ["First"]);
+  const waiting = plugin.waitingAll(scopes)[0].rows[0];
+  eq(waiting.kind, "project"); eq(names(waiting.steps), ["Sent off"]);
+});
+
+test("dropping a project into Waiting changes only its first active task and Undo restores it", async () => {
+  const { app, plugin } = await stand(a => {
+    areaNote(a, "Work"); projectNote(a, "Work", "Launch");
+    taskNote(a, "First", { area: "Work", project: "Launch", scheduled: TODAY });
+    taskNote(a, "Next", { area: "Work", project: "Launch", scheduled: TODAY });
+  });
+  const lead = plugin.tasks().find(t => t.text === "First"), next = plugin.tasks().find(t => t.text === "Next");
+  plugin.data.order.tasks["project:Launch"] = [lead.uid, next.uid];
+  const beforeLead = bodyOf(app, lead.file.path), beforeNext = bodyOf(app, next.file.path), area = (await plugin.collect(false))[0];
+  await plugin.drop({ type: "project", area, project: area.projects[0] }, { target: { type: "area-title", area }, into: true, pile: "waiting" }, { tasks: {} });
+  const waiting = (await plugin.collect(false, true))[0].waitingRows[0];
+  eq(waiting.project.waitingProject, true); eq(waiting.steps[0].uid, lead.uid); eq(waiting.steps[0].date, null);
+  eq(bodyOf(app, next.file.path), beforeNext, "other steps retain their dates and status");
+  await plugin.undoLast();
+  eq(bodyOf(app, lead.file.path), beforeLead); eq(bodyOf(app, next.file.path), beforeNext);
+});
+
 test("the moment it is due back, a running task returns to the focus", async () => {
   const { plugin } = await stand((app) => {
     areaNote(app, "Sport");

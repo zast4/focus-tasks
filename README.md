@@ -82,12 +82,12 @@ start undated. A linked custom note can use `area: [[Area note]]` in the block.
 Projects and expanded steps align with loose tasks, as on a project's own page.
 Creating or moving a project uses this view without adding a separate Projects section.
 
-On a phone, folders align with checkboxes and project names align with task text. The normal list
+On a phone, project expansion sits to the left of its folder and name. Tasks and expanded steps share the same checkbox and text columns. The normal list
 has no grip column. Long press opens the menu; Reorder temporarily shows drag handles
 and Done. Text remains a scrolling surface. Done, leaving the list or backgrounding ends the mode.
-Project context sits above its first action; dates and status controls wrap underneath the action. Expanded steps
+Project context sits above its first action; dates and status controls sit above the action, aligned with the text start and wrapping when needed. Expanded steps
 keep the same columns, with `+N` / `−N` opening and folding the project.
-Task previews use the same three-line limit; editing shows the full text. Capture
+Phone task and project titles wrap in full. Undated tasks reserve no empty metadata row; long press and choose Date to schedule them. Capture
 is local immediately; uploading an offline iPhone note still requires Obsidian Sync.
 
 TaskNotes is optional. The plugin reads and writes task notes independently.
@@ -106,10 +106,14 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 ## Idea lists
 
+A new idea shows the **New idea** placeholder and its lightbulb immediately, including the next row created with Enter.
+
 An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
 inline category controls in place of the count; on a phone, tap it. Project counts sit next to the project name, reusing
 `+N` is a direct expand button: it opens this project's Focus and Backlog tasks and shows Backlog and Ideas controls. A Backlog-only project shows only Ideas; its Backlog tasks are already visible. Backlog and Ideas controls include zero counts, so those empty categories can be filled. Give a task today's date to bring it into Focus; there is no Add to Focus prompt. Focus is always visible and new Focus tasks receive today's date; Backlog tasks are undated. Ideas use the project's private idea list. Collapse restores the compact preview. Hovering +N does not move the caption. Project headers have no add button; press Enter while editing the last task to create the next one. Empty projects keep an inline first-task prompt. An area shows Empty only when it has no Focus, Backlog or Ideas content; folding categories does not make it empty. Empty and single-step projects, and single-entry idea lists, show no numeric badge. A project's row menu still opens its categories; right-click its caption on desktop or hold it on a phone.
 Create an idea list from the area menu: right-click its heading, or use the heading menu on a phone. Ideas have no separate New list footer.
+
+Waiting uses the same project previews and expandable steps. If the first active step is waiting, its whole project moves there, without changing the other steps' dates or status. Take that step back to return the project to Focus. Dragging a project into Waiting changes only its first active step.
 
 Focus stays visible. Backlog and Ideas can be opened independently and together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
@@ -363,6 +367,10 @@ Shift+клик выделяет все задачи от последней кл
 
 ### Замыслы
 
+В «Жду» проекты выглядят как в обычном списке и раскрываются на шаги. Если первая активная задача ожидает ответа, весь проект показывается в «Жду»; даты и статусы остальных шагов сохраняются. «Взять обратно» возвращает проект в фокус. Перетаскивание проекта в «Жду» меняет только первый активный шаг.
+
+В новой строке сразу видны подсказка **Новый замысел** и лампочка, в том числе после Enter у предыдущего замысла.
+
 У области видно одно общее число задач фокуса, отложки и замыслов. Наведение или фокус клавиатуры
 заменяют число иконками категорий прямо в строке; на телефоне это происходит касанием. У проекта
 есть обычная кнопка `+N`: она раскрывает его задачи фокуса и отложки и показывает рядом иконки
@@ -421,13 +429,13 @@ Shift+клик выделяет все задачи от последней кл
 раз при открытии области. Новые задачи внутри области или проекта появляются без даты.
 Проекты, отдельные задачи и раскрытые шаги в этой заметке стоят без вложенных отступов.
 Создание и перенос проекта используют этот view, без отдельного раздела "Проекты".
-На телефоне папка стоит в колонке галочек, название проекта - в колонке текста задач.
+На телефоне раскрытие `+N` / `−N` находится слева от папки и названия проекта. Задачи и раскрытые шаги сохраняют общие колонки галочек и текста.
 Обычно ручки скрыты и их колонка отсутствует. Долгое нажатие открывает меню; "Переставить"
 временно показывает ручки и "Готово". За ручку можно тянуть, по тексту прокручивать список.
 "Готово", переход из списка и уход приложения в фон выключают режим. В настройках он не сохраняется.
-Название проекта находится над первым шагом, даты и статусы - под текстом задачи.
+Название проекта находится над первым шагом, даты и статусы - в компактной строке над текстом, с выравниванием по его началу. Ширина текста задачи остаётся полной.
 Раскрытые шаги сохраняют те же колонки; `+N` / `−N` раскрывают и сворачивают проект.
-Превью задач везде ограничено тремя строками; при правке виден полный текст.
+На телефоне названия задач и проектов переносятся и видны полностью. У задачи без даты нет пустой строки метаданных; назначить дату можно через долгое нажатие и пункт «Дата…».
 Офлайн-задача сохраняется на устройство сразу; доставка через Sync требует запущенного Obsidian.
 
 TaskNotes для работы списка не нужен. Если используются повторы, их выполнение

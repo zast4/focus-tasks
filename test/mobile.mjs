@@ -2,6 +2,8 @@
 import { checkAreaOverviewUI } from './area-overview-ui.mjs';
 import { checkAreaEmptyUI } from './area-empty-ui.mjs';
 import { checkProjectMembershipUI } from './project-membership-ui.mjs';
+import {checkMobileCaptionUI} from './mobile-caption-ui.mjs';
+import {checkWaitingProjectUI} from './waiting-project-ui.mjs';
 // The phone suite: the same plugin in Obsidian's own mobile emulation, driven with touch events on a
 // phone-sized screen. It checks what a finger can reach and what a narrow screen does to the layout —
 // the things the desktop suite cannot see.
@@ -585,6 +587,7 @@ step("mobile editing exits reordering and backgrounding clears its temporary sta
 });
 
 step("a quick swipe scrolls task text without a long-press menu or an editor", async () => {
+  await layoutFixture(page,TODAY);
   await openLayoutContext(page,'pane');
   await page.front();
   await page.eval(`const v=[...app.plugins.plugins['focus-tasks'].views].find(v=>v.containerEl===window.__layoutRoot());v.scroller.scrollTop=40;return true;`);
@@ -599,6 +602,7 @@ step("a quick swipe scrolls task text without a long-press menu or an editor", a
 });
 
 step("a second finger cancels a pending task long press", async () => {
+  await layoutFixture(page,TODAY);
   await openLayoutContext(page,'pane');await page.front();
   await page.eval(`window.__layoutRoot().querySelector('li.ft-task .ft-text').scrollIntoView({block:'center'});return true;`);await sleep(180);
   const point=await until(()=>at(`window.__layoutRoot().querySelector('li.ft-task .ft-text')`),'multi-touch task');
@@ -650,7 +654,24 @@ step("refresh cancels a pending mobile long press without leaving listeners acti
   if(state.menu||state.views.some(v=>v.press||v.editing||v.held))throw new Error('old press survived the rebuilt list: '+J(state));
 });
 
+step("short project-task tap survives a refresh between touchstart and touchend", async () => {
+  await layoutFixture(page,TODAY);await openLayoutContext(page,'pane');await page.front();
+  const target=`window.__layoutRoot().querySelector('li.ft-mobile-project .ft-line > .ft-text')`;
+  await page.eval(`(${target}).scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(180);
+  const point=await until(()=>at(target),'project first action to tap');
+  const before=await page.eval(`return await app.vault.cachedRead(app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-0').file);`);
+  await page.touch('touchStart',[point]);
+  await page.eval(`app.plugins.plugins['focus-tasks'].refresh();return true;`);
+  await sleep(60);await page.touch('touchEnd',[]);
+  try {
+    await until(()=>page.eval(`return !!window.__layoutRoot().querySelector('.ft-text.is-editing');`),'short tap still opens the first-step editor');
+    if(await page.eval(`return !!document.querySelector('.menu');`))throw Error('short tap became a long-press menu');
+  } finally {await page.key('Escape');}
+  await until(()=>page.eval(`const t=app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-0');return app.vault.cachedRead(t.file).then(raw=>raw===${J(before)});`),'untouched task note after cancelling the editor');
+});
+
 step("mobile metadata and project controls respond to touch without opening an editor", async () => {
+  await layoutFixture(page, TODAY);
   await openLayoutContext(page, "embedded-focus");
   await page.send('Emulation.setDeviceMetricsOverride', {width:390,height:HEIGHT,deviceScaleFactor:2,mobile:true});
   await tapOn(`window.__layoutRoot()?.querySelector('li.ft-mobile-project .ft-date')`, 'project first step date');
@@ -663,6 +684,26 @@ step("mobile metadata and project controls respond to touch without opening an e
   await tapOn(`([...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent.includes('Решить, когда летим'))) ?.querySelector('.ft-running')`, 'return waiting task');
   await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-3')?.status==='open';`),'waiting control changes the fixture status');
   if(await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('waiting control opened editor');
+});
+
+step("mobile metadata stays above full-width text after clearing its date and Undo", async () => {
+  await layoutFixture(page,TODAY);await openLayoutContext(page,'pane');
+  const title='Разобраться с очень длинным названием задачи, которое должно читаться целиком';
+  const row=`[...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent===${J(title)})`;
+  const snapshot=await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.uid==='ft-ui-5');return {wide:p.everything(),raw:await app.vault.cachedRead(task.file)};`);
+  if(!snapshot.wide)await tapOn(`window.__layoutRoot().querySelector('.ft-all-toggle')`,'show undated tasks during scheduling changes');
+  const placement=async present=>until(()=>page.eval(`const r=${row},text=r?.querySelector('.ft-text'),meta=r?.querySelector('.ft-mobile-meta');if(!text||!meta)return false;const t=text.getBoundingClientRect(),m=meta.getBoundingClientRect();return t.width>0&&Math.abs(t.right-r.getBoundingClientRect().right)<2&&${present?'m.height>0&&m.bottom<=t.top+1&&Math.abs(m.left-t.left)<2':'m.height===0'}&&!r.querySelector('.is-editing');`),'metadata above full-width text '+present);
+  try {
+    await placement(true);
+    await tapOn(`(${row}).querySelector('.ft-date')`,'date above the task');
+    await until(()=>page.eval(`return !!document.querySelector('.ft-picker');`),'leading date opens the calendar');
+    await tapOn(`[...document.querySelectorAll('.ft-picker-foot button')].find(e=>e.textContent==='Убрать дату')`,'clear the task date');
+    await until(()=>page.eval(`return !app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-5')?.date;`),'undated task stays available');
+    await placement(false);await checkCurrentLayout(page,'leading-meta-cleared',SHOTS);
+    await page.key('Meta+z');
+    await until(()=>page.eval(`const t=app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-5');return app.vault.cachedRead(t.file).then(raw=>raw===${J(snapshot.raw)});`),'Undo restores the original task note');
+    await placement(true);await checkCurrentLayout(page,'leading-meta-restored',SHOTS);
+  } finally {await page.eval(`app.plugins.plugins['focus-tasks'].setEverything(${snapshot.wide});return true;`);}
 });
 
 step("mobile long text stays readable while editing and Escape saves without changing task properties", async () => {
@@ -772,6 +813,7 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,true); });
 step("Other areas show Empty only when their tasks and ideas are absent", async () => { await checkAreaEmptyUI(page,true); });
+step("phone project expansion stays left and undated tasks use Date without blank rows", async () => { await checkMobileCaptionUI(page); });
 step("expanded projects follow task dates between Focus and Backlog without Add to Focus", async () => { await checkProjectMembershipUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
 step("project caption taps survive refresh and long presses open its categories", async () => { await checkProjectCaptionUI(page); });
@@ -780,6 +822,7 @@ step("empty project Backlog and Ideas offer creation; task dates place them in F
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });
 step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,true); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,true); });
+step("Waiting carries the first step's project with ordinary previews, expansion and Undo", async () => { await checkWaitingProjectUI(page,true); });
 step("no errors from the plugin in the console", async () => {
   const mine = page.errors.filter((e) => /focus-tasks/.test(e) || /ft-/.test(e));
   if (mine.length) throw new Error(mine.join("\n"));

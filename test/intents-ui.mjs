@@ -6,6 +6,11 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 
+export async function checkIdeaDraft(page, root, placeholder = 'New idea') {
+  const state = await page.eval(`const e=${root}.querySelector('[contenteditable=true]'),row=e?.closest('li.ft-task'),mark=row?.querySelector('.ft-idea-mark'),r=mark?.getBoundingClientRect();return {placeholder:e?.getAttribute('data-placeholder'),hint:e&&getComputedStyle(e,'::before').content,bulb:!!mark?.querySelector('svg')&&r.width>0&&r.height>0,outside:!!mark&&!e?.contains(mark),empty:!e?.textContent.trim()};`);
+  if (state.placeholder !== placeholder || state.hint !== JSON.stringify(placeholder) || !state.bulb || !state.outside || !state.empty) throw Error('new idea must show its own placeholder and bulb before saving: '+J(state));
+}
+
 export async function checkIntentsUI(page, mobile=false) {
   const click=async expr=>{
     await page.front();
@@ -55,9 +60,11 @@ export async function checkIntentsUI(page, mobile=false) {
   if(await page.eval(`return !!(${list}).querySelector('.ft-plus');`))throw Error('idea list still has a hover add button');
   await click(`(${list}).querySelector('.ft-no-step')`);
   await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'ordinary inline entry');
+  await checkIdeaDraft(page, root, mobile ? 'Новый замысел' : 'New idea');
   await page.type('UI First action');await page.key('Enter');
   await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.some(x=>x.text==='UI First action');`),'inline entry persisted');
   await until(()=>page.eval(`const e=${root}.querySelector('.is-editing');return !!e&&!e.textContent.trim();`),'next idea editor opens after Enter');
+  await checkIdeaDraft(page, root, mobile ? 'Новый замысел' : 'New idea');
   await page.key('Escape');await until(()=>page.eval(`return !${root}.querySelector('.is-editing');`),'next idea editor cancelled');
   await until(()=>page.eval(`return !!(${row('UI First action')});`),'ordinary idea row');
   if(!await page.eval(`const e=${row('UI First action')};return !!e.querySelector('input[type=checkbox]')&&!!e.querySelector('.ft-date');`))throw Error('idea is not an ordinary task row');
@@ -72,7 +79,9 @@ export async function checkIntentsUI(page, mobile=false) {
   await page.key('Meta+d');
   await until(()=>page.eval(`const v=app.workspace.activeLeaf.view.renderer,e=${root}.querySelector('[contenteditable=true]'),task=e&&v.items.get(e.closest('li.ft-task'))?.task;return app.plugins.plugins['focus-tasks'].read().intentTasks.filter(x=>x.text==='UI First action').length===2&&task&&task.uid!==${J(originalUid)};`),'duplicate starts editing');
   // CDP does not invoke Electron's native Select All menu accelerator.
-  await page.eval(`const e=${root}.querySelector('[contenteditable=true]');e.focus();getSelection().selectAllChildren(e);return true;`);await page.type('UI Copy action');await page.key('Enter');await page.key('Escape');
+  await page.eval(`const e=${root}.querySelector('[contenteditable=true]');e.focus();getSelection().selectAllChildren(e);return true;`);await page.type('UI Copy action');await page.key('Enter');
+  await until(()=>page.eval(`return !!${root}.querySelector('.ft-draft-row [contenteditable=true]');`),'Enter after an existing idea opens a new idea');
+  await checkIdeaDraft(page, root, mobile ? 'Новый замысел' : 'New idea');await page.key('Escape');
   await until(()=>page.eval(`return !!(${row('UI Copy action')});`),'copy renamed');
   if(!await page.eval(`const v=app.workspace.activeLeaf.view.renderer,r=v.rows().map(([,x])=>x.text);return r.indexOf('UI Copy action')<r.indexOf('UI First action');`))throw Error('duplicate is not above original');
   // Completion uses the same checkbox and the same reversible completed shelf.

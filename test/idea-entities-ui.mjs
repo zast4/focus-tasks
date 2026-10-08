@@ -1,4 +1,5 @@
 import {J,sleep,until} from './cdp.mjs';
+import {checkIdeaDraft} from './intents-ui.mjs';
 export async function checkIdeaEntitiesUI(page,mobile=false){
  const root="app.workspace.getLeavesOfType('focus-tasks-view')[0].view.containerEl";
  const area=`[...${root}.querySelectorAll('.ft-area')].find(e=>e.querySelector(':scope > .ft-area-title .ft-link')?.textContent==='Idea entities UI')`;
@@ -20,8 +21,8 @@ export async function checkIdeaEntitiesUI(page,mobile=false){
    // A metadata refresh between press and release must preserve this creation control's click.
    await page.eval(`app.plugins.plugins['focus-tasks'].refresh();return true;`);await sleep(80);await page.touch('touchEnd',[]);
  }else await click(looseAdd);
- await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'loose editor survives an index refresh during the tap');await page.type('IE Loose possibility');await page.key('Enter');
- await until(()=>page.eval(`return !!${root}.querySelector('.ft-draft-row [contenteditable=true]');`),'Enter opens the next loose idea editor');await page.key('Escape');
+ await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'loose editor survives an index refresh during the tap');await checkIdeaDraft(page,root,mobile?'Новый замысел':'New idea');await page.type('IE Loose possibility');await page.key('Enter');
+ await until(()=>page.eval(`return !!${root}.querySelector('.ft-draft-row [contenteditable=true]');`),'Enter opens the next loose idea editor');await checkIdeaDraft(page,root,mobile?'Новый замысел':'New idea');await page.key('Escape');
  await until(()=>page.eval(`return !${root}.querySelector('[contenteditable=true]');`),'Escape closes the next loose idea editor');
  await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],t=p.read().intentTasks.find(x=>x.text==='IE Loose possibility');return t?.loose&&!t.project&&!p.tasks().some(x=>x.uid===t.uid);`),'private loose idea saved');
  await looseOrder(false);
@@ -53,6 +54,7 @@ export async function checkIdeaEntitiesUI(page,mobile=false){
  if(!mobile){const at=await page.eval(`const h=(${ownPage}).querySelector('.ft-page-head');h.scrollIntoView({block:'center',behavior:'instant'});const r=h.getBoundingClientRect();return {x:r.left+20,y:r.top+4};`);await page.mouse('mouseMoved',at.x,at.y,0);}
  await click(`(${ownPage}).querySelector('.ft-page-head .ft-plus')`);
  await until(()=>page.eval(`return !!(${ownPage}).querySelector('.ft-draft-row .is-editing');`),'own idea note Plus creates editor');
+ await checkIdeaDraft(page,ownPage,mobile?'Новый замысел':'New idea');
  await page.type('IE Own note idea');await page.key('Enter');await page.key('Escape');
  await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],l=p.intentOf(app.vault.getAbstractFileByPath(__ie.Drag));return p.intentEntries(l).some(t=>t.text==='IE Own note idea')&&!p.tasks().some(t=>t.text==='IE Own note idea');`),'own idea note addition stays private');
  await page.eval(`await app.plugins.plugins['focus-tasks'].openView();return true;`);

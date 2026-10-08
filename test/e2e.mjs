@@ -25,6 +25,7 @@ import { checkIntentsUI } from "./intents-ui.mjs";
 import { checkSupplementsUI } from "./supplements-ui.mjs";
 import { checkListCompletionUI } from "./list-completion-ui.mjs";
 import { checkIdeaEntitiesUI } from "./idea-entities-ui.mjs";
+import {checkWaitingProjectUI} from './waiting-project-ui.mjs';
 import { checkHoverLayoutUI } from "./hover-layout-ui.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -2530,6 +2531,7 @@ step("idea lists use area menus, shared task rows, explicit promotion and Undo",
 step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,false); });
 step("Other areas show Empty only when their tasks and ideas are absent", async () => { await checkAreaEmptyUI(page,false); });
 step("expanded projects follow task dates between Focus and Backlog without Add to Focus", async () => { await checkProjectMembershipUI(page,false); });
+step("Waiting carries the first step's project with ordinary previews, expansion and Undo", async () => { await checkWaitingProjectUI(page,false); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,false); });
 step("empty project Backlog and Ideas offer creation; task dates place them in Focus", async () => { await checkProjectCategoryCreateUI(page,false); });

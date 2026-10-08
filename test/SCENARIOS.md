@@ -42,10 +42,13 @@ Checks: shared supplement UI matrix and row/mobile layout checks at multiple wid
 
 ## Idea containers and activation
 
+Waiting shares ordinary project previews and expandable steps. Cover a single Waiting step with a stale fresh-project flag, a first Waiting step followed by unchanged open steps, a secondary Waiting step, Take it back, native project dragging into Waiting, and Undo. Pending project steps never appear as tags to the right of tasks.
+
 | Action | Required result |
 | --- | --- |
 | Open Ideas in any area | A default virtual "Ideas" row is present even when empty; this creates no file and cannot complete the area. |
 | Add a loose idea | One private UID note in the area, with no list/project link and no Calendar event. |
+| Start an idea or continue it with Enter | The unsaved row shows New idea and a visible lightbulb outside the editable text; ordinary task placeholders stay unchanged. |
 | Add in project Ideas | One entry in that project's private list; canonical task counts do not change. |
 | Complete an exhausted list | The user ticks the list checkbox; contents and UID remain in its private Done shelf. |
 | Complete a list with active entries | Refused, including externally reopened entries not yet reflected by the cache. |
@@ -128,3 +131,9 @@ During partial Sync a private entry whose list is temporarily missing remains in
 - The area default Ideas group follows the other lists while empty, including after its last idea is completed. Adding or reopening an idea restores its populated position. Check the ordering with real creation and completion controls on desktop and touch.
 
 - Project categories override their area defaults: click through local Backlog/Ideas combinations with Focus fixed, including all legacy area preference combinations. Closing the last local Backlog or Ideas category retains the project header and its controls for reopening, without stray carets or task checkboxes. The area's Focus and Backlog preferences do not change. An area category choice clears this local header preference in its own area; renames preserve it and deleting a project clears it. Run on desktop and touch.
+
+Mobile captions: project expansion is left of the folder/name and has a 44px target. Task and project titles wrap without truncation; dates and status controls sit above the action and align with its beginning, without stealing text width. Empty scheduling metadata reserves no row. The Date action remains reachable through the native long-press menu for undated tasks. Verify normal/reordering layouts at 320/390/430px and 18/22/26px fonts in embedded Focus, pane, area and project views, including expanded projects and editing.
+
+Mobile metadata: tap the leading date, clear it and undo. The undated task remains reachable, empty metadata takes no space, checkbox/text alignment stays intact, and Undo restores the exact task note and the leading date.
+
+A refresh between native touchstart and touchend must preserve a short tap on the first project action and open its inline editor. A held press interrupted by refresh must still be cancelled; swiping and a second finger keep their existing cancellation behavior.

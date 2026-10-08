@@ -154,7 +154,7 @@ body.ft-drag-active, body.ft-drag-active * { user-select: none !important; curso
 /* In-place editing of a task's text, and the empty row of the header "+". */
 .focus-tasks-view .ft-text { cursor: text; }
 .focus-tasks-view .ft-text.is-editing { outline: none; background: var(--background-modifier-hover); border-radius: 4px; box-shadow: 0 0 0 3px var(--background-modifier-hover); white-space: pre-wrap; }
-.focus-tasks-view .ft-text[data-placeholder]:empty::before { content: attr(data-placeholder); color: var(--text-faint); }
+.focus-tasks-view :is(.ft-text, .ft-idea-editor)[data-placeholder]:empty::before { content: attr(data-placeholder); color: var(--text-faint); }
 
 /* The date on the right: one column, one format; a click opens the picker. */
 /* The date takes the room it needs, flush right; nothing hangs off it, so no gap opens beside a
@@ -585,14 +585,14 @@ body.is-mobile .ft-intent-modal textarea { font-size: 16px; min-height: 8rem; }
 .focus-tasks-view .ft-found { animation: ft-found 1.4s ease-out; }
 @keyframes ft-found { from { background-color: color-mix(in srgb, var(--text-accent) 22%, transparent); } to { background-color: transparent; } }
 
-/* Mobile layout contract: one checkbox column, full-width action, wrapping metadata underneath.
+/* Mobile layout contract: one checkbox column, full-width action, leading metadata above it.
    Project steps keep these columns even when expanded: nesting on a narrow screen costs text.
    Controls stay in the DOM with their original handlers; desktop retains its inline layout. */
 body.is-mobile .focus-tasks-view { --ft-mobile-box: 1; --ft-mobile-text: 2; --ft-mobile-inset: calc(var(--ft-col) + 0.2rem); }
 body.is-mobile .focus-tasks-view.ft-reordering { --ft-mobile-box: 2; --ft-mobile-text: 3; --ft-mobile-inset: calc(1.7rem + var(--ft-col) + 0.4rem); }
 body.is-mobile .focus-tasks-view li.ft-task {
-  --ft-action-row: 1;
-  --ft-meta-row: 2;
+  --ft-action-row: 2;
+  --ft-meta-row: 1;
   display: grid; grid-template-columns: var(--ft-col) minmax(0, 1fr); column-gap: 0.2rem;
   margin-left: 0 !important;
 }
@@ -614,7 +614,7 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-line {
   display: block; -webkit-line-clamp: none; overflow: visible; overflow-wrap: anywhere;
 }
 body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line > .ft-text {
-  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; line-height: var(--ft-line);
+  display: block; -webkit-line-clamp: none; overflow: visible; line-height: var(--ft-line);
 }
 body.is-mobile .focus-tasks-view li.ft-mobile-project > .ft-line > .ft-text.is-editing {
   display: block; -webkit-line-clamp: none; overflow: visible;
@@ -627,7 +627,7 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-grip {
 }
 body.is-mobile .focus-tasks-view .ft-mobile-meta {
   grid-column: var(--ft-mobile-text) / -1; grid-row: var(--ft-meta-row);
-  display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center;
+  display: flex; flex-wrap: wrap; justify-content: flex-start; align-items: center;
   gap: 0.15rem 0.35rem; min-width: 0;
 }
 body.is-mobile .focus-tasks-view .ft-mobile-meta > :is(.ft-date, .ft-running, .ft-due, .ft-project-tag, .ft-place) {
@@ -647,7 +647,7 @@ body.is-mobile .focus-tasks-view .ft-mobile-meta > .ft-priority::after {
   content: ""; position: absolute; width: 0.45rem; height: 0.45rem; border: 1px solid var(--text-faint);
   border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%);
 }
-body.is-mobile .focus-tasks-view li.ft-mobile-project { --ft-action-row: 2; --ft-meta-row: 3; }
+body.is-mobile .focus-tasks-view li.ft-mobile-project { --ft-action-row: 3; --ft-meta-row: 2; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption {
   grid-column: var(--ft-mobile-box) / -1; grid-row: 1; display: flex; align-items: center;
   gap: 0.3rem; min-width: 0; padding-bottom: 0.2rem; font-size: 0.85em; line-height: 1.5;
@@ -757,9 +757,9 @@ body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-pag
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-plus { grid-column: 3; grid-row: 1; }
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-more { grid-column: 4; grid-row: 1; }
 body.is-mobile .focus-tasks-view :is(.ft-area-page-head,.ft-page-head) > .ft-supplement-switch { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption { display: grid; grid-template-columns: minmax(0,1fr) auto auto; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name { grid-column: 1; grid-row: 1; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more { grid-column: 2; grid-row: 1; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption { display: grid; grid-template-columns: auto minmax(0,1fr); align-items: start; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name { grid-column: 2; grid-row: 1; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-steps-more { grid-column: 1; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-plus { grid-column: 3; grid-row: 1; }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-supplement-switch { grid-column: 1 / -1; grid-row: 2; justify-self: end; }
 body.is-mobile .focus-tasks-view .ft-project-ideas-slot { margin-left: 0; }
@@ -844,8 +844,6 @@ body.is-mobile .focus-tasks-view .ft-area-caption > .ft-category-picker { margin
 body.is-mobile .focus-tasks-view .ft-category-expand { min-width: 44px; height: 44px; }
 
 .focus-tasks-view .ft-area-caption:has(.ft-category-picker.is-open) > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-category-picker.is-open) > .ft-project-name { min-width: 0; overflow: hidden; white-space: nowrap; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-category-picker.is-open) > .ft-project-name > .ft-link { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .focus-tasks-view :is(.ft-area-title.ft-categories-tight,.ft-area-title.ft-category-measure) > :is(.ft-plus,.ft-more) { display: none !important; }
 
@@ -880,4 +878,33 @@ body:not(.is-mobile) .focus-tasks-view .ft-line > .ft-project-categories > .ft-s
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-fold { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 24px; min-height: 24px; cursor: pointer; color: var(--text-muted); }
 body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-fold svg { width: 1rem; height: 1rem; }
 .focus-tasks-view .ft-date.is-project[role="img"] { cursor: default; }
-body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(.ft-project-categories) > .ft-plus { display: inline-flex; }
+/* Mobile titles stay readable; invisible scheduling controls do not add a blank row. */
+body.is-mobile .focus-tasks-view li.ft-task > .ft-text {
+  display: block; -webkit-line-clamp: none; overflow: visible; overflow-wrap: anywhere;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-meta:not(:has(> :not(.ft-date.is-empty, .ft-date.is-bare, .ft-running.is-offer))):not(:has(> .is-active)) { display: none; }
+body.is-mobile .focus-tasks-view .ft-mobile-meta > .ft-date:is(.is-empty, .is-bare):not(.is-active) { display: none; }
+
+/* A project's single expansion target leads the caption, with supplements below its name. */
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > :is(.ft-steps-more, .ft-fold) {
+  grid-column: 1; grid-row: 1; min-width: 44px; min-height: 44px; margin: 0;
+  align-self: start; box-sizing: border-box;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name {
+  align-items: flex-start; overflow: visible; white-space: normal;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption:has(> .ft-steps-more, > .ft-fold) > .ft-project-name {
+  padding-top: max(0px, calc((44px - 1.5em) / 2));
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption .ft-project-icon { line-height: 1.5; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-name > .ft-link {
+  flex: 1; display: block; overflow: visible; text-overflow: clip; white-space: normal; overflow-wrap: anywhere;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-project-categories {
+  grid-column: 2; grid-row: 2; justify-self: start; margin: 0;
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption:not(:has(> .ft-steps-more, > .ft-fold)) {
+  grid-template-columns: minmax(0,1fr);
+}
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption:not(:has(> .ft-steps-more, > .ft-fold)) > :is(.ft-project-name, .ft-project-categories) { grid-column: 1; }
+body.is-mobile .focus-tasks-view .ft-mobile-project-caption > .ft-plus { display: none; }

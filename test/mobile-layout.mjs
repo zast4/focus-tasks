@@ -129,9 +129,11 @@ function inspectLayout() {
       if(Math.abs(parseFloat(separator.left)-column)>2||Math.abs(parseFloat(separator.right))>1)fail('separator off text column',row);
     }
     if(t&&b) {
+      const input=row.querySelector(':scope > .ft-box > input[type=checkbox]');
+      if(input){const style=getComputedStyle(input);if(!visible(input)||style.visibility==='hidden'||Number(style.opacity)===0)fail('task checkbox is invisible',row);}
       const line=parseFloat(getComputedStyle(text).lineHeight);
-      const expected=text.classList.contains('is-editing')?text.scrollHeight:Math.min(text.scrollHeight,line*3);
-      if(Math.abs(text.clientHeight-expected)>2)fail('task preview or editor clips the wrong number of lines',row);
+      const expected=text.scrollHeight;
+      if(Math.abs(text.clientHeight-expected)>2)fail('task title or editor is clipped',row);
       if(Math.abs((b.top+b.height/2)-(t.top+line/2))>2)fail('checkbox off first text line',row);
       if(t.width<r.right-t.left-2)fail('metadata compresses title',row);
       if(text.scrollWidth>text.clientWidth+1)fail('title scrolls horizontally',row);
@@ -139,30 +141,39 @@ function inspectLayout() {
     }
     if(g&&b&&(Math.abs((g.top+g.height/2)-(b.top+b.height/2))>2))fail('grip off checkbox line',row);
     const caption=row.querySelector('.ft-mobile-project-caption');
-    const more=caption?.querySelector('.ft-steps-more');
+    const more=caption?.querySelector('.ft-steps-more'),expand=more||caption?.querySelector(':scope > .ft-fold');
+    if(caption){const name=caption.querySelector('.ft-project-name'),link=caption.querySelector('.ft-link');if(expand&&rect(expand).right>rect(name).left+1)fail('project expansion is not left of its name',row);if(caption.querySelector('.ft-plus'))fail('project header still has an add button',row);if(row.classList.contains('ft-no-steps-counter')&&more)fail('single-step project has a numeric badge',row);if(link&&link.scrollWidth>link.clientWidth+1)fail('project name is truncated',row);}
+    const meta=row.querySelector(':scope > .ft-mobile-meta');if(meta&&[...meta.children].every(e=>e.matches('.ft-date.is-empty:not(.is-active),.ft-date.is-bare:not(.is-active),.ft-running.is-offer'))&&rect(meta).height>0)fail('empty metadata reserves a blank row',row);
     if(more?.classList.contains('is-late')||more?.classList.contains('is-open')) {
       const probe=document.createElement('span');probe.style.color=more.classList.contains('is-open')?'var(--text-normal)':'var(--text-error)';
       more.parentElement.appendChild(probe);const expected=getComputedStyle(probe).color;probe.remove();
       if(getComputedStyle(more).color!==expected)fail('project count loses overdue/open state colour',row);
     }
-    if(caption&&reference) {
+    if(caption&&reference&&expand){const target=rect(expand),column=rect(reference.querySelector(':scope > .ft-box'));if(Math.abs(target.left-column.left)>2)fail('project expansion off shared checkbox column',row);if(target.width<44||target.height<44)fail('project expansion target below 44px',row);}
+    if(caption&&reference&&!expand) {
       const icon=rect(caption.querySelector('.ft-project-icon')),link=rect(caption.querySelector('.ft-link'));
       const referenceBox=rect(reference.querySelector(':scope > .ft-box')),referenceText=rect(reference.querySelector('.ft-text'));
       if(Math.abs((icon.left+icon.width/2)-(referenceBox.left+referenceBox.width/2))>2)fail('project folder off shared checkbox column',row);
       if(Math.abs(link.left-referenceText.left)>2)fail('project title off shared action column',row);
     }
-    if(caption&&text) {
+    if(caption&&text&&!expand) {
       const icon=rect(caption.querySelector('.ft-project-icon')),link=rect(caption.querySelector('.ft-link'));
       if(rect(caption).bottom>t.top+1)fail('project overlaps action',row);
       if(!icon||Math.abs((icon.left+icon.width/2)-(b.left+b.width/2))>2)fail('project icon off checkbox column',row);
       if(!link||Math.abs(link.left-t.left)>2)fail('project name off title column',row);
     }
     const controls=[...row.querySelectorAll(':scope > .ft-box, :scope > .ft-grip, .ft-date, .ft-running, .ft-priority, .ft-steps-more, .ft-plus, .ft-later-chip, .ft-place, .ft-mobile-project-caption .ft-link')].filter(visible);
+    const metadata=row.querySelector('.ft-mobile-meta');
+    if(t&&visible(metadata)) {
+      const m=rect(metadata),first=[...metadata.children].find(visible);
+      if(m.bottom>t.top+1)fail('metadata is not above the action',row);
+      if(Math.abs(m.left-t.left)>2||first&&Math.abs(rect(first).left-t.left)>2)fail('metadata is not aligned with the action start',row);
+    }
     for(const c of controls) {
       const q=rect(c);
       if(q.width<24||q.height<24)fail('touch target below 24px '+c.className,row);
       if(q.left<0||q.right>innerWidth+1)fail('control outside screen '+c.className,row);
-      if(c.matches('.ft-date,.ft-running,.ft-priority')&&t&&q.top<t.bottom-1)fail('metadata beside title',row);
+      if(c.closest('.ft-mobile-meta')&&t&&q.bottom>t.top+1)fail('metadata overlaps or follows title',row);
       if(t&&overlaps(q,t))fail('control overlaps title '+c.className,row);
     }
     for(let i=0;i<controls.length;i++)for(let j=i+1;j<controls.length;j++)

@@ -6,7 +6,16 @@ export async function setTaskDayUI(page,row,iso,mobile=false){
  await page.front();
  const point=await page.eval(`const e=${row};e.scrollIntoView({block:'center',behavior:'instant'});const r=e.getBoundingClientRect();return {x:r.left+r.width/2,y:r.top+r.height/2};`);
  await sleep(180);if(!mobile)await page.mouse('mouseMoved',point.x,point.y,0);
- await tap(`(${row}).querySelector('.ft-date')`);
+ const hiddenDate=mobile&&await page.eval(`const e=(${row}).querySelector('.ft-date');return !e?.getBoundingClientRect().height;`);
+ if(hiddenDate){
+  await page.eval(`window.__ftDateMenuReady=null;return true;`);
+  await until(()=>page.eval(`const row=${row},now=performance.now();if(!row?.isConnected)return false;if(window.__ftDateMenuReady?.row!==row)window.__ftDateMenuReady={row,at:now};return now-window.__ftDateMenuReady.at>=650;`),'task stable before date menu');
+  const target=await until(()=>page.eval(`const e=(${row}).querySelector('.ft-text'),r=e?.getBoundingClientRect(),p=r&&{x:r.left+r.width/2,y:r.top+r.height/2};return p&&e.contains(document.elementFromPoint(p.x,p.y))?p:false;`),'undated task menu target');
+  await page.tap(target,650,false);
+  const menu="[...document.querySelectorAll('.menu-item')].find(e=>/^(Date|Дата)…$/.test(e.textContent.trim()))";
+  await until(()=>page.eval(`return !!(${menu});`),'undated task Date action');
+  await tap(menu);
+ }else await tap(`(${row}).querySelector('.ft-date')`);
  await until(()=>page.eval(`return !!document.querySelector('.ft-picker-input');`),'task calendar');
  await tap("document.querySelector('.ft-picker-input')");
  const text=iso.slice(8)+'.'+iso.slice(5,7)+'.'+iso.slice(2,4);

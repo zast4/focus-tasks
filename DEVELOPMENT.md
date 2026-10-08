@@ -163,6 +163,8 @@ Area Backlog opens a separate overview below Focus, with compact project preview
 may have one preview per bucket, but each task appears once. Focus and Backlog expansion preferences
 are separate (`steps:` / `backlog-steps:`), so an expanded Focus project does not expand its Backlog.
 Direct +N expansion keeps one local header at the clicked preview (`project-local-ahead:`) and opens its Focus and Backlog tasks. When a bucket has no project row left, dates move the header to the surviving bucket; its original expansion key keeps it open. Expanded projects offer Backlog and Ideas controls, including empty counts; a Backlog-primary project only offers Ideas. Focus has no project toggle. Collapse restores the overview.
+
+Waiting has ordinary project rows with independent `waiting-steps:` expansion. `collect()` includes pending Waiting in the first active step's project order. A first pending step routes the entire active project to `waitingRows`, without rewriting siblings or letting retained fresh/local-header flags create empty Focus rows. Secondary Waiting steps are grouped under their project while its first active step remains in ordinary work. `waitingAll(scopeAreas)` renders these rows; a project drag into Waiting changes only the first active task (same UID), and a drag back to Focus/Backlog opens that step with the destination date. Undo includes this write and the project order.
 Empty and single-step projects omit the numeric badge; their row menu can expand the categories. Single-entry idea lists also omit the badge. Empty projects retain a creation placeholder; no empty steps block is rendered. Ideas-only headers
 reserve the checkbox column without offering project completion or a false "no step" placeholder.
 Area category switches reset matching local overrides without opening every project. Filled project Backlog has no add helper; Enter continues its undated list. Empty categories retain their creation entry. `creationView` opens the
@@ -275,12 +277,14 @@ Focus note, the dedicated pane, area notes and project notes. The same contracts
 expanding a project and during inline editing. Fixtures include long titles, an empty project,
 one-step and multi-step projects, dated Waiting, deadlines and completed project tasks.
 
-Mobile changes must use the shared row layout: checkbox, full-width action text and wrapping
-metadata underneath. Normal mode has no visible grip and no reserved grip cell. Long press opens
+Mobile changes must use the shared row layout: checkbox beside the full-width action text and
+wrapping metadata above it, aligned with the beginning of the text. Phone titles wrap in full, including project names. Project expansion is a single 44px target to the left of its name; supplements stay below the name. Empty metadata is absent from layout, and undated tasks expose Date in their long-press menu. Normal mode has no visible grip and no reserved grip cell. Long press opens
 the menu; Reorder temporarily adds the grip column and a Done toolbar. Drag handles have their own
 touch-action region; short swipes on text keep native scrolling. Done, navigation and backgrounding
 end the mode; it is renderer state, never saved to settings or Sync. Project context uses the same
 cells, and expanded steps do not add indentation. Avoid absolute offsets for task grips.
+
+An index refresh cancels pending long-press timers. If pointerdown retained the live row until click, a short touch release must still open the editor; a held release remains cancelled. Keep scrolling, multi-touch and pointer cancellation covered by native gesture tests.
 
 Before staging any mobile change:
 
