@@ -131,7 +131,7 @@ const STRINGS = {
     place: "Put in an area…", toProject: "Make it a project", toProjectDone: "“{0}” is a project now",
     toProjectBusy: "“{0}” cannot become a project: a note with that name already exists",
     dueOn: "Deadline: {0}", priorityLow: "Low priority", priorityNormal: "Normal priority", priorityHigh: "High priority", priorityNone: "No priority",
-    botMark: "Added by a robot, not looked at yet — a click takes the mark off", botMarkOff: "Take the robot's mark off",
+    botMark: "Added by a robot, not looked at yet — a click takes the mark off", botMarkOff: "Take the robot's mark off", botLabel: "Bot",
     projectDated: "Date of the first project task",
     inProgress: "Waiting…", backToWork: "Take it back",
     waitingSince: "In other hands; look again {0}", waitingNoDate: "In other hands; no day set to look again",
@@ -231,7 +231,7 @@ const STRINGS = {
     place: "Положить в область…", toProject: "Сделать проектом", toProjectDone: "«{0}» теперь проект",
     toProjectBusy: "«{0}» не сделать проектом: заметка с таким именем уже есть",
     dueOn: "Дедлайн: {0}", priorityLow: "Низкий приоритет", priorityNormal: "Обычный приоритет", priorityHigh: "Высокий приоритет", priorityNone: "Без приоритета",
-    botMark: "Добавил бот, ещё не смотрел - клик снимает метку", botMarkOff: "Снять метку бота",
+    botMark: "Добавил бот, ещё не смотрел - клик снимает метку", botMarkOff: "Снять метку бота", botLabel: "Бот",
     projectDated: "Дата первой задачи проекта",
     inProgress: "Жду…", backToWork: "Взять обратно",
     waitingSince: "Жду; посмотреть {0}", waitingNoDate: "Жду; день не назначен",
@@ -3621,14 +3621,27 @@ class FocusRenderer extends MarkdownRenderChild {
     tools.addEventListener("click",e=>e.stopPropagation());
   }
 
-  // Mobile metadata gets a leading row above the action. Moving the controls preserves their actions,
+  // Mobile metadata gets a secondary row below the action. Moving the controls preserves their actions,
   // selection and date-picker anchors; task text never competes with a time or a project tag.
   mobileMeta(li) {
     if (!Platform.isMobile) return;
     const controls = [...li.children].filter((el) => el.matches(".ft-date, .ft-running, .ft-priority, .ft-due, .ft-project-tag, .ft-place"));
     if (!controls.length) return;
     const meta = li.createSpan({ cls: "ft-mobile-meta" });
-    for (const el of controls) meta.appendChild(el);
+    for (const [group, names] of [["ft-meta-info", ["ft-date", "ft-due", "ft-project-tag", "ft-place"]], ["ft-meta-actions", ["ft-priority", "ft-running"]]]) {
+      const ordered = names.flatMap(name => controls.filter(el => el.hasClass(name)));
+      if (!ordered.length) continue;
+      const host = meta.createSpan({ cls: group });
+      for (const el of ordered) {
+        if (el.hasClass("ft-priority")) el.createSpan({ cls: "ft-meta-label", text: t("botLabel") });
+        if (el.hasClass("ft-running")) {
+          setIcon(el, "undo-2");
+          el.createSpan({ cls: "ft-meta-label", text: t("backToWork") });
+          el.setAttr("aria-label", t("backToWork"));
+        }
+        host.appendChild(el);
+      }
+    }
   }
 
   // A project as one row of the list: «📁 Name › its first step  +N  date». The box, the text, the

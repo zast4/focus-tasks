@@ -686,23 +686,64 @@ step("mobile metadata and project controls respond to touch without opening an e
   if(await page.eval(`return !!document.querySelector('.ft-text.is-editing');`))throw new Error('waiting control opened editor');
 });
 
-step("mobile metadata stays above full-width text after clearing its date and Undo", async () => {
+step("mobile area name keeps its position when the count reveals categories", async () => {
+  await layoutFixture(page,TODAY);await openLayoutContext(page,'pane');
+  await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await page.eval(`window.__layoutRoot().style.fontSize='18px';return true;`);
+  const header=`window.__layoutRoot().querySelector('.ft-area-title')`;
+  const measure=()=>page.eval(`const h=${header},n=h.querySelector('.ft-area-caption').firstElementChild,range=document.createRange();range.selectNodeContents(n);const r=range.getClientRects()[0],b=h.getBoundingClientRect();return {x:r.left-b.left,y:r.top-b.top};`);
+  const before=await measure();
+  await tapOn(`(${header}).querySelector('.ft-category-total')`,'area count reveals its categories');
+  try {
+    await until(()=>page.eval(`return (${header}).querySelector('.ft-category-picker').classList.contains('is-open');`),'area categories visible');
+    const after=await measure();
+    if(Math.abs(before.x-after.x)>1||Math.abs(before.y-after.y)>1)throw Error('area name shifts when its count opens: '+J({before,after}));
+  } finally {await page.key('Escape');}
+  const clip=await page.eval(`const r=(${header}).getBoundingClientRect();return {x:Math.max(0,r.x),y:Math.max(0,r.y-8),width:r.width,height:r.height+16,scale:1};`);
+  const shot=await page.send('Page.captureScreenshot',{format:'png',clip});
+  fs.writeFileSync(path.join(SHOTS,'mobile-metadata-area-header.png'),Buffer.from(shot.data,'base64'));
+});
+
+step("mobile metadata groups dates before labelled Bot and Take back actions", async () => {
+  await layoutFixture(page,TODAY);await openLayoutContext(page,'pane');
+  await page.send('Emulation.setDeviceMetricsOverride',{width:390,height:HEIGHT,deviceScaleFactor:2,mobile:true});
+  await page.eval(`window.__layoutRoot().style.fontSize='18px';return true;`);
+  await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.uid==='ft-ui-3');await p.setFields(task,{status:'waiting',priority:'low',scheduled:${J(TODAY+'T00:01:00')},due:moment(${J(TODAY)}).add(1,'day').format('YYYY-MM-DD')});p.refresh();return true;`);
+  const row=`[...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent==='Решить, когда летим в отпуск')`;
+  await until(()=>page.eval(`const r=${row},meta=r?.querySelector('.ft-mobile-meta');return meta?.firstElementChild.classList.contains('ft-meta-info')&&meta.lastElementChild.classList.contains('ft-meta-actions')&&meta.querySelector('.ft-meta-info')?.firstElementChild.classList.contains('ft-date')&&meta.querySelector('.ft-priority')?.textContent==='Бот'&&meta.querySelector('.ft-running')?.textContent==='Взять обратно';`),'scheduled date first and readable mobile action labels');
+  await page.eval(`(${row}).scrollIntoView({block:'center',behavior:'instant'});return true;`);await sleep(180);
+  await checkCurrentLayout(page,'grouped-metadata',SHOTS);
+  const bounds=await page.eval(`const r=(${row}).getBoundingClientRect();return {x:r.left,y:r.top,width:r.width,height:r.height,scale:1};`);
+  const card=await page.send('Page.captureScreenshot',{format:'png',clip:bounds,captureBeyondViewport:false});
+  fs.writeFileSync(path.join(SHOTS,'mobile-metadata-grouped-card.png'),Buffer.from(card.data,'base64'));
+  await tapOn(`(${row}).querySelector('.ft-running')`,'labelled Take back action');
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-3')?.status==='open';`),'return action keeps the task identity');
+  await until(()=>page.eval(`return !!(${row})?.querySelector('.ft-priority')&&!(${row})?.querySelector('.ft-running');`),'returned task shows its remaining Bot action');
+  const snapshot=await page.eval(`const t=app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-3');return {uid:t.uid,text:t.text,status:t.status,date:t.date,at:t.at,due:t.due,area:t.area,project:t.project};`);
+  await tapOn(`(${row}).querySelector('.ft-priority')`,'clear the readable Bot mark');
+  await until(()=>page.eval(`const t=app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-3');return t?.priority!=='low'&&!(${row})?.querySelector('.ft-priority,.ft-running');`),'Bot action removes only its mark');
+  const after=await page.eval(`const t=app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-3');return {uid:t.uid,text:t.text,status:t.status,date:t.date,at:t.at,due:t.due,area:t.area,project:t.project};`);
+  if(J(snapshot)!==J(after))throw Error('Bot action changed unrelated task properties');
+  if(await page.eval(`return !!document.querySelector('.ft-text.is-editing,.menu');`))throw Error('mobile action opened an editor or menu');
+});
+
+step("mobile metadata stays below full-width text after clearing its date and Undo", async () => {
   await layoutFixture(page,TODAY);await openLayoutContext(page,'pane');
   const title='Разобраться с очень длинным названием задачи, которое должно читаться целиком';
   const row=`[...window.__layoutRoot().querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent===${J(title)})`;
   const snapshot=await page.eval(`const p=app.plugins.plugins['focus-tasks'],task=p.tasks().find(t=>t.uid==='ft-ui-5');return {wide:p.everything(),raw:await app.vault.cachedRead(task.file)};`);
   if(!snapshot.wide)await tapOn(`window.__layoutRoot().querySelector('.ft-all-toggle')`,'show undated tasks during scheduling changes');
-  const placement=async present=>until(()=>page.eval(`const r=${row},text=r?.querySelector('.ft-text'),meta=r?.querySelector('.ft-mobile-meta');if(!text||!meta)return false;const t=text.getBoundingClientRect(),m=meta.getBoundingClientRect();return t.width>0&&Math.abs(t.right-r.getBoundingClientRect().right)<2&&${present?'m.height>0&&m.bottom<=t.top+1&&Math.abs(m.left-t.left)<2':'m.height===0'}&&!r.querySelector('.is-editing');`),'metadata above full-width text '+present);
+  const placement=async present=>until(()=>page.eval(`const r=${row},text=r?.querySelector('.ft-text'),meta=r?.querySelector('.ft-mobile-meta');if(!text||!meta)return false;const t=text.getBoundingClientRect(),m=meta.getBoundingClientRect();return t.width>0&&Math.abs(t.right-r.getBoundingClientRect().right)<2&&${present?'m.height>0&&m.top>=t.bottom-1&&Math.abs(m.left-t.left)<2':'m.height===0'}&&!r.querySelector('.is-editing');`),'metadata below full-width text '+present);
   try {
     await placement(true);
-    await tapOn(`(${row}).querySelector('.ft-date')`,'date above the task');
-    await until(()=>page.eval(`return !!document.querySelector('.ft-picker');`),'leading date opens the calendar');
+    await tapOn(`(${row}).querySelector('.ft-date')`,'date below the task');
+    await until(()=>page.eval(`return !!document.querySelector('.ft-picker');`),'lower date opens the calendar');
     await tapOn(`[...document.querySelectorAll('.ft-picker-foot button')].find(e=>e.textContent==='Убрать дату')`,'clear the task date');
     await until(()=>page.eval(`return !app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-5')?.date;`),'undated task stays available');
-    await placement(false);await checkCurrentLayout(page,'leading-meta-cleared',SHOTS);
+    await placement(false);await checkCurrentLayout(page,'lower-meta-cleared',SHOTS);
     await page.key('Meta+z');
     await until(()=>page.eval(`const t=app.plugins.plugins['focus-tasks'].tasks().find(t=>t.uid==='ft-ui-5');return app.vault.cachedRead(t.file).then(raw=>raw===${J(snapshot.raw)});`),'Undo restores the original task note');
-    await placement(true);await checkCurrentLayout(page,'leading-meta-restored',SHOTS);
+    await placement(true);await checkCurrentLayout(page,'lower-meta-restored',SHOTS);
   } finally {await page.eval(`app.plugins.plugins['focus-tasks'].setEverything(${snapshot.wide});return true;`);}
 });
 

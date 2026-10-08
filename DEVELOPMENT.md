@@ -125,7 +125,7 @@ model: a task is no longer a checkbox line.
 
 ### Intent lists share task rows, not the actionable queue
 
-New idea lists are created from the area context menu, including its touch menu. The Ideas block has no New list footer.
+New idea lists are created from the area context menu, including its touch menu. The Ideas block has no New list footer. Empty idea editors keep a native inline box for the caret; the shared idea UI check samples native screenshots to verify the insertion cursor actually blinks before typing and in the next row after Enter.
 
 A container is a note with `type: список замыслов`, immutable `uid`, `title`, `intentArea`,
 area `parents` and `intentListVersion: 1`. Its body is list-level context. An entry uses
@@ -278,7 +278,7 @@ expanding a project and during inline editing. Fixtures include long titles, an 
 one-step and multi-step projects, dated Waiting, deadlines and completed project tasks.
 
 Mobile changes must use the shared row layout: checkbox beside the full-width action text and
-wrapping metadata above it, aligned with the beginning of the text. Phone titles wrap in full, including project names. Project expansion is a single 44px target to the left of its name; supplements stay below the name. Empty metadata is absent from layout, and undated tasks expose Date in their long-press menu. Normal mode has no visible grip and no reserved grip cell. Long press opens
+wrapping metadata below it, aligned with the beginning of the text. Schedule/deadline information precedes a separate action group. All metadata labels share one font size and 1em icons; mobile Bot and Take back actions use visible labels. Area names and numeric counts share their first text baseline. Phone titles wrap in full, including project names. Project expansion is a single 44px target to the left of its name; supplements stay below the name. Empty metadata is absent from layout, and undated tasks expose Date in their long-press menu. Normal mode has no visible grip and no reserved grip cell. Long press opens
 the menu; Reorder temporarily adds the grip column and a Done toolbar. Drag handles have their own
 touch-action region; short swipes on text keep native scrolling. Done, navigation and backgrounding
 end the mode; it is renderer state, never saved to settings or Sync. Project context uses the same

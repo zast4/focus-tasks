@@ -88,6 +88,16 @@ function inspectLayout() {
   const rect=e=>e?.getBoundingClientRect();
   const visible=e=>e&&rect(e).width>0&&rect(e).height>0;
   const errors=[];
+  const textBaseline=el=>{
+    const node=document.createTreeWalker(el,NodeFilter.SHOW_TEXT,{acceptNode:n=>n.textContent.trim()?NodeFilter.FILTER_ACCEPT:NodeFilter.FILTER_SKIP}).nextNode();
+    if(!node)return null;
+    const range=document.createRange();range.setStart(node,0);range.setEnd(node,1);
+    const style=getComputedStyle(node.parentElement),ctx=document.createElement('canvas').getContext('2d');
+    ctx.font=`${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const ascent=ctx.measureText(node.textContent[0]).fontBoundingBoxAscent;
+    if(!Number.isFinite(ascent))throw Error('font baseline measurement unavailable');
+    return range.getBoundingClientRect().top+ascent;
+  };
   const fail=(message,row)=>errors.push(message+': '+row?.textContent.trim().slice(0,110));
   const overlaps=(a,b)=>a&&b&&Math.min(a.right,b.right)-Math.max(a.left,b.left)>1&&Math.min(a.bottom,b.bottom)-Math.max(a.top,b.top)>1;
   const rows=[...root.querySelectorAll('li.ft-task')].filter(visible);
@@ -98,6 +108,11 @@ function inspectLayout() {
     if(!d||d.width<44||d.height<44||d.left<0||d.right>innerWidth+1||d.top<0||d.bottom>innerHeight)errors.push('reordering Done is not reachable');
   }
   for(const header of [...root.querySelectorAll('.ft-area-title')].filter(visible)) {
+    const caption=header.querySelector(':scope > .ft-area-caption'),name=caption?.firstElementChild,picker=caption?.querySelector('.ft-category-picker'),count=picker?.querySelector('.ft-category-total');
+    if(name&&visible(count)&&!picker.classList.contains('is-open')) {
+      const titleBaseline=textBaseline(name),countBaseline=textBaseline(count);
+      if(titleBaseline!==null&&countBaseline!==null&&Math.abs(titleBaseline-countBaseline)>1.5)fail('area name and count have different text baselines',header);
+    }
     const emoji=header.querySelector(':scope > .ft-emoji');
     if(header.matches('.ft-area-page-head')&&!visible(emoji))fail('local area emoji is joined to its name',header);
     if(visible(emoji)&&emoji.textContent) {
@@ -143,7 +158,7 @@ function inspectLayout() {
     const caption=row.querySelector('.ft-mobile-project-caption');
     const more=caption?.querySelector('.ft-steps-more'),expand=more||caption?.querySelector(':scope > .ft-fold');
     if(caption){const name=caption.querySelector('.ft-project-name'),link=caption.querySelector('.ft-link');if(expand&&rect(expand).right>rect(name).left+1)fail('project expansion is not left of its name',row);if(caption.querySelector('.ft-plus'))fail('project header still has an add button',row);if(row.classList.contains('ft-no-steps-counter')&&more)fail('single-step project has a numeric badge',row);if(link&&link.scrollWidth>link.clientWidth+1)fail('project name is truncated',row);}
-    const meta=row.querySelector(':scope > .ft-mobile-meta');if(meta&&[...meta.children].every(e=>e.matches('.ft-date.is-empty:not(.is-active),.ft-date.is-bare:not(.is-active),.ft-running.is-offer'))&&rect(meta).height>0)fail('empty metadata reserves a blank row',row);
+    const meta=row.querySelector(':scope > .ft-mobile-meta');if(meta&&[...meta.querySelectorAll('.ft-date,.ft-running,.ft-priority,.ft-due,.ft-project-tag,.ft-place')].every(e=>e.matches('.ft-date.is-empty:not(.is-active),.ft-date.is-bare:not(.is-active),.ft-running.is-offer'))&&rect(meta).height>0)fail('empty metadata reserves a blank row',row);
     if(more?.classList.contains('is-late')||more?.classList.contains('is-open')) {
       const probe=document.createElement('span');probe.style.color=more.classList.contains('is-open')?'var(--text-normal)':'var(--text-error)';
       more.parentElement.appendChild(probe);const expected=getComputedStyle(probe).color;probe.remove();
@@ -166,14 +181,25 @@ function inspectLayout() {
     const metadata=row.querySelector('.ft-mobile-meta');
     if(t&&visible(metadata)) {
       const m=rect(metadata),first=[...metadata.children].find(visible);
-      if(m.bottom>t.top+1)fail('metadata is not above the action',row);
+      if(m.top<t.bottom-1)fail('metadata is not below the action',row);
       if(Math.abs(m.left-t.left)>2||first&&Math.abs(rect(first).left-t.left)>2)fail('metadata is not aligned with the action start',row);
+      const info=metadata.querySelector('.ft-meta-info'),actions=metadata.querySelector('.ft-meta-actions');
+      if(!info&&!actions)fail('metadata information and actions are not grouped',row);
+      const date=info?.querySelector('.ft-date'),due=info?.querySelector('.ft-due');
+      if(date&&due&&!(date.compareDocumentPosition(due)&Node.DOCUMENT_POSITION_FOLLOWING))fail('deadline comes before the scheduled date',row);
+      const labels=[...metadata.querySelectorAll('.ft-date,.ft-due,.ft-running,.ft-priority,.ft-project-tag,.ft-place')].filter(visible);
+      const fonts=labels.map(e=>parseFloat(getComputedStyle(e).fontSize));
+      if(fonts.length&&Math.max(...fonts)-Math.min(...fonts)>0.5)fail('metadata labels use different font sizes',row);
+      for(const svg of [...metadata.querySelectorAll('svg')].filter(visible)) {
+        const s=rect(svg),font=parseFloat(getComputedStyle(svg).fontSize);
+        if(Math.abs(s.width-font)>1||Math.abs(s.height-font)>1)fail('metadata icons do not follow the label scale',row);
+      }
     }
     for(const c of controls) {
       const q=rect(c);
       if(q.width<24||q.height<24)fail('touch target below 24px '+c.className,row);
       if(q.left<0||q.right>innerWidth+1)fail('control outside screen '+c.className,row);
-      if(c.closest('.ft-mobile-meta')&&t&&q.bottom>t.top+1)fail('metadata overlaps or follows title',row);
+      if(c.closest('.ft-mobile-meta')&&t&&q.top<t.bottom-1)fail('metadata overlaps or precedes title',row);
       if(t&&overlaps(q,t))fail('control overlaps title '+c.className,row);
     }
     for(let i=0;i<controls.length;i++)for(let j=i+1;j<controls.length;j++)

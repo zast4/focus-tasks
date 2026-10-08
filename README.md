@@ -85,9 +85,9 @@ Creating or moving a project uses this view without adding a separate Projects s
 On a phone, project expansion sits to the left of its folder and name. Tasks and expanded steps share the same checkbox and text columns. The normal list
 has no grip column. Long press opens the menu; Reorder temporarily shows drag handles
 and Done. Text remains a scrolling surface. Done, leaving the list or backgrounding ends the mode.
-Project context sits above its first action; dates and status controls sit above the action, aligned with the text start and wrapping when needed. Expanded steps
+Project context sits above its first action; dates and status controls sit below the action, aligned with the text start and wrapping when needed. Expanded steps
 keep the same columns, with `+N` / `−N` opening and folding the project.
-Phone task and project titles wrap in full. Undated tasks reserve no empty metadata row; long press and choose Date to schedule them. Capture
+Phone task and project titles wrap in full. Schedule and deadline appear before the separate Bot and Take back actions; their labels and icons share one scale. Area names and counts share a text baseline. Undated tasks reserve no empty metadata row; long press and choose Date to schedule them. Capture
 is local immediately; uploading an offline iPhone note still requires Obsidian Sync.
 
 TaskNotes is optional. The plugin reads and writes task notes independently.
@@ -106,7 +106,7 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 ## Idea lists
 
-A new idea shows the **New idea** placeholder and its lightbulb immediately, including the next row created with Enter.
+A new idea shows the **New idea** placeholder and its lightbulb immediately, including the next row created with Enter. The empty editor shows a blinking text caret from the start.
 
 An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
 inline category controls in place of the count; on a phone, tap it. Project counts sit next to the project name, reusing
@@ -369,7 +369,7 @@ Shift+клик выделяет все задачи от последней кл
 
 В «Жду» проекты выглядят как в обычном списке и раскрываются на шаги. Если первая активная задача ожидает ответа, весь проект показывается в «Жду»; даты и статусы остальных шагов сохраняются. «Взять обратно» возвращает проект в фокус. Перетаскивание проекта в «Жду» меняет только первый активный шаг.
 
-В новой строке сразу видны подсказка **Новый замысел** и лампочка, в том числе после Enter у предыдущего замысла.
+В новой строке сразу видны подсказка **Новый замысел** и лампочка, в том числе после Enter у предыдущего замысла. В пустом редакторе сразу виден мигающий текстовый курсор.
 
 У области видно одно общее число задач фокуса, отложки и замыслов. Наведение или фокус клавиатуры
 заменяют число иконками категорий прямо в строке; на телефоне это происходит касанием. У проекта
@@ -433,7 +433,7 @@ Shift+клик выделяет все задачи от последней кл
 Обычно ручки скрыты и их колонка отсутствует. Долгое нажатие открывает меню; "Переставить"
 временно показывает ручки и "Готово". За ручку можно тянуть, по тексту прокручивать список.
 "Готово", переход из списка и уход приложения в фон выключают режим. В настройках он не сохраняется.
-Название проекта находится над первым шагом, даты и статусы - в компактной строке над текстом, с выравниванием по его началу. Ширина текста задачи остаётся полной.
+Название проекта находится над первым шагом, даты и статусы - в компактной строке под текстом, с выравниванием по его началу. Ширина текста задачи остаётся полной. Сначала идут дата и дедлайн, затем отдельная группа действий «Бот» и «Взять обратно». Метки имеют общий размер шрифта и значков. Название области и число выровнены по одной текстовой базовой линии.
 Раскрытые шаги сохраняют те же колонки; `+N` / `−N` раскрывают и сворачивают проект.
 На телефоне названия задач и проектов переносятся и видны полностью. У задачи без даты нет пустой строки метаданных; назначить дату можно через долгое нажатие и пункт «Дата…».
 Офлайн-задача сохраняется на устройство сразу; доставка через Sync требует запущенного Obsidian.

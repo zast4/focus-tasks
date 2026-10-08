@@ -1,5 +1,6 @@
 import { J, sleep, until } from './cdp.mjs';
 import {toggleProjectUI} from './ui-actions.mjs';
+import {checkIdeaCaret} from './idea-caret-ui.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,6 +10,7 @@ import { execFileSync } from 'node:child_process';
 export async function checkIdeaDraft(page, root, placeholder = 'New idea') {
   const state = await page.eval(`const e=${root}.querySelector('[contenteditable=true]'),row=e?.closest('li.ft-task'),mark=row?.querySelector('.ft-idea-mark'),r=mark?.getBoundingClientRect();return {placeholder:e?.getAttribute('data-placeholder'),hint:e&&getComputedStyle(e,'::before').content,bulb:!!mark?.querySelector('svg')&&r.width>0&&r.height>0,outside:!!mark&&!e?.contains(mark),empty:!e?.textContent.trim()};`);
   if (state.placeholder !== placeholder || state.hint !== JSON.stringify(placeholder) || !state.bulb || !state.outside || !state.empty) throw Error('new idea must show its own placeholder and bulb before saving: '+J(state));
+  await checkIdeaCaret(page,root);
 }
 
 export async function checkIntentsUI(page, mobile=false) {

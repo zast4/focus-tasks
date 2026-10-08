@@ -31,6 +31,7 @@ export async function checkProjectCategoryCreateUI(page,mobile=false){
   await until(()=>page.eval(`return !!(${row});`),'Backlog task to date');
   await setTaskDayUI(page,row,await page.eval(`return __ecc.day;`),mobile);
   await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().find(t=>t.text===${J(title)})?.date===__ecc.day;`),'dated task enters Focus');
+  await until(()=>page.eval(`const e=${row};return !!e&&!e.closest('.ft-later-steps,.ft-future-block')&&!document.querySelector('.ft-picker')&&!${root}.querySelector('[contenteditable=true]');`),'dated task is visibly in Focus before adding another Backlog task');
   if(await page.eval(`return !!${root}.querySelector('.ft-project-category-add[data-ft-project-category=focus],.ft-project-empty-focus');`))throw Error('redundant Add to Focus remains');
  };
  await until(()=>page.eval(`return !!(${header()})?.querySelector('.ft-text');`),'compact Focus-only project');
