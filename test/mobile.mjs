@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { checkAreaOverviewUI } from './area-overview-ui.mjs';
 import { checkAreaEmptyUI } from './area-empty-ui.mjs';
+import { checkProjectMembershipUI } from './project-membership-ui.mjs';
 // The phone suite: the same plugin in Obsidian's own mobile emulation, driven with touch events on a
 // phone-sized screen. It checks what a finger can reach and what a narrow screen does to the layout —
 // the things the desktop suite cannot see.
@@ -771,10 +772,11 @@ step("phone UID links reveal a renamed project step and Waiting task without ope
 step("idea lists use area menus, shared rows, promotion and narrow phone layout", async () => { await checkIntentsUI(page,true); });
 step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,true); });
 step("Other areas show Empty only when their tasks and ideas are absent", async () => { await checkAreaEmptyUI(page,true); });
+step("expanded projects follow task dates between Focus and Backlog without Add to Focus", async () => { await checkProjectMembershipUI(page,true); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
 step("project caption taps survive refresh and long presses open its categories", async () => { await checkProjectCaptionUI(page); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,true); });
-step("empty project categories create Focus, Backlog and Ideas with correct dates", async () => { await checkProjectCategoryCreateUI(page,true); });
+step("empty project Backlog and Ideas offer creation; task dates place them in Focus", async () => { await checkProjectCategoryCreateUI(page,true); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });
 step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,true); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,true); });

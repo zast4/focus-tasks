@@ -1,5 +1,6 @@
 import {J,sleep,until} from './cdp.mjs';
 import {toggleProjectUI} from './ui-actions.mjs';
+import {setTaskDayUI} from './project-membership-ui.mjs';
 
 export async function checkProjectCategoryCreateUI(page,mobile=false){
  const expected=mobile?'focus-tasks-mobile':'focus-tasks-e2e';
@@ -21,9 +22,16 @@ export async function checkProjectCategoryCreateUI(page,mobile=false){
  const ensure=async(kind,on)=>{if(kind==='focus')return;await until(()=>page.eval(`return !!(${header()});`),'project header');if(await page.eval(`return (${category(kind)}).getAttribute('aria-pressed')==='true';`)!==on)await click(category(kind),true);await until(()=>page.eval(`return (${category(kind)}).getAttribute('aria-pressed')===${J(String(on))};`),'category '+kind+' '+on);};
  const create=async(expr,title,kind)=>{
   await click(expr);await until(()=>page.eval(`return !!${root}.querySelector('[contenteditable=true]');`),'category editor');
-  if(!await page.eval(`const e=${root}.querySelector('[contenteditable=true]');return !!e.closest(${J(kind==='backlog'?'.ft-later-steps,.ft-future-block':kind==='focus'?'.ft-project-empty-focus':'.ft-project-intents')});`))throw Error('draft escaped its '+kind+' list');
+  if(!await page.eval(`const e=${root}.querySelector('[contenteditable=true]');return !!e.closest(${J(kind==='backlog'?'.ft-later-steps,.ft-future-block':'.ft-project-intents')});`))throw Error('draft escaped its '+kind+' list');
   await page.type(title);await page.key('Enter');await page.key('Escape');
   await until(()=>page.eval(`const p=app.plugins.plugins['focus-tasks'],t=[...p.tasks(),...p.read().intentTasks].find(t=>t.text===${J(title)});if(!t||t.area!==__ecc.area)return false;return ${J(kind)}==='intents'?!!t.intent&&p.projectIntentLists(app.vault.getAbstractFileByPath(__ecc.path)).some(l=>p.intentEntries(l).some(x=>x.uid===t.uid)):!t.intent&&p.projectFile(t)?.path===__ecc.path&&t.date===(${J(kind)}==='focus'?__ecc.day:null);`),'correct category note '+title);
+ };
+ const promote=async title=>{
+  const row=`[...${root}.querySelectorAll('li.ft-task:not(.ft-project-row)')].find(e=>e.querySelector('.ft-text')?.textContent===${J(title)})`;
+  await until(()=>page.eval(`return !!(${row});`),'Backlog task to date');
+  await setTaskDayUI(page,row,await page.eval(`return __ecc.day;`),mobile);
+  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].tasks().find(t=>t.text===${J(title)})?.date===__ecc.day;`),'dated task enters Focus');
+  if(await page.eval(`return !!${root}.querySelector('.ft-project-category-add[data-ft-project-category=focus],.ft-project-empty-focus');`))throw Error('redundant Add to Focus remains');
  };
  await until(()=>page.eval(`return !!(${header()})?.querySelector('.ft-text');`),'compact Focus-only project');
  if(await page.eval(`return !!(${header()}).querySelector('.ft-steps-more');`))throw Error('single-step project displays a redundant counter');
@@ -33,20 +41,21 @@ export async function checkProjectCategoryCreateUI(page,mobile=false){
  await create(`(${area()}).querySelector('.ft-later-steps [data-ft-project-category=backlog]')`,'ECC Backlog','backlog');
  const seed=`[...(${area()}).querySelectorAll('li.ft-task')].find(e=>e.querySelector('.ft-text')?.textContent==='ECC Seed Focus')`;
  await click(`(${seed}).querySelector('input[type=checkbox]')`);
- await until(()=>page.eval(`return !!(${area()}).querySelector('.ft-project-empty-focus');`),'Focus empty after completion');
- await ensure('focus',true);
- await create(`(${area()}).querySelector('.ft-project-empty-focus [data-ft-project-category=focus]')`,'ECC New Focus','focus');
+ await until(()=>page.eval(`return (${header()})?.getAttribute('data-ft-project-bucket')==='backlog';`),'project leaves Focus after completion');
+ if(await page.eval(`return !!${root}.querySelector('.ft-project-category-add[data-ft-project-category=focus],.ft-project-empty-focus');`))throw Error('empty Focus offers an unwanted creation button');
+ await promote('ECC Backlog');
  await ensure('intents',true);
  await create(`(${area()}).querySelector('.ft-project-intents .ft-intents-add')`,'ECC Idea','intents');
- await until(()=>page.eval(`return [...(${header()}).querySelectorAll('.ft-supplement-count')].map(x=>x.textContent).join(',')==='1,1';`),'independent populated categories');
+ await until(()=>page.eval(`return [...(${header()}).querySelectorAll('.ft-supplement-count')].map(x=>x.textContent).join(',')==='0,1';`),'dated task and private idea retain independent categories');
  // A project note has the same zero categories and creation semantics, even with a future day.
  await page.eval(`const p=app.plugins.plugins['focus-tasks'],area={name:__ecc.area,note:p.notes().find(n=>!n.project&&n.area===__ecc.area).file},file=await p.createProject(area,'ECC Future page');await p.frontOwned(file,fm=>fm.scheduled=__ecc.future);__ecc.path=file.path;const text=await app.vault.read(file);if(!text.includes('focus-tasks'))await app.vault.append(file,${J('\n```focus-tasks\n```\n')});await app.workspace.getLeaf('tab').openFile(file,{state:{mode:'preview'}});return true;`);
  root="[...app.workspace.activeLeaf.view.containerEl.querySelectorAll('.ft-page')].find(e=>e.getBoundingClientRect().width>0)";header=()=>`(${root})?.querySelector(':scope > .ft-area-title')`;
  await until(()=>page.eval(`return (${header()})?.querySelectorAll('button[data-ft-category]').length===2;`),'visible project note offers Backlog and Ideas');
- await ensure('focus',true);
- await create(`${root}.querySelector('.ft-project-empty-focus [data-ft-project-category=focus]')`,'ECC Future project Focus','focus');
+ if(await page.eval(`return !!${root}.querySelector('.ft-project-category-add[data-ft-project-category=focus],.ft-project-empty-focus');`))throw Error('project page offers an unwanted Add to Focus');
  await ensure('backlog',true);
  await create(`${root}.querySelector('.ft-future-block [data-ft-project-category=backlog]')`,'ECC Future project Backlog','backlog');
+ await promote('ECC Future project Backlog');
+ await create(`${root}.querySelector('.ft-future-block [data-ft-project-category=backlog]')`,'ECC Future project Backlog 2','backlog');
  await ensure('intents',true);
  await create(`${root}.querySelector('.ft-project-intents .ft-intents-add')`,'ECC Future project Idea','intents');
  if(!await page.eval(`const p=app.plugins.plugins['focus-tasks'],file=app.vault.getAbstractFileByPath(__ecc.path),area=p.notes().find(n=>n.file===file)?.area,scope=p.scopeTasks((await p.collect(false,true)).find(a=>a.name===area),file.path);return p.classify(file).date===__ecc.future&&scope.focus.length===1&&scope.backlog.length===1;`))throw Error('project day changed or swallowed an explicit task category');

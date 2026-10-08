@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { checkAreaOverviewUI } from './area-overview-ui.mjs';
 import { checkAreaEmptyUI } from './area-empty-ui.mjs';
+import { checkProjectMembershipUI } from './project-membership-ui.mjs';
 // End-to-end test of Focus Tasks in a fresh vault, driven over the Chrome DevTools Protocol.
 //
 // Needs Obsidian running with a DevTools port (any vault open):
@@ -2528,9 +2529,10 @@ step("commands are registered", async () => {
 step("idea lists use area menus, shared task rows, explicit promotion and Undo", async () => { await checkIntentsUI(page); });
 step("area backlog stays below Focus without expanding every project", async () => { await checkAreaOverviewUI(page,false); });
 step("Other areas show Empty only when their tasks and ideas are absent", async () => { await checkAreaEmptyUI(page,false); });
+step("expanded projects follow task dates between Focus and Backlog without Add to Focus", async () => { await checkProjectMembershipUI(page,false); });
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,false); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,false); });
-step("empty project categories create Focus, Backlog and Ideas with correct dates", async () => { await checkProjectCategoryCreateUI(page,false); });
+step("empty project Backlog and Ideas offer creation; task dates place them in Focus", async () => { await checkProjectCategoryCreateUI(page,false); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,false); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,false); });
 step("hover and keyboard tools never rewrap the task or cover its text", async () => { await checkHoverLayoutUI(page); });

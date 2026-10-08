@@ -156,11 +156,11 @@ row/note views; numbers do not depend on control visibility. `scopeTasks` counts
 row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
 change numbers. Area Focus stays visible; its category icon is a read-only count, and stale hide preferences are ignored.
 An Other-area Empty creation prompt requires no Focus/Backlog tasks, no active Ideas and no visible Backlog project rows; category folding does not change emptiness.
-Project rows and project-page headings have no add toolbar button. Enter creates the next task; empty categories retain their inline creation prompts.
+Project rows and project-page headings have no add toolbar button. Enter creates the next task; empty Backlog and Ideas categories retain their inline creation prompts. Focus has no creation prompt on project rows or pages.
 Area Backlog opens a separate overview below Focus, with compact project previews. A mixed project
 may have one preview per bucket, but each task appears once. Focus and Backlog expansion preferences
 are separate (`steps:` / `backlog-steps:`), so an expanded Focus project does not expand its Backlog.
-Direct +N expansion keeps one local header at the clicked preview (`project-local-ahead:`) and opens its Focus and Backlog tasks. Expanded projects offer Backlog and Ideas controls, including empty counts; a Backlog-primary project only offers Ideas. Focus has no project toggle. Collapse restores the overview.
+Direct +N expansion keeps one local header at the clicked preview (`project-local-ahead:`) and opens its Focus and Backlog tasks. When a bucket has no project row left, dates move the header to the surviving bucket; its original expansion key keeps it open. Expanded projects offer Backlog and Ideas controls, including empty counts; a Backlog-primary project only offers Ideas. Focus has no project toggle. Collapse restores the overview.
 Empty and single-step projects omit the numeric badge; their row menu can expand the categories. Single-entry idea lists also omit the badge. Empty projects retain a creation placeholder; no empty steps block is rendered. Ideas-only headers
 reserve the checkbox column without offering project completion or a false "no step" placeholder.
 Area category switches reset matching local overrides without opening every project. Filled project Backlog has no add helper; Enter continues its undated list. Empty categories retain their creation entry. `creationView` opens the

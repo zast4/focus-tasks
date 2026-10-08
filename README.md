@@ -108,14 +108,14 @@ An event notification and a native Apple Reminders checkbox are different integr
 
 An area shows one total count across Focus, Backlog and Ideas. Hovering or focusing the count opens
 inline category controls in place of the count; on a phone, tap it. Project counts sit next to the project name, reusing
-`+N` is a direct expand button: it opens this project's Focus and Backlog tasks and shows Backlog and Ideas controls. A Backlog-only project shows only Ideas; its Backlog tasks are already visible. The controls include zero counts, so empty categories can still be created. Focus is always visible and new Focus tasks receive today's date; Backlog tasks are undated. Ideas use the project's private idea list. Collapse restores the compact preview. Hovering +N does not move the caption. Project headers have no add button; press Enter while editing the last task to create the next one. Empty projects keep an inline first-task prompt. An area shows Empty only when it has no Focus, Backlog or Ideas content; folding categories does not make it empty. Empty and single-step projects, and single-entry idea lists, show no numeric badge. A project's row menu still opens its categories; right-click its caption on desktop or hold it on a phone.
+`+N` is a direct expand button: it opens this project's Focus and Backlog tasks and shows Backlog and Ideas controls. A Backlog-only project shows only Ideas; its Backlog tasks are already visible. Backlog and Ideas controls include zero counts, so those empty categories can be filled. Give a task today's date to bring it into Focus; there is no Add to Focus prompt. Focus is always visible and new Focus tasks receive today's date; Backlog tasks are undated. Ideas use the project's private idea list. Collapse restores the compact preview. Hovering +N does not move the caption. Project headers have no add button; press Enter while editing the last task to create the next one. Empty projects keep an inline first-task prompt. An area shows Empty only when it has no Focus, Backlog or Ideas content; folding categories does not make it empty. Empty and single-step projects, and single-entry idea lists, show no numeric badge. A project's row menu still opens its categories; right-click its caption on desktop or hold it on a phone.
 Focus stays visible. Backlog and Ideas can be opened independently and together. Open categories
 use full brightness; closed categories are dimmed, with no border, background or underline.
 When an area is folded, all available controls are dimmed. Clicking one unfolds the area and shows
 that category, preserving the other saved switches. Expanding with the caret restores them all.
 Opening area Backlog adds compact project previews below Focus; it does not expand all projects. Mixed projects can have a preview in each bucket, without repeating tasks. A project whose
 own controls were used keeps its header available, including after its last Focus task is completed.
-Fold arrows appear only for actual steps; an open empty category offers creation without a dead fold arrow.
+Fold arrows appear only for actual steps; an open empty Backlog or Ideas category offers creation without a dead fold arrow.
 Counters include hidden task steps, exclude pending Waiting/completed/cancelled records, and stay
 unchanged when folded. Pending Waiting keeps its own shelf; on its return date/time it counts in Focus.
 Adding a task opens its destination category so the new row stays visible. Category switches clear
@@ -365,8 +365,9 @@ Shift+клик выделяет все задачи от последней кл
 заменяют число иконками категорий прямо в строке; на телефоне это происходит касанием. У проекта
 есть обычная кнопка `+N`: она раскрывает его задачи фокуса и отложки и показывает рядом иконки
 отложки и замыслов. У проектов в областях только с отложкой появляется лишь иконка замыслов.
-Иконки доступны и при нулевых счётчиках: пустой список можно наполнить. В фокусе новая задача
-получает сегодняшнюю дату, в отложке остаётся без даты, замысел привязывается к проекту.
+Иконки отложки и замыслов доступны и при нулевых счётчиках: пустой список можно наполнить.
+Кнопки «Добавить в фокус» нет: назначь задаче дату сегодня. Отложка создаётся без даты, замысел привязывается к проекту.
+Если фокусных задач больше нет, раскрытый проект перемещается в отложку и сохраняет раскрытие.
 Повторное нажатие на счётчик возвращает компактную строку. Наведение на +N не двигает название.
 Верхнего плюса у проекта нет: следующая задача создаётся через Enter при редактировании последней.
 У пустого проекта остаётся строка добавления первой задачи.
