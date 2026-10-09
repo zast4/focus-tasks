@@ -607,7 +607,7 @@ body.is-mobile .focus-tasks-view li.ft-task > .ft-box {
   grid-column: var(--ft-mobile-box); grid-row: var(--ft-action-row); width: var(--ft-col);
   min-height: 24px;
 }
-body.is-mobile .focus-tasks-view li.ft-task > :is(.ft-text, .ft-line, .ft-project-name) {
+body.is-mobile .focus-tasks-view li.ft-task > :is(.ft-text, .ft-line, .ft-project-name, .ft-idea-input) {
   grid-column: var(--ft-mobile-text) / -1; grid-row: var(--ft-action-row); min-width: 0; margin-left: 0; overflow-wrap: anywhere;
 }
 body.is-mobile .focus-tasks-view li.ft-task > .ft-line {
@@ -827,9 +827,51 @@ body:not(.is-mobile) .focus-tasks-view .ft-hover-tools > :is(.ft-plus,.ft-chip,.
 body:not(.is-mobile) .focus-tasks-view .ft-hover-tools > .ft-supplement-switch { margin: 0; align-self: center; }
 .focus-tasks-view .ft-intents { --ft-idea-ink: var(--color-orange, #c79657); }
 .focus-tasks-view .ft-project-intents { position: relative; }
-.focus-tasks-view .ft-project-intents::before { content: ""; position: absolute; left: -0.3rem; top: 0; bottom: 0; width: 2px; background: color-mix(in srgb, var(--ft-idea-ink) 45%, transparent); pointer-events: none; }
+/* Every project category has the same spacing and boundary. Contain child
+   margins so a private list cannot acquire a different gap from ordinary steps.
+   Separators start at the checkbox column, clear of the side guides. */
+.focus-tasks-view :is(li,div).ft-project-section {
+  --ft-section-rule-left: calc(var(--ft-col) * 2.25);
+  display: flow-root; position: relative; list-style: none; margin: 0; padding: 0; border-top: 0;
+}
+.focus-tasks-view .ft-project-section > ul.ft-list { margin: 0; }
+.focus-tasks-view .ft-project-section + .ft-project-section { margin-top: 0.3em; }
+.focus-tasks-view .ft-project-section + .ft-project-section::after {
+  content: ""; position: absolute; top: calc(-0.15em - 0.5px); left: var(--ft-section-rule-left); right: var(--ft-pad);
+  height: 1px; border: 0; background: var(--background-modifier-border); opacity: 0.55; pointer-events: none;
+}
+.focus-tasks-view li.ft-project-section::before {
+  content: ""; position: absolute; left: calc(var(--ft-col) * 1.75); top: 0.25em; bottom: 0.25em;
+  border-left: 1px solid var(--background-modifier-border); pointer-events: none;
+}
+.focus-tasks-view li.ft-project-section:is(.ft-later-steps,.ft-project-backlog)::before { border-left-style: dashed; }
+.focus-tasks-view .ft-project-ideas-slot { --ft-idea-ink: var(--color-orange, #c79657); }
+.focus-tasks-view li.ft-project-ideas-slot.ft-project-section::before { border-left-color: color-mix(in srgb, var(--ft-idea-ink) 45%, transparent); }
+.focus-tasks-view .ft-project-section > .ft-project-intents { margin: 0 0 0 var(--ft-col); }
+.focus-tasks-view :is(.ft-area-page,.ft-page) .ft-project-section { --ft-section-rule-left: 0px; }
+.focus-tasks-view :is(.ft-area-page,.ft-page) .ft-project-section > .ft-project-intents { margin-left: 0; }
+.focus-tasks-view .ft-area-page li.ft-project-section::before,
+body.is-mobile .focus-tasks-view li.ft-project-section::before { display: none; }
+body.is-mobile .focus-tasks-view .ft-project-section { --ft-section-rule-left: var(--ft-pad); }
+body.is-mobile .focus-tasks-view .ft-project-section > .ft-project-intents { margin-left: 0; }
+.focus-tasks-view .ft-project-intents:has([contenteditable=true]) > .ft-intents-add { display: none; }
 .focus-tasks-view .ft-idea-mark { display: inline-flex; vertical-align: -0.15em; color: var(--ft-idea-ink); margin-right: 0.35em; }
 .focus-tasks-view .ft-idea-mark svg { width: 0.9em; height: 0.9em; }
+
+/* New ideas use a full-width text field, just like task drafts. The bulb is a
+   separate, noneditable prefix; an empty nested inline box has an unreliable
+   native caret and leaves the rest of the apparent field outside the editor. */
+.focus-tasks-view li.ft-task > .ft-idea-input {
+  display: flex; flex: 1 1 auto; min-width: 0; margin-left: 0.2rem; line-height: var(--ft-line);
+}
+body.is-mobile .focus-tasks-view li.ft-task > .ft-idea-input { margin-left: 0; }
+.focus-tasks-view .ft-idea-input > .ft-idea-mark {
+  flex: none; height: calc(var(--ft-line) * 1em); align-items: center;
+}
+.focus-tasks-view .ft-idea-input > .ft-text {
+  display: block; flex: 1 1 auto; min-width: 0; min-height: calc(var(--ft-line) * 1em);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
 
 body.is-mobile .focus-tasks-view .ft-area-title > .ft-area-caption { grid-column: 3; grid-row: 1; display:flex; align-items:baseline; gap:0.15em; min-width:0; }
 body.is-mobile .focus-tasks-view .ft-area-title.ft-area-page-head > .ft-area-caption,

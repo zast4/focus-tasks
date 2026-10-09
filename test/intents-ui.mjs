@@ -10,7 +10,18 @@ import { execFileSync } from 'node:child_process';
 export async function checkIdeaDraft(page, root, placeholder = 'New idea') {
   const state = await page.eval(`const e=${root}.querySelector('[contenteditable=true]'),row=e?.closest('li.ft-task'),mark=row?.querySelector('.ft-idea-mark'),r=mark?.getBoundingClientRect();return {placeholder:e?.getAttribute('data-placeholder'),hint:e&&getComputedStyle(e,'::before').content,bulb:!!mark?.querySelector('svg')&&r.width>0&&r.height>0,outside:!!mark&&!e?.contains(mark),empty:!e?.textContent.trim()};`);
   if (state.placeholder !== placeholder || state.hint !== JSON.stringify(placeholder) || !state.bulb || !state.outside || !state.empty) throw Error('new idea must show its own placeholder and bulb before saving: '+J(state));
+  const field=await page.eval(`
+    const e=${root}.querySelector('[contenteditable=true]'),row=e.closest('li.ft-task'),r=e.getBoundingClientRect(),rr=row.getBoundingClientRect();
+    let cell=e;while(cell.parentElement!==row)cell=cell.parentElement;
+    const following=[...row.children].slice([...row.children].indexOf(cell)+1).filter(x=>{const c=getComputedStyle(x),b=x.getBoundingClientRect();return !['absolute','fixed'].includes(c.position)&&b.width&&b.height&&b.top<r.bottom-.5&&b.bottom>r.top+.5;});
+    const edge=Math.min(rr.right-parseFloat(getComputedStyle(row).paddingRight),...following.map(x=>x.getBoundingClientRect().left-parseFloat(getComputedStyle(x).marginLeft)));
+    return {width:r.width,available:edge-r.left,point:{x:r.left+(edge-r.left)*.8,y:r.top+r.height/2},mobile:document.body.classList.contains('is-mobile')};`);
+  if(field.available<=0||field.width<field.available-2)throw Error('new idea must have a full-width editable field like a new task: '+J(field));
   await checkIdeaCaret(page,root);
+  if(field.mobile)await page.tap(field.point,60,false);else await page.click(field.point,0,false);
+  await sleep(100);
+  const focused=await page.eval(`const e=${root}.querySelector('[contenteditable=true]'),s=getSelection();return !!e&&document.activeElement===e&&s.isCollapsed&&e.contains(s.anchorNode)&&!e.textContent.trim();`);
+  if(!focused)throw Error('clicking the empty part of a new idea field must retain its native insertion point');
 }
 
 export async function checkIntentsUI(page, mobile=false) {

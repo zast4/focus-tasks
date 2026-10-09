@@ -38,21 +38,25 @@ export async function checkListCompletionUI(page,mobile=false){
  await until(()=>page.eval(`return app.plugins.plugins['focus-tasks'].read().intentTasks.find(t=>t.uid===__lc.entry)?.status==='done';`),'last possibility checked');
  await until(()=>page.eval(`return !!(${row('active')})?.querySelector('input[aria-label="${mobile?'Завершить список':'Complete list'}"]');`),'empty list completion replaces the entry checkbox');
  await click(`(${row('active')}).querySelector('input[aria-label="${mobile?'Завершить список':'Complete list'}"]')`);await until(()=>status('active'),'exhausted list completed');
- // The same empty-list checkbox is present under a project's Ideas and in its own note.
+ // Empty project ideas have only their creation prompt. Complete the private
+ // list in its own note, then reopen it from the project's completed shelf.
  await page.eval(`const p=app.plugins.plugins['focus-tasks'];delete p.data.opened['intents:List completion UI'];await p.saveFolds();p.refresh();await app.workspace.getLeavesOfType('focus-tasks-view')[0].view.renderer.rerendered();return true;`);
  const boundProject=`${root}.querySelector('li[data-ft-project-path="'+__lc.project+'"]')`;
  await until(()=>page.eval(`return !!(${boundProject});`),'bound empty project');
  if(await page.eval(`return !!(${boundProject}).querySelector('.ft-steps-more');`))throw Error('empty project displays a zero counter');
  if(!await page.eval(`return (${boundProject}).classList.contains('is-open');`))await toggleProjectUI(page,boundProject,mobile);
  await click(`(${boundProject}).querySelector('.ft-intents-chip')`);
- await until(()=>page.eval(`return !!(${row('bound')})?.querySelector('input[type=checkbox]');`),'bound empty list checkbox');
- await click(`(${row('bound')}).querySelector('input[type=checkbox]')`);await until(()=>status('bound'),'bound list completed');
+ await until(()=>page.eval(`const b=${root}.querySelector('.ft-project-intents[data-intent-project="'+__lc.project+'"]');return !!b?.querySelector('.ft-intents-add')&&!b.querySelector('.ft-intent-list-row');`),'empty bound project list shows only Add an idea');
+ await page.eval(`window.__lcScoped=true;const f=app.vault.getAbstractFileByPath(__lc.bound.path);await app.vault.process(f,raw=>raw.includes(${J('```focus-tasks')})?raw:raw+${J('\n```focus-tasks\n```\n')});const leaf=app.workspace.getLeaf('tab');await leaf.openFile(f,{state:{mode:'preview'}});app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
+ await until(()=>page.eval(`return !!${root}.querySelector('.ft-intent-page input[aria-label="${mobile?'Завершить список':'Complete list'}"]');`),'bound list completion in its own note');
+ await click(`${root}.querySelector('.ft-intent-page input[aria-label="${mobile?'Завершить список':'Complete list'}"]')`,true);await until(()=>status('bound'),'bound list completed');
  await page.eval(`window.__lcScoped=true;const f=app.vault.getAbstractFileByPath(__lc.project),leaf=app.workspace.getLeaf('tab');await leaf.openFile(f,{state:{mode:'preview'}});app.workspace.revealLeaf(leaf).catch(e=>console.warn('fixture reveal',e));app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
  await until(()=>page.eval(`return !!${root}.querySelector('.ft-page');`),'project scoped view without an empty category popup');
  if(!await page.eval(`return !!${root}.querySelector('.ft-intent-lists-done')||${root}.querySelector('.ft-intents-chip')?.getAttribute('aria-pressed')==='true';`))await click(`${root}.querySelector('.ft-intents-chip')`);
  await until(()=>page.eval(`return !!${root}.querySelector('.ft-intent-lists-done');`),'bound completed list shelf in project note');
  if(!await page.eval(`return !!(${row('bound')});`))await click(`${root}.querySelector('.ft-intent-lists-done')`);
  await click(`(${row('bound')}).querySelector('input[type=checkbox]')`);await until(async()=>!await status('bound'),'bound list reopened in project note');
+ await until(()=>page.eval(`const b=${root}.querySelector('.ft-project-intents[data-intent-project="'+__lc.project+'"]');return !!b?.querySelector('.ft-intents-add')&&!b.querySelector('.ft-intent-list-row');`),'reopened empty private list omits its project header');
  await page.eval(`const f=app.vault.getAbstractFileByPath(__lc.empty.path);await app.vault.process(f,raw=>raw.includes(${J('```focus-tasks')})?raw:raw+${J('\n```focus-tasks\n```\n')});const leaf=app.workspace.getLeaf('tab');await leaf.openFile(f,{state:{mode:'preview'}});app.workspace.revealLeaf(leaf).catch(e=>console.warn('fixture reveal',e));app.workspace.setActiveLeaf(leaf,{focus:true});return true;`);
  await until(()=>page.eval(`return !!${root}.querySelector('.ft-intent-page input[aria-label="${mobile?'Завершить список':'Complete list'}"]');`),'own private list page');
  await click(`${root}.querySelector('.ft-intent-page input[aria-label="${mobile?'Завершить список':'Complete list'}"]')`,true);await until(()=>status('empty'),'own list checkbox survives refresh');

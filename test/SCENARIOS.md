@@ -24,7 +24,7 @@ Run each of these on a Focus area, a Backlog-only area, a project, an empty proj
 | Configuration | Required result |
 | --- | --- |
 | Only Focus | Focus rows stay present; Backlog and Ideas stay closed. |
-| Focus + Backlog | Focus stays unchanged; compact Backlog project previews appear below it, no repeated task or add button in filled categories. |
+| Focus + Backlog | Focus stays unchanged; compact Backlog project previews appear below it, no repeated task or Backlog add button, including empty categories. |
 | Focus + Ideas | Private entries stay private; canonical Focus rows remain. |
 | Focus + Backlog + Ideas | Independent overview buckets and private Ideas coexist; each task appears once. Explicit project categories share one local header. |
 | Legacy hidden Focus preference | Focus remains visible; there is no project Focus toggle. |
@@ -36,7 +36,7 @@ Run each of these on a Focus area, a Backlog-only area, a project, an empty proj
 
 Numbers count unique entries, not compact project headers. Pending Waiting is separate.
 Desktop hidden controls have zero layout size; there are no invisible placeholders or action tracks.
-Each area shows one aggregate count. Desktop hover/focus and phone tap replace it with inline controls. Focus is read-only. Project +N responds to a direct click, opens only that project's tasks and shows Backlog and Ideas, including zero counts. A Backlog-primary project shows only Ideas. Collapse restores compact previews. Empty categories create tasks today/undated or ideas in a bound private list. Enter in populated Backlog continues its undated list without an add helper. Hover leaves the project caption stationary. Legacy project dates cannot create a Focus header. The displayed project date follows the first active task, respects manual order, and changes with that task; direct project and mixed-selection date actions preserve the project note.
+Each area shows one aggregate count. Desktop hover/focus and phone tap replace it with inline controls. Focus is read-only. Project +N responds to a direct click, opens only that project's tasks and shows Backlog and Ideas, including zero counts. A Backlog-primary project shows only Ideas. Collapse restores compact previews. Empty Ideas offer creation in a bound private list. Empty Backlog has no add prompt in the pane or project note. Enter on a Focus task creates a step today; clearing its date or setting a future date moves it into project Backlog. Enter in populated Backlog continues its undated list without an add helper. Hover leaves the project caption stationary. Legacy project dates cannot create a Focus header. The displayed project date follows the first active task, respects manual order, and changes with that task; direct project and mixed-selection date actions preserve the project note.
 
 Checks: shared supplement UI matrix and row/mobile layout checks at multiple widths and 14/18/26 px text, with screenshots.
 
@@ -48,7 +48,10 @@ Waiting shares ordinary project previews and expandable steps. Cover a single Wa
 | --- | --- |
 | Open Ideas in any area | A default virtual "Ideas" row is present even when empty; this creates no file and cannot complete the area. |
 | Add a loose idea | One private UID note in the area, with no list/project link and no Calendar event. |
-| Start an idea or continue it with Enter | The unsaved row shows New idea, a visible lightbulb outside the editable text, and a focused native caret that blinks at the insertion edge; ordinary task placeholders stay unchanged. |
+| Start an idea or continue it with Enter | The unsaved row shows New idea and a lightbulb outside a full-width editable field. The native caret blinks immediately; clicking the blank part retains the insertion point. Also check the empty default Ideas list of an area. Ordinary task placeholders stay unchanged. |
+| Add the first project idea | Add an idea hides during the draft, returns after cancellation, and disappears after saving. Check the Focus pane and project note. Enter continues the filled list. |
+| Open populated project ideas | No add helper remains. Focus, Backlog and Ideas have equal row gaps and matching separators at normal and enlarged text sizes. Desktop guides share one axis and thickness, end symmetrically clear of separators and never cross them; phones and local pages omit the guides. |
+| Delete the last project idea, Undo, then replace it | Only Add an idea remains, without a default list header. The private list's bytes and UID survive deletion; Undo restores the same entry. Adding again reuses the same private list. Empty-list completion remains available in its own note and the area collection. |
 | Add in project Ideas | One entry in that project's private list; canonical task counts do not change. |
 | Complete an exhausted list | The user ticks the list checkbox; contents and UID remain in its private Done shelf. |
 | Complete a list with active entries | Refused, including externally reopened entries not yet reflected by the cache. |

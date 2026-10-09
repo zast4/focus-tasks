@@ -125,7 +125,11 @@ model: a task is no longer a checkbox line.
 
 ### Intent lists share task rows, not the actionable queue
 
-New idea lists are created from the area context menu, including its touch menu. The Ideas block has no New list footer. Empty idea editors keep a native inline box for the caret; the shared idea UI check samples native screenshots to verify the insertion cursor actually blinks before typing and in the next row after Enter.
+New idea lists are created from the area context menu, including its touch menu. The Ideas block has no New list footer. New idea drafts use a full-width block text field, like ordinary task drafts, with a separate noneditable lightbulb. The shared idea UI check verifies the usable field width, samples native screenshots for a complete caret blink cycle before typing and after Enter, and clicks the blank part of the field to ensure its insertion point stays active. This also covers the empty default Ideas list of an area.
+
+Project idea blocks offer Add an idea only without active entries, and hide it while the first draft is open. Cancelling or deleting the last entry leaves just this prompt, without an empty private list header or context. The underlying note, UID, context and project binding remain intact; Undo restores the same entry, and a replacement reuses its private list. Empty lists can still be completed in their own note or the area collection and reopened from the project's completed shelf.
+
+Project Focus, Backlog and Ideas use common section containers, contained child margins and identical spacing. Their indented separators do not intersect the aligned side guides; all guide ends have the same inset. Local pages and phones hide the guides. The supplement UI checks measure row gaps, both separators, guide axes and clearances at three font sizes and capture the native presentation. Creation/deletion/Undo checks cover the Focus pane and project note.
 
 A container is a note with `type: список замыслов`, immutable `uid`, `title`, `intentArea`,
 area `parents` and `intentListVersion: 1`. Its body is list-level context. An entry uses
@@ -158,7 +162,7 @@ row/note views; numbers do not depend on control visibility. `scopeTasks` counts
 row/step membership once per UID, excluding pending Waiting and closed tasks. Folding does not
 change numbers. Area Focus stays visible; its category icon is a read-only count, and stale hide preferences are ignored.
 An Other-area Empty creation prompt requires no Focus/Backlog tasks, no active Ideas and no visible Backlog project rows; category folding does not change emptiness.
-Project rows and project-page headings have no add toolbar button. Enter creates the next task; empty Backlog and Ideas categories retain their inline creation prompts. Focus has no creation prompt on project rows or pages.
+Project rows and project-page headings have no add toolbar button. Enter creates the next task. Backlog has no creation prompt, even when empty; remove a task's date or set a future date to move it there. Empty Ideas keep their inline creation prompt. Focus has no creation prompt on project rows or pages.
 Area Backlog opens a separate overview below Focus, with compact project previews. A mixed project
 may have one preview per bucket, but each task appears once. Focus and Backlog expansion preferences
 are separate (`steps:` / `backlog-steps:`), so an expanded Focus project does not expand its Backlog.

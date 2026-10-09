@@ -859,7 +859,7 @@ step("expanded projects follow task dates between Focus and Backlog without Add 
 step("shared phone supplement switch and project ideas stay local", async () => { await checkSupplementsUI(page,true); });
 step("project caption taps survive refresh and long presses open its categories", async () => { await checkProjectCaptionUI(page); });
 step("category controls keep captions, pointer anchors, tooltips and idea editing stable", async () => { await checkCategoryRegressionsUI(page,true); });
-step("empty project Backlog and Ideas offer creation; task dates place them in Focus", async () => { await checkProjectCategoryCreateUI(page,true); });
+step("project Backlog has no add prompt; Enter and task dates place steps in their categories", async () => { await checkProjectCategoryCreateUI(page,true); });
 step("empty and exhausted idea lists complete privately and reopen in both scopes", async () => { await checkListCompletionUI(page,true); });
 step("second project step opens inside the project before saving", async () => { await checkProjectDraftUI(page,true); });
 step("project conversion and loose ideas preserve identity through real controls", async () => { await checkIdeaEntitiesUI(page,true); });

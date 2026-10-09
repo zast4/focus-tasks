@@ -294,8 +294,6 @@ Object.assign(STRINGS.en, { listExpand: "Expand list", listCollapse: "Collapse l
 Object.assign(STRINGS.ru, { listExpand: "Развернуть список", listCollapse: "Свернуть список", newIntentList: "Новый список замыслов", deleteIntentList: "Удалить список", deleteIntentListDesc: "Удалить список со всеми пунктами? Можно отменить.", intentToFocus: "Перенести в фокус сегодня", intentToBacklog: "Перенести в отложку", intentToList: "Перенести в список", intentEmpty: "Добавить пункт", intentListPlace: "Перенести список в область" });
 Object.assign(STRINGS.en, { projectToIntent: "Make an idea list", taskToIntent: "Make an idea" });
 Object.assign(STRINGS.ru, { projectToIntent: "Сделать замыслом", taskToIntent: "Сделать замыслом" });
-Object.assign(STRINGS.en, { addBacklogTask: "Add to Backlog" });
-Object.assign(STRINGS.ru, { addBacklogTask: "Добавить в отложку" });
 Object.assign(STRINGS.en, { extraViews: "Focus, backlog and ideas", backlog: "Backlog", addProjectIdea: "Add an idea", bindIntentProject: "Link to a project", unbindIntentProject: "Keep as an area list", intentProjectTaken: "This project already has an idea list", deleteProjectIdeas: "Its {0} ideas will also be deleted. You can undo this." });
 Object.assign(STRINGS.ru, { extraViews: "Фокус, отложка и замыслы", backlog: "Отложка", addProjectIdea: "Добавить замысел", bindIntentProject: "Привязать к проекту", unbindIntentProject: "Оставить списком области", intentProjectTaken: "У проекта уже есть список замыслов", deleteProjectIdeas: "Также будут удалены его замыслы: {0}. Можно отменить." });
 Object.assign(STRINGS.en, {
@@ -1466,22 +1464,21 @@ class FocusRenderer extends MarkdownRenderChild {
     const pileShown = p.categoryShown(later);
     this.projectSupplements(head, { key: intentKey, focus, later, count: this.ideaCount(p.projectIntentLists(b)), backlogPrimary:false });
     if (p.categoryShown(focus)) {
-      if (counts.focus.length) await this.list(box, counts.focus.map((task) => ({ kind: "task", task })), { area, pile: "focus" });
+      if (counts.focus.length) await this.list(box.createDiv({ cls: "ft-project-section" }), counts.focus.map((task) => ({ kind: "task", task })), { area, pile: "focus" });
     }
-    if (pileShown) {
-      const pile = box.createDiv({ cls: "ft-future-block" });
-      if (counts.backlog.length) await this.ahead(pile, counts.backlog.map((task) => ({ kind: "task", task })), area);
-      else this.projectBacklogTaskAdd(pile, area.name, b).addClass("ft-page-add");
+    if (pileShown && counts.backlog.length) {
+      const pile = box.createDiv({ cls: "ft-future-block ft-project-section" });
+      await this.ahead(pile, counts.backlog.map((task) => ({ kind: "task", task })), area);
     }
-    if (ideasShown) await this.projectIntentsBlock(box, area.name, b);
+    if (ideasShown) await this.projectIntentsBlock(box.createDiv({ cls: "ft-project-ideas-slot ft-project-section" }), area.name, b);
     // «+ Step in this project»: a row typed in place under the last one
     if (!box.querySelector(".ft-page-add")) {
       const add = box.createDiv({ cls: "ft-empty ft-empty-add ft-page-add", text: "+ " + t("addStep"), attr: { "aria-label": t("addStep") } });
       add.onclick = async () => {
         await this.creationView(target, intentKey, focus, later);
         const last = lastRow();
-        this.draft(last || add, target);
-        if (!last) add.remove();
+        const draft = await this.draft(last || add, target);
+        if (!last && draft) add.remove();
       };
     }
     // what the project waits for, folded (per device) under «▷ Waiting · N»
@@ -2017,6 +2014,7 @@ class FocusRenderer extends MarkdownRenderChild {
     const p = this.plugin, key = "project-intents:" + project.file.path;
     const lists = p.projectIntentLists(project);
     const block = el.createDiv({ cls: "ft-intents ft-project-intents", attr: { "data-intent-project": project.file.path } });
+    let hasOpenIdeas = false;
     const addEntry = async anchor => {
       if (this.editing || this.held) return;
       let list; this.editing = true;
@@ -2031,15 +2029,15 @@ class FocusRenderer extends MarkdownRenderChild {
       const tasks = entries.filter(x => ![STATUS_DONE, STATUS_CANCELLED, STATUS_SOMEDAY].includes(x.status)).sort((a,b) => rank(a)-rank(b) || collator()(a.text,b.text));
       this.shown.tasks["intent:" + list.uid] = tasks.map(x => x.uid);
       const description = splitNote(await p.app.vault.cachedRead(list.file))[1];
-      if (description.trim()) {
+      if (tasks.length && description.trim()) {
         const context = block.createDiv({ cls: "ft-intent-description" });
         await MarkdownRenderer.render(p.app, description, context, list.file.path, this.inner); this.bindMarkdownLinks(context, list.file.path);
       }
-      if (tasks.length) await this.list(block, tasks.map(task => ({ kind: "task", task })), { area: { name: area }, pile: "intents", all: true });
-      else {
-        const ul = block.createEl("ul", { cls: "contains-task-list ft-list" });
-        await this.projectRow(ul, { kind: "project", project: { ...list, intentList: true, date: null }, steps: [] }, { area: { name: area }, all: true, pile: "intents" });
+      if (tasks.length) {
+        hasOpenIdeas = true;
+        await this.list(block, tasks.map(task => ({ kind: "task", task })), { area: { name: area }, pile: "intents", all: true });
       }
+      // Empty private lists keep their note and UID, without an in-project header.
       const done = entries.filter(x => x.status === STATUS_DONE);
       if (done.length) {
         const doneKey = "intent-done:" + list.uid, opened = p.isShown(doneKey, true);
@@ -2049,14 +2047,10 @@ class FocusRenderer extends MarkdownRenderChild {
       }
     }
     await this.completedIntentLists(block, lists.filter(x => p.closedIntentList(x)), "project-intent-lists-done:" + project.file.path);
-    const add = block.createDiv({ cls: "ft-empty ft-empty-add ft-intents-add", text: "+ " + t("addProjectIdea") });
-    add.onclick = () => addEntry([...block.querySelectorAll('li.ft-task')].pop() || add);
-  }
-
-  projectBacklogTaskAdd(el, area, project) {
-    const add = el.createDiv({ cls: "ft-empty ft-empty-add ft-project-category-add", text: "+ " + t("addBacklogTask"), attr: { "data-ft-project-category": "backlog" } });
-    add.onclick = () => this.draft(add, this.plugin.projectCategoryTarget(project, area, "backlog"));
-    return add;
+    if (!hasOpenIdeas) {
+      const add = block.createDiv({ cls: "ft-empty ft-empty-add ft-intents-add", text: "+ " + t("addProjectIdea") });
+      add.onclick = () => addEntry([...block.querySelectorAll('li.ft-task')].pop() || add);
+    }
   }
 
   async completedIntentLists(block, lists, key) {
@@ -3137,12 +3131,12 @@ class FocusRenderer extends MarkdownRenderChild {
   }
 
   draftText(li, idea, placeholder) {
-    const text = li.createSpan({ cls: "ft-text" });
-    if (!idea) { text.setAttribute("data-placeholder", placeholder); return text; }
+    if (!idea) return li.createSpan({ cls: "ft-text", attr: { "data-placeholder": placeholder } });
     li.addClass("ft-idea-task");
-    const marker = text.createSpan({ cls: "ft-idea-mark", attr: { "aria-label": t("intents") } });
+    const input = li.createSpan({ cls: "ft-idea-input" });
+    const marker = input.createSpan({ cls: "ft-idea-mark", attr: { "aria-label": t("intents") } });
     setIcon(marker, "lightbulb");
-    return text.createSpan({ cls: "ft-idea-editor", attr: { "data-placeholder": t("newIdea") } });
+    return input.createSpan({ cls: "ft-text", attr: { "data-placeholder": t("newIdea") } });
   }
 
   async rowAfter(prev, anchor, day) {
@@ -3164,7 +3158,7 @@ class FocusRenderer extends MarkdownRenderChild {
   // An empty row under `anchor` for a new task in `target`; Enter saves it and opens the next one.
   async projectDraftAnchor(anchor,target,afterUid=null) {
     // Category-specific creation stays in its own list, including an empty one.
-    if (target.projectCategory && anchor.closest(".ft-project-category-add,.ft-project-empty-focus,.ft-later-steps")) return anchor;
+    if (target.projectCategory && anchor.closest(".ft-project-empty-focus,.ft-later-steps")) return anchor;
     const origin = anchor.closest("li.ft-project-row"), bucket = origin?.getAttribute("data-ft-project-bucket")
       || (anchor.closest(".ft-future-block") ? "backlog" : "focus");
     const find=()=>[...this.containerEl.querySelectorAll("li.ft-project-row")].find(e=>{
@@ -3766,7 +3760,7 @@ class FocusRenderer extends MarkdownRenderChild {
     } else if (!open && !headerOnly) {
       line.createSpan({ cls: "ft-sep", text: "›" });
       const category = inBacklog ? "backlog" : "focus";
-      text = line.createSpan({ cls: "ft-text ft-no-step", text: t(isList ? "addIntent" : category === "focus" ? "addStep" : "addBacklogTask") });
+      text = line.createSpan({ cls: "ft-text ft-no-step", text: t(isList ? "addIntent" : "addStep") });
       if (!isList) text.setAttr("data-ft-project-category", category);
       text.onclick = (e) => { e.stopPropagation(); this.draft(anchor(), isList ? target() : p.projectCategoryTarget(project, area.name, category)); };
     }
@@ -3810,16 +3804,15 @@ class FocusRenderer extends MarkdownRenderChild {
     this.track(li, { type: "project", area, project, task: step });
     if(!project.looseIdeas)this.grip(li, { type: "project", area, project, task: step });
     if (open) {
-      const body = ul.createEl("li", { cls: "ft-steps" });
+      const body = ul.createEl("li", { cls: "ft-steps" + (!isList && steps.length ? " ft-project-section" + (inBacklog ? " ft-project-backlog" : "") : "") });
       await this.list(body, steps.map((task) => ({ kind: "task", task })), { ...opts, level: (opts.level || 0) + 1 });
     }
     // the project's pile of what is not today: its own list under the row (and under the open steps)
-    if (!isList && !isWaiting && !inherited && !inBacklog && laterShown) {
-      const pile = ul.createEl("li", { cls: "ft-later-steps ft-future-block" });
-      if (counts.backlog.length) await this.ahead(pile, counts.backlog.map((task) => ({ kind: "task", task })), area, { level: (opts.level || 0) + 1 });
-      if (!counts.backlog.length && text?.getAttribute("data-ft-project-category") !== "backlog") this.projectBacklogTaskAdd(pile, area.name, project);
+    if (!isList && !isWaiting && !inherited && !inBacklog && laterShown && counts.backlog.length) {
+      const pile = ul.createEl("li", { cls: "ft-later-steps ft-future-block ft-project-section" });
+      await this.ahead(pile, counts.backlog.map((task) => ({ kind: "task", task })), area, { level: (opts.level || 0) + 1 });
     }
-    if (ideasShown) await this.projectIntentsBlock(ul.createEl("li", { cls: "ft-project-ideas-slot" }), area.name, project);
+    if (ideasShown) await this.projectIntentsBlock(ul.createEl("li", { cls: "ft-project-ideas-slot ft-project-section" }), area.name, project);
     if (Platform.isMobile) {
       // A collapsed project's context starts at the checkbox column; its action has the same text
       // column as every other task. Expanded headers reuse the same project caption.

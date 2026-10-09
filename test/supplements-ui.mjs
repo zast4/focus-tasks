@@ -1,4 +1,5 @@
 import {J,sleep,until} from './cdp.mjs';
+import fs from 'node:fs';
 import {focusRoot as root,guardFixture,clickUI,toggleProjectUI} from './ui-actions.mjs';
 export async function checkSupplementsUI(page,mobile=false){
  await guardFixture(page,mobile);
@@ -31,6 +32,29 @@ export async function checkSupplementsUI(page,mobile=false){
  if(!mobile){await page.eval(`(${row}).querySelector('.ft-intents-chip').focus();app.plugins.plugins['focus-tasks'].refresh();return true;`);await until(()=>page.eval(`return document.activeElement===(${row}).querySelector('.ft-intents-chip');`),'project category restores keyboard focus through redraw');}
  await click(`(${row}).querySelector('.ft-intents-chip')`);
  await until(()=>page.eval(`return [...(${area}).querySelectorAll('.ft-text')].some(e=>e.textContent==='SUP Project Idea');`),'project Ideas open');
+ const rhythms=await page.eval(`
+   const a=${area},block=a.querySelector('.ft-project-intents'),slot=block.parentElement,old=a.style.fontSize,results=[];
+   const previous=[...slot.parentElement.children].slice(0,[...slot.parentElement.children].indexOf(slot)).filter(e=>e.matches('.ft-steps,.ft-later-steps')),groups=[previous[0],previous.at(-1),slot];
+   const guide=g=>[g,...g.querySelectorAll(':scope > .ft-project-intents')].map(e=>{const c=getComputedStyle(e,'::before'),r=e.getBoundingClientRect(),w=parseFloat(c.borderLeftWidth)||parseFloat(c.width);return c.display!=='none'&&c.content!=='none'&&w>0?{x:r.left+parseFloat(c.left),top:r.top+parseFloat(c.top),bottom:r.bottom-parseFloat(c.bottom),width:w}:null;}).find(Boolean);
+   const rule=g=>{const c=getComputedStyle(g,'::after'),r=g.getBoundingClientRect(),b=parseFloat(getComputedStyle(g).borderTopWidth);if(c.content!=='none'&&c.display!=='none'&&parseFloat(c.height)>0)return {x:r.left+parseFloat(c.left),right:r.right-parseFloat(c.right),y:r.top+parseFloat(c.top)+parseFloat(c.height)/2};return b?{x:r.left,right:r.right,y:r.top+b/2}:null;};
+   try{for(const size of [old,'20px','26px']){
+     a.style.fontSize=size;
+     const rows=groups.map(g=>[...g.querySelectorAll('li.ft-task:not(.ft-project-row)')].map(e=>e.getBoundingClientRect()).filter(r=>r.width&&r.height));
+     const guides=groups.map(guide),rules=groups.slice(1).map(rule),gaps=rows.slice(1).map((r,i)=>r[0].top-rows[i].at(-1).bottom);
+     results.push({size,add:!!block.querySelector('.ft-intents-add'),guides,rules,gaps});
+   }}finally{a.style.fontSize=old;}return results;`);
+ for(const r of rhythms){
+  const [focus,backlog,ideas]=r.guides,[beforeBacklog,beforeIdeas]=r.rules;
+  const visible=mobile?r.guides.every(g=>!g):r.guides.every(Boolean);
+  const axes=mobile||focus&&backlog&&ideas&&[backlog,ideas].every(g=>Math.abs(g.x-focus.x)<=1&&g.width===focus.width);
+  const separators=beforeBacklog&&beforeIdeas&&Math.abs(beforeBacklog.x-beforeIdeas.x)<=1&&Math.abs(beforeBacklog.right-beforeIdeas.right)<=1;
+  const crossings=mobile||separators&&[[focus,backlog,beforeBacklog],[backlog,ideas,beforeIdeas]].every(([prev,next,line])=>line.x>prev.x+prev.width+4&&line.y-prev.bottom>2&&next.top-line.y>2&&Math.abs((line.y-prev.bottom)-(next.top-line.y))<=1);
+  if(r.add||!visible||!axes||!separators||!crossings||Math.abs(r.gaps[0]-r.gaps[1])>1)throw Error('project Focus, Backlog and Ideas must share spacing, separators and separate aligned guides: '+J(r));
+ }
+ await page.eval(`(${row}).scrollIntoView({block:'start',behavior:'instant'});return true;`);await sleep(120);
+ const clip=await page.eval(`const r=(${row}).getBoundingClientRect(),b=(${area}).querySelector('.ft-project-intents').getBoundingClientRect(),x=Math.max(0,r.left-8),y=Math.max(0,r.top-4);return {x,y,width:Math.min(innerWidth-x,Math.max(r.right,b.right)-x+4),height:Math.min(innerHeight-y,b.bottom-y+4),scale:1};`);
+ const shot=await page.send('Page.captureScreenshot',{format:'png',clip});
+ fs.writeFileSync(new URL('shots/project-ideas-'+(mobile?'mobile':'desktop')+'.png',import.meta.url),Buffer.from(shot.data,'base64'));
  await click(`(${row}).querySelector('.ft-steps-more')`);
  const collapsed=()=>page.eval(`const a=${area},r=${row},p=app.plugins.plugins['focus-tasks'];return !r?.classList.contains('is-open')&&!r?.querySelector('[data-ft-category]')&&!a.querySelector('.ft-later-steps')&&!p.isShown('project-header:'+__sup.project,true);`);
  await until(collapsed,'collapse returns compact +N without retained Backlog');

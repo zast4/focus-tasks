@@ -18,7 +18,7 @@ export async function checkProjectDraftUI(page,mobile=false){
   await until(()=>page.eval(`return !!${root}&&(${context==='project'?`${root}.querySelector('.ft-page')`:row});`),'single-step '+context);
   const text=context==='project'?`${root}.querySelector('li.ft-task .ft-text')`:`(${row}).querySelector('.ft-line > .ft-text')`;
   if(await page.eval(`return !!(${context==='project'?root+'.querySelector(".ft-page-head")':row}).querySelector('.ft-plus');`))throw Error('project header still has an add button in '+context);
-  if(action==='empty')await click(context==='project'?`${root}.querySelector('.ft-project-category-add')`:`(${row}).querySelector('.ft-no-step')`);
+  if(action==='empty')await click(context==='project'?`${root}.querySelector('.ft-page-add')`:`(${row}).querySelector('.ft-no-step')`);
   else{await click(text);await until(()=>page.eval(`return !!${root}.querySelector('.is-editing');`),'first-step editor');await page.key('Enter');}
   if(action==='empty'){await until(()=>page.eval(`return !!${root}.querySelector('.is-editing');`),'first empty-project draft');await page.type('DP '+context+' '+action+' first');await page.key('Enter');}
   await until(()=>page.eval(`return !!${root}.querySelector('.ft-draft-row .is-editing');`),'new draft in '+context+'/'+action);
