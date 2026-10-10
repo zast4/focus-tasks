@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#123260"><meta name="robots" content="noindex,nofollow">
+<meta name="description" content="12 вариантов квартир в Люберцах и Томилино: карта улиц, фотографии, цены и отметки просмотра.">
+<title>Квартиры на карте · Люберцы и Томилино</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml"><link rel="stylesheet" href="vendor/leaflet.css"><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="app-header">
+ <a class="brand" href="./" aria-label="Квартиры на карте, главная"><span class="brand-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 20V5h10v15M14 10h6v10M2 20h20M8 8h2M8 12h2M8 16h2M17 14h1M17 17h1"/></svg></span><span><strong>Квартиры на карте</strong><small>Люберцы · Панки · Томилино</small></span></a>
+ <div class="header-actions"><div class="progress-status" aria-live="polite"><span class="progress-ring" id="progressRing"><span id="viewedCount">0</span></span><span><b id="progressText">0 из 12</b><small>карточек открыто</small></span></div><a class="icon-action pdf-action" href="selection.pdf" download aria-label="Скачать подборку в PDF"><svg viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M5 16v5h14v-5"/></svg><span>PDF</span></a><button class="icon-action share-action" id="shareButton" type="button"><svg viewBox="0 0 24 24"><path d="M8 12a5 5 0 0 1 5-5h3a5 5 0 0 1 0 10h-3M16 12a5 5 0 0 1-5 5H8A5 5 0 0 1 8 7h3"/></svg><span>Скопировать ссылку</span></button></div>
+</header>
+<main class="workspace">
+ <aside class="catalog" aria-label="Список квартир">
+  <div class="catalog-top"><div class="catalog-title"><h1>12 вариантов</h1><span class="date-tag">09.10.2026</span></div><div class="search-field"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/></svg><input id="searchInput" type="search" placeholder="Улица или номер варианта" aria-label="Поиск по адресу или номеру"></div><div class="filters" role="group" aria-label="Фильтр по просмотру"><button type="button" data-filter="all" aria-pressed="true">Все <span id="allCount">12</span></button><button type="button" data-filter="unseen" aria-pressed="false">Не открывали <span id="unseenCount">12</span></button><button type="button" data-filter="seen" aria-pressed="false">Открывали <span id="seenCount">0</span></button></div></div>
+  <div class="listing-list" id="listingList"><div class="loading">Загружаем подборку…</div></div>
+  <div class="catalog-footer"><p>Номера совпадают с PDF. Отметки сохраняются в этом браузере.</p><button class="text-button" id="resetButton" type="button">Сбросить отметки</button></div>
+ </aside>
+ <section class="map-panel" aria-label="Карта района"><div id="map" role="region" aria-label="Интерактивная карта квартир"></div><div class="map-top"><span class="map-label"><span class="map-label-dot"></span><span id="mapCount">11 вариантов на карте</span></span><button class="map-fit" id="fitButton" type="button" aria-label="Показать все найденные варианты на карте"><svg viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5M8 12h8M12 8v8"/></svg><span>Все на карте</span></button></div><div class="map-bottom"><div class="legend"><span><i class="legend-pin">1</i>Не открывали</span><span><i class="legend-pin seen">✓</i>Открывали</span><span><i class="legend-pin approx">≈</i>Ориентир</span></div><p class="map-note" id="mapNote">№8 - примерное положение корпуса. №10 - адрес не подтверждён.</p></div><div id="mapError" class="map-error" hidden>Улицы не загрузились. Карточки доступны; точные адреса можно открыть в Яндекс Картах.</div></section>
+</main>
+<nav class="mobile-switch" aria-label="Режим просмотра"><button id="mapTab" type="button" aria-pressed="true"><svg viewBox="0 0 24 24"><path d="m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3V6ZM9 3v15M15 6v15"/></svg>Карта</button><button id="listTab" type="button" aria-pressed="false"><svg viewBox="0 0 24 24"><path d="M8 5h13M8 12h13M8 19h13M3 5h.01M3 12h.01M3 19h.01"/></svg>Список <span>12</span></button></nav>
+<dialog id="detailDialog" class="detail" aria-labelledby="detailTitle"><div id="detailContent"></div></dialog>
+<dialog id="resetDialog" class="reset-dialog" aria-labelledby="resetTitle"><h2 id="resetTitle">Сбросить отметки?</h2><p>Все 12 вариантов снова будут отмечены как непросмотренные.</p><div class="reset-actions"><button id="cancelReset" type="button">Отмена</button><button id="confirmReset" type="button" class="primary">Сбросить</button></div></dialog>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
+<noscript><p class="noscript">Для карты нужен JavaScript. <a href="selection.pdf">Скачать PDF</a>.</p></noscript>
+<script src="vendor/leaflet.js"></script><script src="app.js" defer></script>
+</body></html>
